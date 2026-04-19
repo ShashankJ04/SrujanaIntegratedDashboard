@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{% block meta_desc %}Manufacturing Dashboard — Tool management, production tracking & analytics{% endblock %}">
+  <title>{% block title %}Dashboards{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboards.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="dash-body">
+
+  <!-- Topbar hover trigger -->
+  <div class="dash-topbar-trigger"></div>
+
+  <!-- App bar -->
+  <div class="dash-appbar">
+    <button class="dash-menu-btn" id="dashMenuBtn" title="Menu">☰</button>
+    <span style="width:12px"></span>
+    <span class="dash-appbar-title">Manufacturing Dashboard</span>
+    <span class="spacer"></span>
+    <a href="/logout" class="dash-appbar-btn">Logout</a>
+  </div>
+
+  <!-- Sidebar overlay -->
+  <div class="dash-overlay" id="dashOverlay"></div>
+
+  <!-- Sidebar drawer -->
+  <nav class="dash-sidebar" id="dashSidebar">
+    <div class="dash-sidebar-header">
+      <h3>Manufacturing</h3>
+    </div>
+    <ul class="dash-nav-list" id="dashNavList">
+      <li class="dash-nav-item">
+        <a href="/dashboards" class="dash-nav-link {% if request.path == '/dashboards' %}active{% endif %}">
+          <span class="dash-nav-icon">🏠</span> Home
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/tools" class="dash-nav-link {% if '/dashboards/tools' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">🔧</span> Tools
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/preventive-maintenance" class="dash-nav-link {% if '/preventive-maintenance' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">🛠️</span> Preventive Maintenance
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/life-report" class="dash-nav-link {% if '/life-report' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">📊</span> Life Report
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/production" class="dash-nav-link {% if '/production' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">🏭</span> Production
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/rm-variance" class="dash-nav-link {% if '/rm-variance' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">⇄</span> RM Variance
+        </a>
+      </li>
+      <li class="dash-nav-item">
+        <a href="/dashboards/reports" class="dash-nav-link {% if request.path.startswith('/dashboards/reports') %}active{% endif %}">
+          <span class="dash-nav-icon">📈</span> Reports
+        </a>
+      </li>
+      {% if user and user.userId == 43 %}
+      <li class="dash-nav-item">
+        <a href="/dashboards/admin/rbac" class="dash-nav-link {% if '/admin/rbac' in request.path %}active{% endif %}">
+          <span class="dash-nav-icon">⚙️</span> RBAC Admin
+        </a>
+      </li>
+      {% endif %}
+      <li class="dash-nav-item" style="margin-top:auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">
+        <a href="/dashboard" class="dash-nav-link">
+          <span class="dash-nav-icon">📋</span> Bharat Dashboard
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main content -->
+  <main class="dash-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Scripts -->
+  <script src="{{ url_for('static', filename='js/dashboards_api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboards_utils.js') }}"></script>
+  <script>
+    // Sidebar toggle
+    const menuBtn = document.getElementById('dashMenuBtn');
+    const sidebar = document.getElementById('dashSidebar');
+    const overlay = document.getElementById('dashOverlay');
+
+    function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('open'); }
+    function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+
+    menuBtn.addEventListener('click', () => {
+      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+    });
+    overlay.addEventListener('click', closeSidebar);
+
+    // Close sidebar on nav click
+    document.querySelectorAll('.dash-nav-link').forEach(el => {
+      el.addEventListener('click', closeSidebar);
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

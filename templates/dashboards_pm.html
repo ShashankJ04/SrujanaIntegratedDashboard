@@ -1,0 +1,461 @@
+{% extends "base_dashboards.html" %}
+{% block title %}Preventive Maintenance{% endblock %}
+
+{% block content %}
+<div style="padding:20px; height:100vh; overflow:hidden; display:flex; flex-direction:column;">
+  <!-- Top bar -->
+  <div class="dash-page-header">
+    <h1 class="dash-page-title">Preventive Maintenance</h1>
+    <input type="text" class="dash-input" id="pmSearch" placeholder="Search by tool no or part no..." style="flex-grow:1; max-width:360px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="dash-btn dash-btn-outline dash-btn-sm" id="pmExportBtn">⬇ Export Excel</button>
+      <button class="dash-filter-btn safe" id="pmSafeBtn">Safe (&lt;80%) <span id="pmSafeCount">0</span></button>
+      <button class="dash-filter-btn warning" id="pmWarnBtn">Warning (≥80%) <span id="pmWarnCount">0</span></button>
+      <button class="dash-filter-btn critical" id="pmCritBtn">Critical (≥100%) <span id="pmCritCount">0</span></button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="pmLoading" class="dash-loading-center"><div class="dash-spinner"></div></div>
+
+  <!-- Table -->
+  <div class="dash-table-wrap" id="pmTableWrap" style="flex:1; min-height:0; display:none;">
+    <table class="dash-table" id="pmTable">
+      <thead>
+        <tr>
+          <th class="text-right">Sl No</th><th>Tool No</th><th>Part No</th>
+          <th class="text-right">Tool Life</th><th class="text-right">SPM</th>
+          <th class="text-right">PM Strokes</th><th class="text-right">Strokes Completed</th>
+          <th class="text-right">Next PM Stroke</th><th>Last Maintenance</th>
+          <th class="text-right">PM Count</th><th style="min-width:200px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="pmTbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Empty state -->
+  <div id="pmEmpty" class="dash-empty" style="display:none;"><div class="dash-empty-icon">🛠️</div><div class="dash-empty-text">No tools match your search</div></div>
+</div>
+
+<!-- Add Tool Modal -->
+<div class="dash-modal-overlay" id="pmAddModal">
+  <div class="dash-modal">
+    <div class="dash-modal-header"><h3 id="pmAddTitle">Add Tool for PM</h3></div>
+    <div class="dash-modal-body">
+      <div><label class="dash-form-label">Search Tool</label><input type="text" class="dash-input" id="pmAddSearch" placeholder="Type tool number..." style="width:100%"></div>
+      <div id="pmAddSearchResults" style="max-height:120px; overflow-y:auto;"></div>
+      <div id="pmAddSelectedTool" style="display:none;"><label class="dash-form-label">Selected</label><input type="text" class="dash-input" id="pmAddToolDisplay" disabled style="width:100%"></div>
+      <div><label class="dash-form-label">Tool Life (strokes)</label><input type="number" class="dash-input" id="pmAddLife" placeholder="e.g. 100000" min="1" style="width:100%"></div>
+      <div><label class="dash-form-label">SPM</label><input type="number" class="dash-input" id="pmAddSpm" placeholder="e.g. 100" min="1" style="width:100%"></div>
+      <div><label class="dash-form-label">PM Strokes</label><input type="number" class="dash-input" id="pmAddPmStrokes" placeholder="e.g. 50000" min="1" style="width:100%"></div>
+      <div id="pmAddStrokesInfo" style="display:none;"><label class="dash-form-label">Current Strokes</label><input type="text" class="dash-input" id="pmAddCurrent" disabled style="width:100%"></div>
+      <div id="pmAddNextDiv" style="display:none;"><label class="dash-form-label">Next PM Stroke</label><input type="number" class="dash-input" id="pmAddNext" style="width:100%"></div>
+    </div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="closePmModal('pmAddModal')">Cancel</button>
+      <button class="dash-btn dash-btn-primary" id="pmAddSubmit">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="dash-modal-overlay" id="pmEditModal">
+  <div class="dash-modal dash-modal-sm">
+    <div class="dash-modal-header"><h3>Edit Tool Settings</h3></div>
+    <div class="dash-modal-body">
+      <div><label class="dash-form-label">Tool Life</label><input type="number" class="dash-input" id="pmEditLife" min="1" style="width:100%"></div>
+      <div><label class="dash-form-label">SPM</label><input type="number" class="dash-input" id="pmEditSpm" min="1" style="width:100%"></div>
+      <div><label class="dash-form-label">PM Strokes</label><input type="number" class="dash-input" id="pmEditPmStrokes" min="1" style="width:100%"></div>
+    </div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="closePmModal('pmEditModal')">Cancel</button>
+      <button class="dash-btn dash-btn-primary" id="pmEditSubmit">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Maintenance Modal -->
+<div class="dash-modal-overlay" id="pmConfirmModal">
+  <div class="dash-modal dash-modal-sm">
+    <div class="dash-modal-header"><h3>Confirm Maintenance</h3></div>
+    <div class="dash-modal-body">
+      <p style="font-size:13px; color:var(--text-muted);">Confirm maintenance for tool <strong id="pmConfirmToolNo"></strong></p>
+      <div><label class="dash-form-label">Current Stroke</label><input type="text" class="dash-input" id="pmConfirmCurrent" disabled style="width:100%"></div>
+      <div><label class="dash-form-label">Next PM Stroke</label><input type="number" class="dash-input" id="pmConfirmNext" style="width:100%"></div>
+      <div><label class="dash-form-label">PM Sheet Attachment</label><input type="file" class="dash-file-input" id="pmConfirmFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"></div>
+    </div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="closePmModal('pmConfirmModal')">Cancel</button>
+      <button class="dash-btn dash-btn-success" id="pmConfirmSubmit">✓ Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="dash-modal-overlay" id="pmDeleteModal">
+  <div class="dash-modal dash-modal-sm">
+    <div class="dash-modal-header"><h3>Delete Tool</h3></div>
+    <div class="dash-modal-body">
+      <p style="font-size:13px;">Are you sure you want to remove tool <strong id="pmDeleteToolNo"></strong> from PM tracking? This cannot be undone.</p>
+    </div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="closePmModal('pmDeleteModal')">Cancel</button>
+      <button class="dash-btn dash-btn-danger" id="pmDeleteSubmit">🗑 Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="dash-modal-overlay" id="pmHistoryModal">
+  <div class="dash-modal dash-modal-lg">
+    <div class="dash-modal-header"><h3 id="pmHistoryTitle">Maintenance History</h3></div>
+    <div class="dash-modal-body" id="pmHistoryBody"></div>
+    <div class="dash-modal-footer"><button class="dash-btn dash-btn-outline" onclick="closePmModal('pmHistoryModal')">Close</button></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let allTools = [], pmEntries = [], pmStatusAll = [];
+  let searchFilter = '', thresholdFilter = 'all';
+  let selectedAddTool = null, currentEditToolId = null, currentConfirmEntry = null, currentDeleteToolId = null;
+
+  const canEdit = true; // Will be checked via RBAC on API side
+
+  function closePmModal(id) { document.getElementById(id).classList.remove('open'); }
+  window.closePmModal = closePmModal;
+  function openPmModal(id) { document.getElementById(id).classList.add('open'); }
+
+  async function loadData() {
+    document.getElementById('pmLoading').style.display = 'flex';
+    document.getElementById('pmTableWrap').style.display = 'none';
+    try {
+      [pmEntries, allTools, pmStatusAll] = await Promise.all([
+        apiFetch('/api/pm/'),
+        apiFetch('/api/tools/all'),
+        apiFetch('/api/pm/status?mode=all'),
+      ]);
+      renderTable();
+    } catch(err) { showSnackbar(err.message); }
+    document.getElementById('pmLoading').style.display = 'none';
+  }
+
+  function getEntryByToolNo(toolNo) {
+    const matches = pmEntries.filter(e => e.toolNo === toolNo);
+    if (!matches.length) return null;
+    return matches.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+  }
+
+  function renderTable() {
+    const pmPctMap = new Map(); const lifetimeMap = new Map();
+    pmStatusAll.forEach(s => { pmPctMap.set(s.toolNo, s.pmPercentage); lifetimeMap.set(s.toolNo, s.totalLifetimeStrokes); });
+
+    // Threshold counts
+    let safe = 0, warn = 0, crit = 0;
+    allTools.forEach(t => {
+      const pct = pmPctMap.get(t.toolNo) || 0;
+      if (pct >= 100) crit++; else if (pct >= 80) warn++; else safe++;
+    });
+    document.getElementById('pmSafeCount').textContent = safe;
+    document.getElementById('pmWarnCount').textContent = warn;
+    document.getElementById('pmCritCount').textContent = crit;
+
+    // Filter
+    let rows = allTools.map(t => ({
+      tool: t,
+      entry: (() => { const e = getEntryByToolNo(t.toolNo); return e ? { ...e, totalLifetimeStrokes: lifetimeMap.get(t.toolNo) || 0 } : null; })()
+    }));
+
+    if (thresholdFilter !== 'all') {
+      rows = rows.filter(r => {
+        const pct = pmPctMap.get(r.tool.toolNo) || 0;
+        if (thresholdFilter === 'critical') return pct >= 100;
+        if (thresholdFilter === 'warning') return pct >= 80 && pct < 100;
+        return pct < 80;
+      });
+    }
+
+    if (searchFilter) {
+      const q = searchFilter.toLowerCase();
+      rows = rows.filter(r => r.tool.toolNo.toLowerCase().includes(q) || r.tool.partNo.toLowerCase().includes(q));
+    }
+
+    const tbody = document.getElementById('pmTbody');
+    tbody.innerHTML = '';
+
+    if (!rows.length) {
+      document.getElementById('pmTableWrap').style.display = 'none';
+      document.getElementById('pmEmpty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('pmEmpty').style.display = 'none';
+    document.getElementById('pmTableWrap').style.display = 'block';
+
+    rows.forEach((r, i) => {
+      const e = r.entry;
+      const t = r.tool;
+      const latest = e && e.maintenanceHistory && e.maintenanceHistory.length > 0 ? e.maintenanceHistory[e.maintenanceHistory.length - 1] : null;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="text-right fw-600">${i + 1}</td>
+        <td class="fw-600">${t.toolNo}</td>
+        <td>${t.partNo || '-'}</td>
+        <td class="text-right">${e ? formatIndianNumber(e.toolLife) : '-'}</td>
+        <td class="text-right">${e ? formatIndianNumber(e.spm) : '-'}</td>
+        <td class="text-right">${e ? formatIndianNumber(e.pmStrokes) : '-'}</td>
+        <td class="text-right">${e ? formatIndianNumber(e.totalLifetimeStrokes) : '-'}</td>
+        <td class="text-right">${e ? (latest ? formatIndianNumber(latest.nextStroke) : 'Not set') : '-'}</td>
+        <td>${e ? (latest ? new Date(latest.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : 'No maintenance') : '-'}</td>
+        <td class="text-right">${e ? e.maintenanceHistory.length : '-'}</td>
+        <td id="actions-${t.id}"></td>
+      `;
+      tbody.appendChild(tr);
+
+      const actionsCell = document.getElementById('actions-' + t.id);
+      if (e) {
+        actionsCell.innerHTML = `
+          <button class="dash-btn-icon" title="Edit" data-edit="${e.toolId}">✏️</button>
+          <button class="dash-btn-icon" title="History" data-history="${e.toolId}">🕐</button>
+          <button class="dash-btn-icon danger" title="Delete" data-delete="${e.toolId}">🗑️</button>
+          <button class="dash-btn-icon success" title="Confirm PM" data-confirm="${e.toolId}">✅</button>
+        `;
+      } else {
+        actionsCell.innerHTML = `<button class="dash-btn dash-btn-outline dash-btn-sm" data-configure="${t.toolNo}">+ Configure</button>`;
+      }
+    });
+
+    // Bind action buttons
+    tbody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.edit)));
+    });
+    tbody.querySelectorAll('[data-history]').forEach(btn => {
+      btn.addEventListener('click', () => openHistoryModal(parseInt(btn.dataset.history)));
+    });
+    tbody.querySelectorAll('[data-delete]').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(parseInt(btn.dataset.delete)));
+    });
+    tbody.querySelectorAll('[data-confirm]').forEach(btn => {
+      btn.addEventListener('click', () => openConfirmModal(parseInt(btn.dataset.confirm)));
+    });
+    tbody.querySelectorAll('[data-configure]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tool = allTools.find(t => t.toolNo === btn.dataset.configure);
+        if (tool) openAddModal(tool);
+      });
+    });
+  }
+
+  // Search/Filter handlers
+  document.getElementById('pmSearch').addEventListener('input', e => { searchFilter = e.target.value.trim(); renderTable(); });
+
+  ['safe', 'warning', 'critical'].forEach(key => {
+    const btn = document.getElementById(key === 'safe' ? 'pmSafeBtn' : key === 'warning' ? 'pmWarnBtn' : 'pmCritBtn');
+    btn.addEventListener('click', () => {
+      thresholdFilter = thresholdFilter === key ? 'all' : key;
+      document.querySelectorAll('.dash-filter-btn').forEach(b => b.classList.remove('active'));
+      if (thresholdFilter !== 'all') btn.classList.add('active');
+      renderTable();
+    });
+  });
+
+  // Export
+  document.getElementById('pmExportBtn').addEventListener('click', () => {
+    const params = new URLSearchParams({ mode: thresholdFilter, search: searchFilter });
+    apiDownloadGet('/api/pm/export?' + params.toString(), 'preventive_maintenance.xlsx');
+  });
+
+  // Add modal
+  function openAddModal(initialTool) {
+    selectedAddTool = initialTool || null;
+    document.getElementById('pmAddSearch').value = '';
+    document.getElementById('pmAddSearchResults').innerHTML = '';
+    document.getElementById('pmAddLife').value = '';
+    document.getElementById('pmAddSpm').value = '';
+    document.getElementById('pmAddPmStrokes').value = '';
+    document.getElementById('pmAddCurrent').value = '';
+    document.getElementById('pmAddNext').value = '';
+
+    if (initialTool) {
+      document.getElementById('pmAddTitle').textContent = 'Configure Tool: ' + initialTool.toolNo;
+      document.getElementById('pmAddSearch').parentElement.style.display = 'none';
+      document.getElementById('pmAddSearchResults').style.display = 'none';
+      document.getElementById('pmAddSelectedTool').style.display = 'block';
+      document.getElementById('pmAddToolDisplay').value = initialTool.toolNo;
+      loadToolStrokes(initialTool.id);
+    } else {
+      document.getElementById('pmAddTitle').textContent = 'Add Tool for PM';
+      document.getElementById('pmAddSearch').parentElement.style.display = '';
+      document.getElementById('pmAddSearchResults').style.display = '';
+      document.getElementById('pmAddSelectedTool').style.display = 'none';
+      document.getElementById('pmAddStrokesInfo').style.display = 'none';
+      document.getElementById('pmAddNextDiv').style.display = 'none';
+    }
+    openPmModal('pmAddModal');
+  }
+
+  async function loadToolStrokes(toolId) {
+    try {
+      const data = await apiFetch('/api/pm/tool-strokes/' + toolId);
+      document.getElementById('pmAddStrokesInfo').style.display = '';
+      document.getElementById('pmAddCurrent').value = formatIndianNumber(data.totalStrokes);
+      document.getElementById('pmAddNextDiv').style.display = '';
+      const pmS = parseInt(document.getElementById('pmAddPmStrokes').value) || 0;
+      document.getElementById('pmAddNext').value = data.totalStrokes + pmS;
+    } catch {}
+  }
+
+  let searchTimer;
+  document.getElementById('pmAddSearch').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      const q = e.target.value.trim();
+      if (q.length < 2) { document.getElementById('pmAddSearchResults').innerHTML = ''; return; }
+      const results = await apiFetch('/api/tools/search?q=' + encodeURIComponent(q));
+      const existingToolNos = new Set(pmEntries.map(e => e.toolNo));
+      const container = document.getElementById('pmAddSearchResults');
+      container.innerHTML = '';
+      results.forEach(r => {
+        const d = document.createElement('div');
+        d.className = 'dash-list-item';
+        d.style.fontSize = '13px';
+        const disabled = existingToolNos.has(r.toolNo);
+        if (disabled) d.style.opacity = '0.4';
+        d.textContent = r.toolNo + (disabled ? ' (already added)' : '');
+        if (!disabled) {
+          d.style.cursor = 'pointer';
+          d.addEventListener('click', () => {
+            selectedAddTool = r;
+            document.getElementById('pmAddSearch').value = r.toolNo;
+            container.innerHTML = '';
+            document.getElementById('pmAddSelectedTool').style.display = 'block';
+            document.getElementById('pmAddToolDisplay').value = r.toolNo;
+            loadToolStrokes(r.id);
+          });
+        }
+        container.appendChild(d);
+      });
+    }, 300);
+  });
+
+  document.getElementById('pmAddPmStrokes').addEventListener('input', () => {
+    if (selectedAddTool) {
+      const curText = document.getElementById('pmAddCurrent').value;
+      const cur = parseInt(curText.replace(/,/g, '')) || 0;
+      const pmS = parseInt(document.getElementById('pmAddPmStrokes').value) || 0;
+      document.getElementById('pmAddNext').value = cur + pmS;
+    }
+  });
+
+  document.getElementById('pmAddSubmit').addEventListener('click', async () => {
+    if (!selectedAddTool) return;
+    try {
+      await apiPost('/api/pm/', {
+        toolId: selectedAddTool.id,
+        toolNo: selectedAddTool.toolNo,
+        toolLife: parseInt(document.getElementById('pmAddLife').value),
+        spm: parseInt(document.getElementById('pmAddSpm').value),
+        pmStrokes: parseInt(document.getElementById('pmAddPmStrokes').value),
+        nextStroke: parseInt(document.getElementById('pmAddNext').value),
+      });
+      closePmModal('pmAddModal');
+      loadData();
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  // Edit modal
+  function openEditModal(toolId) {
+    currentEditToolId = toolId;
+    const entry = pmEntries.find(e => e.toolId === toolId);
+    if (!entry) return;
+    document.getElementById('pmEditLife').value = entry.toolLife;
+    document.getElementById('pmEditSpm').value = entry.spm;
+    document.getElementById('pmEditPmStrokes').value = entry.pmStrokes;
+    openPmModal('pmEditModal');
+  }
+
+  document.getElementById('pmEditSubmit').addEventListener('click', async () => {
+    try {
+      await apiPatch('/api/pm/' + currentEditToolId, {
+        toolLife: parseInt(document.getElementById('pmEditLife').value),
+        spm: parseInt(document.getElementById('pmEditSpm').value),
+        pmStrokes: parseInt(document.getElementById('pmEditPmStrokes').value),
+      });
+      closePmModal('pmEditModal');
+      loadData();
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  // Confirm modal
+  async function openConfirmModal(toolId) {
+    const entry = pmEntries.find(e => e.toolId === toolId);
+    if (!entry) return;
+    currentConfirmEntry = entry;
+    document.getElementById('pmConfirmToolNo').textContent = entry.toolNo;
+    document.getElementById('pmConfirmFile').value = '';
+    openPmModal('pmConfirmModal');
+    try {
+      const info = await apiFetch('/api/pm/' + toolId + '/stroke-info');
+      document.getElementById('pmConfirmCurrent').value = formatIndianNumber(info.currentStroke);
+      document.getElementById('pmConfirmNext').value = info.suggestedNextStroke;
+    } catch {}
+  }
+
+  document.getElementById('pmConfirmSubmit').addEventListener('click', async () => {
+    if (!currentConfirmEntry) return;
+    const fd = new FormData();
+    fd.append('nextStroke', document.getElementById('pmConfirmNext').value);
+    const fileInput = document.getElementById('pmConfirmFile');
+    if (fileInput.files.length) fd.append('attachment', fileInput.files[0]);
+    try {
+      await apiPostForm('/api/pm/' + currentConfirmEntry.toolId + '/confirm', fd);
+      closePmModal('pmConfirmModal');
+      loadData();
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  // Delete modal
+  function openDeleteModal(toolId) {
+    currentDeleteToolId = toolId;
+    const entry = pmEntries.find(e => e.toolId === toolId);
+    document.getElementById('pmDeleteToolNo').textContent = entry ? entry.toolNo : toolId;
+    openPmModal('pmDeleteModal');
+  }
+
+  document.getElementById('pmDeleteSubmit').addEventListener('click', async () => {
+    try {
+      await apiDelete('/api/pm/' + currentDeleteToolId);
+      closePmModal('pmDeleteModal');
+      loadData();
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  // History modal
+  function openHistoryModal(toolId) {
+    const entry = pmEntries.find(e => e.toolId === toolId);
+    if (!entry) return;
+    document.getElementById('pmHistoryTitle').textContent = 'Maintenance History — ' + entry.toolNo;
+    const body = document.getElementById('pmHistoryBody');
+
+    if (!entry.maintenanceHistory || !entry.maintenanceHistory.length) {
+      body.innerHTML = '<div class="dash-empty"><div class="dash-empty-text">No maintenance history available</div></div>';
+    } else {
+      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr><th>Date</th><th class="text-right">Current Stroke</th><th class="text-right">Next Stroke</th><th>Attachment</th></tr></thead><tbody>';
+      entry.maintenanceHistory.forEach(rec => {
+        const dateStr = new Date(rec.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        html += `<tr><td>${dateStr}</td><td class="text-right">${formatIndianNumber(rec.currentStroke)}</td><td class="text-right">${formatIndianNumber(rec.nextStroke)}</td><td>${rec.attachment ? '<a href="' + rec.attachment + '" target="_blank" style="color:var(--primary)">View</a>' : '—'}</td></tr>`;
+      });
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+    }
+    openPmModal('pmHistoryModal');
+  }
+
+  loadData();
+})();
+</script>
+{% endblock %}

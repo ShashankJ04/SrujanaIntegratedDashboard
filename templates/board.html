@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factory Control Board — Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --board-bg: #0a0f1e;
+      --board-surface: rgba(255,255,255,0.04);
+      --board-surface-2: rgba(255,255,255,0.07);
+      --board-border: rgba(255,255,255,0.08);
+      --board-text: #e2e8f0;
+      --board-text-muted: #94a3b8;
+      --board-text-dim: #64748b;
+      --board-text-bright: #f8fafc;
+      --board-blue: #3b82f6;
+      --board-emerald: #10b981;
+      --board-amber: #f59e0b;
+      --board-red: #ef4444;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--board-bg); color: var(--board-text);
+      display: flex; flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .board-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; border-bottom: 1px solid var(--board-border);
+      background: rgba(255,255,255,0.03); backdrop-filter: blur(12px);
+      flex-shrink: 0; z-index: 30;
+    }
+    .board-header::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+      background: linear-gradient(90deg, var(--board-blue), var(--board-emerald));
+      opacity: 0.6;
+    }
+    .board-brand { display: flex; align-items: center; gap: 16px; }
+    .board-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; box-shadow: 0 4px 16px rgba(59,130,246,0.3);
+    }
+    .board-title { font-size: 22px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.02em; color: var(--board-text-bright); }
+    .board-subtitle { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--board-blue); margin-top: 2px; }
+
+    /* Tab buttons */
+    .board-tabs {
+      display: flex; gap: 4px; background: rgba(255,255,255,0.05);
+      padding: 4px; border-radius: 14px; border: 1px solid var(--board-border);
+    }
+    .board-tab {
+      padding: 10px 24px; border-radius: 10px; border: 1px solid transparent;
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.1em; cursor: pointer;
+      font-family: inherit; transition: all 200ms;
+      background: transparent; color: var(--board-text-dim);
+    }
+    .board-tab:hover { color: var(--board-text-muted); }
+    .board-tab.active {
+      background: var(--board-blue); color: #fff;
+      border-color: var(--board-blue);
+      box-shadow: 0 2px 12px rgba(59,130,246,0.35);
+    }
+
+    /* Clock */
+    .board-clock { text-align: right; }
+    .board-time { font-size: 32px; font-weight: 900; letter-spacing: -0.03em; color: var(--board-text-bright); font-variant-numeric: tabular-nums; }
+    .board-date { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--board-text-dim); margin-top: 2px; }
+
+    /* Main scrollable area */
+    .board-main { flex: 1; overflow-y: auto; }
+    .board-main::-webkit-scrollbar { display: none; }
+
+    /* Table */
+    .board-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1200px; }
+    .board-table thead th {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--board-surface-2);
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--board-text-muted);
+      padding: 12px 18px; text-align: left; white-space: nowrap;
+      border-bottom: 1px solid var(--board-border);
+    }
+    .board-table tbody td {
+      padding: 12px 18px; border-bottom: 1px solid var(--board-border);
+      color: var(--board-text); vertical-align: middle;
+    }
+    .board-table tbody tr:hover td { background: var(--board-surface); }
+    .board-table tbody tr.stripe td { background: var(--board-surface); }
+    .board-table tbody tr.stripe:hover td { background: var(--board-surface-2); }
+
+    /* Cell styles */
+    .cell-machine { font-weight: 900; text-transform: uppercase; font-size: 13px; letter-spacing: -0.01em; }
+    .cell-machine.active { color: var(--board-blue); border-left: 3px solid var(--board-blue); padding-left: 15px; }
+    .cell-machine.idle { color: var(--board-text-dim); border-left: 3px solid var(--board-text-dim); padding-left: 15px; }
+    .cell-part { font-weight: 700; color: var(--board-amber); text-transform: uppercase; font-size: 13px; }
+    .cell-part-name { font-size: 10px; color: var(--board-text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+    .cell-so { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: var(--board-surface-2); border: 1px solid var(--board-border); color: var(--board-text-muted); margin-top: 4px; }
+    .cell-tool { font-weight: 700; color: var(--board-text); font-size: 13px; text-transform: uppercase; }
+    .cell-rm { font-weight: 700; color: #0ea5e9; text-transform: uppercase; font-size: 13px; }
+    .cell-rm-req { font-size: 11px; color: var(--board-text-dim); margin-top: 2px; }
+    .cell-num { text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .cell-num.big { font-size: 20px; }
+    .cell-num.target { color: var(--board-text); }
+    .cell-num.strokes { color: #818cf8; }
+    .cell-num.good { color: var(--board-emerald); }
+    .cell-num.pending { color: var(--board-blue); }
+
+    .status-chip {
+      display: inline-block; padding: 3px 10px; border-radius: 6px;
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.06em; border: 1px solid;
+    }
+    .status-completed { color: #34d399; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.25); }
+    .status-in_progress { color: #60a5fa; background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.25); }
+    .status-pending { color: #fbbf24; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.25); }
+
+    .idle-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 14px; border-radius: 8px;
+      background: var(--board-surface); border: 1px solid var(--board-border);
+      color: var(--board-text-dim); font-size: 10px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+
+    .cell-remarks { color: var(--board-text-dim); font-size: 12px; font-style: italic; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+  <header class="board-header" style="position:relative;">
+    <div class="board-brand">
+      <div class="board-icon">📊</div>
+      <div>
+        <div class="board-title">Factory Control Board</div>
+        <div class="board-subtitle">Live Execution Status</div>
+      </div>
+    </div>
+
+    <div class="board-tabs">
+      <button id="btn_yesterday" class="board-tab" onclick="setTab('yesterday')">Yesterday</button>
+      <button id="btn_today" class="board-tab active" onclick="setTab('today')">Today</button>
+      <button id="btn_tomorrow" class="board-tab" onclick="setTab('tomorrow')">Tomorrow</button>
+    </div>
+
+    <div class="board-clock">
+      <div id="live_time" class="board-time">00:00:00</div>
+      <div id="live_date" class="board-date">---</div>
+    </div>
+  </header>
+
+  <main id="scroll_container" class="board-main">
+    <table class="board-table">
+      <thead>
+        <tr>
+          <th style="width:180px">Machine</th>
+          <th style="width:260px">Component & SO</th>
+          <th style="width:160px">Tool No</th>
+          <th style="width:180px">RM & Required</th>
+          <th style="text-align:center;width:100px">Target</th>
+          <th style="text-align:center;width:100px">Strokes</th>
+          <th style="text-align:center;width:100px">Produced</th>
+          <th style="text-align:center;width:120px">Status</th>
+          <th style="width:200px">Remarks</th>
+        </tr>
+      </thead>
+      <tbody id="board_body">
+        <tr><td colspan="9" style="text-align:center;padding:80px 0;color:var(--board-text-dim)">Loading board data…</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <script>
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+    const todayObj = new Date(Date.now() - tzoffset);
+    const todayStr = todayObj.toISOString().split('T')[0];
+    let yesterdayObj = new Date(todayObj); yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    const yesterdayStr = yesterdayObj.toISOString().split('T')[0];
+    let tomorrowObj = new Date(todayObj); tomorrowObj.setDate(tomorrowObj.getDate() + 1);
+    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+
+    let allMachines = [];
+    let allJobs = { [yesterdayStr]: [], [todayStr]: [], [tomorrowStr]: [] };
+    let activeTab = 'today';
+    const tabs = ['yesterday', 'today', 'tomorrow'];
+    let tabIndex = 1;
+
+    // Live clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('live_time').innerText = now.toLocaleTimeString('en-US', { hour12: false });
+      document.getElementById('live_date').innerText = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    }, 1000);
+
+    async function fetchBoardData() {
+      try {
+        if (!allMachines.length) {
+          const mRes = await fetch('/api/wh/machines');
+          allMachines = await mRes.json();
+        }
+        const res = await fetch(`/api/wh/board/${todayStr}`);
+        const jobs = await res.json();
+        allJobs = { [yesterdayStr]: [], [todayStr]: [], [tomorrowStr]: [] };
+        jobs.forEach(j => { if (allJobs[j.scheduled_date]) allJobs[j.scheduled_date].push(j); });
+        renderTable();
+      } catch (e) { console.error('Board data fetch failed', e); }
+    }
+
+    function setTab(tabName) {
+      activeTab = tabName;
+      tabIndex = tabs.indexOf(tabName);
+      tabs.forEach(t => {
+        const btn = document.getElementById(`btn_${t}`);
+        btn.classList.toggle('active', t === tabName);
+      });
+      renderTable();
+    }
+
+    // Auto-cycle tabs every 15s
+    setInterval(() => { tabIndex = (tabIndex + 1) % 3; setTab(tabs[tabIndex]); }, 15000);
+
+    function renderTable() {
+      const tbody = document.getElementById('board_body');
+      let dateKey = todayStr;
+      if (activeTab === 'yesterday') dateKey = yesterdayStr;
+      if (activeTab === 'tomorrow') dateKey = tomorrowStr;
+
+      const jobs = allJobs[dateKey];
+      let html = '';
+
+      allMachines.forEach((mac, mIndex) => {
+        const macName = mac.MCM_Name.split('(')[0].trim();
+        const macJobs = jobs.filter(j => j.machine_name.split('(')[0].trim() === macName);
+        const stripe = mIndex % 2 === 0 ? '' : ' stripe';
+
+        if (macJobs.length === 0) {
+          html += `<tr class="${stripe}">
+            <td class="cell-machine idle">${macName}</td>
+            <td colspan="8"><span class="idle-tag">☽ Machine Idle</span></td>
+          </tr>`;
+        } else {
+          macJobs.forEach((j, idx) => {
+            const statusCls = j.status === 'COMPLETED' ? 'status-completed' :
+                              j.status === 'IN_PROGRESS' ? 'status-in_progress' : 'status-pending';
+            const machineCell = idx === 0
+              ? `<td class="cell-machine active">${macName}</td>`
+              : `<td class="cell-machine" style="border-left:3px solid transparent;padding-left:30px;color:var(--board-text-dim)">↳</td>`;
+
+            html += `<tr class="${stripe}">
+              ${machineCell}
+              <td>
+                <div class="cell-part">${j.part_no}</div>
+                <div class="cell-part-name">${j.part_name}</div>
+                <div class="cell-so">${j.sales_order_no || 'STOCK'}</div>
+              </td>
+              <td class="cell-tool">${j.tool_no}</td>
+              <td>
+                <div class="cell-rm">${j.raw_material_part_no}</div>
+                <div class="cell-rm-req">Req: <strong style="color:var(--board-text)">${(j.rm_required_qty || 0).toFixed(2)} KG</strong></div>
+              </td>
+              <td class="cell-num target big">${j.target_qty}</td>
+              <td class="cell-num strokes big">${j.strokes_consumed}</td>
+              <td class="cell-num big ${j.produced_qty >= j.target_qty ? 'good' : 'pending'}">${j.produced_qty}</td>
+              <td style="text-align:center"><span class="status-chip ${statusCls}">${j.status}</span></td>
+              <td class="cell-remarks">${j.operator_remarks || '<span style="opacity:0.4">—</span>'}</td>
+            </tr>`;
+          });
+        }
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    // Initial + auto-refresh
+    fetchBoardData();
+    setInterval(fetchBoardData, 10000);
+
+    // Auto-scroll
+    const scroller = document.getElementById('scroll_container');
+    let scrollDir = 1;
+    setInterval(() => {
+      if (scroller.scrollHeight > scroller.clientHeight) {
+        if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 5) {
+          scrollDir = -1;
+          setTimeout(() => { scroller.scrollTo({ top: 0, behavior: 'smooth' }); scrollDir = 1; }, 5000);
+        } else if (scrollDir === 1) {
+          scroller.scrollBy({ top: 2, behavior: 'smooth' });
+        }
+      }
+    }, 50);
+  </script>
+</body>
+</html>

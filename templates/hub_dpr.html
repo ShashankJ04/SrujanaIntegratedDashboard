@@ -1,0 +1,146 @@
+<!-- DPR — Daily Production Review (Hub Section) — aligned with Original Dashboard -->
+<!-- DPR_POLL_INTERVAL_MS: set once in hub.html (before dpr.js); no per-section script needed. -->
+<script>window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};</script>
+
+<section class="ti-section ti-hub-section-fill" data-section="dpr" id="section-dpr">
+
+  <!-- ── Header Row (date, actions, line count — single band) ── -->
+  <div class="ti-dpr-toolbar" style="flex-shrink:0">
+    <div class="ti-dpr-toolbar-left">
+      <label class="ti-dpr-date-label" for="dpr-date">Date</label>
+      <input id="dpr-date" class="ti-dpr-date-input" type="date" />
+      {% if dpr_edit_allowed|default(false) %}
+      <button type="button" id="dpr-add-row" class="ti-btn ti-btn-primary ti-btn-sm" title="Add production line">＋ Add line</button>
+      {% endif %}
+      <button type="button" id="dpr-reset-columns" class="ti-btn ti-btn-outline ti-btn-sm" title="Reset saved column layout">Reset columns</button>
+    </div>
+    <div class="ti-dpr-toolbar-right">
+      <span id="dpr-table-summary" class="ti-dpr-table-summary"></span>
+      <span id="dpr-status" class="ti-dpr-status"></span>
+    </div>
+  </div>
+
+  <!-- ── KPI Strip (match Original: Planned / Produced / Produced %) ── -->
+  <div class="ti-dpr-kpi-grid" style="flex-shrink:0">
+    <article class="ti-card ti-dpr-kpi-card">
+      <h3 class="ti-dpr-kpi-title">Daily Production Status</h3>
+      <div class="ti-dpr-kpi-row">
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-planned">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced %</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced-pct">—</span></div>
+      </div>
+    </article>
+    <article class="ti-card ti-dpr-kpi-card">
+      <h3 class="ti-dpr-kpi-title">Monthly Production Status</h3>
+      <div class="ti-dpr-kpi-row">
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-planned">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-produced">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced %</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-produced-pct">—</span></div>
+      </div>
+    </article>
+    <article class="ti-card ti-dpr-kpi-card">
+      <h3 class="ti-dpr-kpi-title">Previous Day Summary</h3>
+      <div class="ti-dpr-kpi-row">
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-board-last-planned">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-board-last-produced">—</span></div>
+        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Achievement %</span><span class="ti-dpr-kpi-value" id="dpr-board-last-achievement">—</span></div>
+      </div>
+    </article>
+  </div>
+
+  <!-- ── Board row: Production resources + Bottlenecks (Original Dashboard) ── -->
+  <div class="ti-dpr-board-row" style="flex-shrink:0">
+    <article class="ti-card ti-dpr-board-card">
+      <h3 class="ti-dpr-kpi-title">Production Resources</h3>
+      <div class="ti-dpr-board-lines">
+        <div class="ti-dpr-board-line">
+          <span class="ti-dpr-board-label">Operators (Planned / Actual):</span>
+          <span id="dpr-operators-read" class="ti-dpr-board-value">—</span>
+          <div id="dpr-operators-edit" class="ti-dpr-inline-edit" style="display:none">
+            <input id="dpr-op-planned-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
+            <span>/</span>
+            <input id="dpr-op-actual-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
+          </div>
+        </div>
+        <div class="ti-dpr-board-line">
+          <span class="ti-dpr-board-label">Machines (Planned / Total):</span>
+          <span id="dpr-machines-read" class="ti-dpr-board-value">—</span>
+        </div>
+      </div>
+    </article>
+    <article class="ti-card ti-dpr-board-card ti-dpr-board-card--wide">
+      <h3 class="ti-dpr-kpi-title">Key Bottlenecks &amp; Pending Issues</h3>
+      <div id="dpr-board-bottleneck-read-wrap" class="ti-dpr-bottleneck-read-wrap">
+        <div id="dpr-bottleneck-grid" class="ti-dpr-bottleneck-grid" aria-label="Bottleneck list"></div>
+      </div>
+      <textarea id="dpr-board-bottleneck-input" class="ti-input ti-dpr-bottleneck-input" style="display:none;width:100%;min-height:120px;resize:vertical" rows="6" placeholder="One issue per line"></textarea>
+    </article>
+  </div>
+
+  <!-- ── DPR Table — same column keys as Original Dashboard (drag / pin / sort in JS) ── -->
+  <div class="ti-card" style="padding:0; overflow:hidden; flex:1; min-height:0; display:flex; flex-direction:column;">
+    <div id="dpr-table-container" class="ti-dpr-scroll ti-dpr-table-wrap" style="flex:1; min-height:0;">
+      <table class="ti-dpr-table data-table dpr-data-table ti-excel-table ti-excel-table--original" id="dpr-table">
+        <thead>
+          <tr>
+            {% if dpr_edit_allowed|default(false) %}
+            <th id="dpr-th-actions" data-col-name="actions" class="dpr-col-actions">Actions</th>
+            {% endif %}
+            <th data-col-name="machine">Machine</th>
+            <th data-col-name="qr" class="dpr-col-qr">QR</th>
+            <th data-col-name="part_no">Part No</th>
+            <th data-col-name="part_name">Part Name</th>
+            <th data-col-name="planned_qty">Planned Qty</th>
+            <th data-col-name="produced_qty">Produced Qty</th>
+            <th data-col-name="produced_pct">Produced %</th>
+            <th data-col-name="remarks">Remarks</th>
+            <th data-col-name="rm_issued">RM Issued</th>
+            <th data-col-name="rm_available">RM Available</th>
+            <th data-col-name="rm_code">RM Code</th>
+            <th data-col-name="rm_coverage_nos">RM Coverage (Nos)</th>
+            <th data-col-name="rm_allocated">RM Allocated</th>
+            <th data-col-name="tool_no">Tool No</th>
+            <th data-col-name="strokes_consumed">Strokes Consumed</th>
+            <th data-col-name="pm_due">PM Due</th>
+          </tr>
+        </thead>
+        <tbody id="dpr-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Machine QR modal (same behavior as Original Dashboard) -->
+<div
+  id="dpr-qr-modal"
+  class="dpr-qr-modal dpr-hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="dpr-qr-modal-title"
+>
+  <div class="dpr-qr-modal-backdrop" id="dpr-qr-modal-backdrop"></div>
+  <div class="dpr-qr-modal-card">
+    <div class="dpr-qr-modal-head">
+      <h3 id="dpr-qr-modal-title" class="dpr-qr-modal-title">Machine QR</h3>
+      <button type="button" id="dpr-qr-modal-close" class="ti-btn ti-btn-outline ti-btn-sm">Close</button>
+    </div>
+    <img id="dpr-qr-modal-img" class="dpr-qr-modal-img" alt="" width="240" height="240" />
+    <p class="dpr-qr-modal-hint">
+      <a id="dpr-qr-modal-link" href="#" target="_blank" rel="noopener">Open receiver (mobile)</a>
+    </p>
+  </div>
+</div>
+
+<script>
+(function() {
+  var t = document.getElementById("dpr-table");
+  var host = document.getElementById("dpr-table-container");
+  if (window.TiExcelDisplay) {
+    if (t) TiExcelDisplay.apply(t, { variant: "original" });
+    if (host) TiExcelDisplay.applyHost(host);
+  }
+  if (window.DprPage && typeof DprPage.init === "function") {
+    DprPage.init();
+  }
+})();
+</script>

@@ -1,0 +1,343 @@
+<!-- Hub Reports (REPT) — Ultra-compact toolbar, maximized grid -->
+
+<section class="ti-section ti-hub-section-fill reports-runner" data-section="reports" id="section-reports">
+
+  <!-- ═══ COMPACT TOOLBAR — single strip ═══ -->
+  <div class="rr-toolbar">
+    <h2 class="rr-toolbar__title" id="runReportTitle">Reports</h2>
+    <span id="runReportSub" class="rr-toolbar__hint">Select a report from the sidebar</span>
+
+    <!-- Inline variables (hidden until a report with vars is selected) -->
+    <div id="runVarsPanel" class="rr-toolbar__vars" style="display:none"></div>
+
+    <!-- Spacer pushes actions right -->
+    <div class="rr-toolbar__spacer"></div>
+
+    <!-- Actions cluster -->
+    <button type="button" class="rr-btn rr-btn--run" id="runExecuteBtn" disabled title="Run report">▶ Run</button>
+    <span id="reportsGridCount" class="rr-pill sg-count" style="display:none" aria-live="polite"></span>
+    <input type="search" id="reportsGridSearch" class="rr-search sg-search" placeholder="Search columns…" style="display:none" autocomplete="off" />
+    <button type="button" class="rr-btn rr-btn--clear" id="runClearBtn" style="display:none" title="Clear parameters">✕</button>
+    <button type="button" class="rr-btn rr-btn--export" id="runExportBtn" disabled title="Export to Excel">⬇ Export</button>
+  </div>
+
+  <!-- ═══ LOADING ═══ -->
+  <div id="runLoading" class="rr-loading" style="display:none"><div class="rr-loading__bar"></div></div>
+
+  <!-- ═══ ERROR ═══ -->
+  <div id="runError" class="rr-error" style="display:none"></div>
+
+  <!-- ═══ GRID — fills all remaining space ═══ -->
+  <div class="rr-grid-host">
+    <div id="runTable" style="display:none"></div>
+    <div id="runEmpty" class="rr-empty" style="display:none">
+      <span class="rr-empty__icon">📋</span>
+      <span class="rr-empty__text">Select a report from the <strong>sidebar</strong> to get started</span>
+    </div>
+  </div>
+
+  <!-- Hidden picker kept for sidebar-collapsed fallback -->
+  <select id="reportsRunnerPicker" class="rr-hidden-picker" style="display:none" aria-hidden="true">
+    <option value="">Choose a report…</option>
+  </select>
+</section>
+
+<script>
+(function() {
+  let currentRunReport = null, lastRunResult = null;
+  let pickerIgnoreChange = false;
+  let _prevSidebarState = null; // remember sidebar state before auto-collapse
+
+  /* ── Auto-collapse sidebar for max grid width ── */
+  function autoCollapseSidebar() {
+    const sidebar = document.querySelector('.ti-sidebar');
+    if (!sidebar) return;
+    _prevSidebarState = sidebar.classList.contains('collapsed');
+    if (!_prevSidebarState) {
+      sidebar.classList.add('collapsed');
+      localStorage.setItem('hub_sidebar', 'collapsed');
+    }
+  }
+
+  function restoreSidebar() {
+    if (_prevSidebarState === false) {
+      const sidebar = document.querySelector('.ti-sidebar');
+      if (sidebar) {
+        sidebar.classList.remove('collapsed');
+        localStorage.setItem('hub_sidebar', 'expanded');
+      }
+    }
+    _prevSidebarState = null;
+  }
+
+  // Auto-collapse on section load (but not aggressively — user can re-expand)
+  // We skip auto-collapse so the user can use the sidebar tree to navigate reports.
+  // Instead, expand the reports tree automatically.
+  (function() {
+    const tree = document.getElementById('ti-nav-reports-tree');
+    const chev = document.getElementById('ti-nav-reports-chevron');
+    if (tree) {
+      tree.hidden = false;
+      if (chev) {
+        chev.setAttribute('aria-expanded', 'true');
+        chev.textContent = '▾';
+      }
+    }
+  })();
+
+  /* ── Picker (hidden, for programmatic sync) ── */
+  function syncReportsPicker(reportId) {
+    const sel = document.getElementById('reportsRunnerPicker');
+    if (!sel) return;
+    pickerIgnoreChange = true;
+    sel.value = reportId ? String(reportId) : '';
+    pickerIgnoreChange = false;
+  }
+
+  async function populateReportsPicker() {
+    const sel = document.getElementById('reportsRunnerPicker');
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">Choose a report…</option>';
+    try {
+      const groups = await apiFetch('/api/reports/groups');
+      for (const g of groups) {
+        const reports = await apiFetch('/api/reports/reports?groupId=' + encodeURIComponent(g.id));
+        const og = document.createElement('optgroup');
+        og.label = g.name;
+        reports.forEach(r => {
+          const o = document.createElement('option');
+          o.value = r.id;
+          o.textContent = r.name;
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      }
+    } catch (e) {
+      console.error('Reports picker:', e);
+    }
+    if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+    else syncReportsPicker(currentRunReport && currentRunReport.id);
+  }
+
+  window.__hubReportsRefreshPicker = populateReportsPicker;
+
+  function setReportsGridToolsVisible(show) {
+    const c = document.getElementById('reportsGridCount');
+    const s = document.getElementById('reportsGridSearch');
+    if (c) {
+      c.style.display = show ? 'inline-flex' : 'none';
+      if (!show) c.textContent = '';
+    }
+    if (s) {
+      s.style.display = show ? '' : 'none';
+      if (!show) s.value = '';
+    }
+  }
+
+  function attrEscape(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  function reportVarControlHtml(v) {
+    const id = 'runVar_' + v;
+    const u = v.toUpperCase();
+    const ph = attrEscape(v);
+    const tip = ' title="' + ph + '" aria-label="' + ph + '"';
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (u === 'MONTH' || u.endsWith('_MONTH')) {
+      const cur = new Date().getMonth() + 1;
+      let opts = '';
+      for (let m = 1; m <= 12; m++) {
+        opts += '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + ' — ' + monthNames[m - 1] + '</option>';
+      }
+      return '<div class="rr-var"><select class="ti-select rr-var__ctl" id="' + id + '"' + tip + '>' + opts + '</select></div>';
+    }
+    if (u === 'YEAR' || u === 'Y' || u.endsWith('_YEAR')) {
+      const y0 = new Date().getFullYear();
+      let opts = '';
+      for (let y = y0 - 5; y <= y0 + 1; y++) {
+        opts += '<option value="' + y + '"' + (y === y0 ? ' selected' : '') + '>' + y + '</option>';
+      }
+      return '<div class="rr-var"><select class="ti-select rr-var__ctl rr-var__ctl--narrow" id="' + id + '"' + tip + '>' + opts + '</select></div>';
+    }
+    if (u === 'DAY' || u === 'DOM' || u === 'D') {
+      return '<div class="rr-var"><input type="number" class="ti-input rr-var__ctl rr-var__ctl--narrow" id="' + id + '" min="1" max="31" placeholder="' + ph + '"' + tip + '></div>';
+    }
+    if ((u.includes('DATE') || u.endsWith('_DT') || u === 'AS_ON') && !u.endsWith('_MONTH') && !u.endsWith('_YEAR')) {
+      const today = new Date().toISOString().slice(0, 10);
+      return '<div class="rr-var"><input type="date" class="ti-input rr-var__ctl" id="' + id + '" value="' + today + '"' + tip + '></div>';
+    }
+    return '<div class="rr-var"><input type="text" class="ti-input rr-var__ctl" id="' + id + '" placeholder="' + ph + '" style="min-width:100px;max-width:160px"' + tip + '></div>';
+  }
+
+  function resetRunVariableInputs() {
+    if (!currentRunReport) return;
+    const vars = currentRunReport.variables || [];
+    if (!vars.length) return;
+    const varsPanel = document.getElementById('runVarsPanel');
+    varsPanel.innerHTML = vars.map(reportVarControlHtml).join('');
+  }
+
+  function collectRunVariables() {
+    const vars = {};
+    (currentRunReport.variables || []).forEach(v => {
+      const el = document.getElementById('runVar_' + v);
+      if (el) vars[v] = el.value;
+    });
+    return vars;
+  }
+
+  function showEmptyViewer() {
+    currentRunReport = null;
+    lastRunResult = null;
+    document.getElementById('runReportTitle').textContent = 'Reports';
+    const sub = document.getElementById('runReportSub');
+    sub.textContent = 'Select a report from the sidebar';
+    sub.style.display = '';
+    document.getElementById('runExecuteBtn').disabled = true;
+    document.getElementById('runExportBtn').disabled = true;
+    document.getElementById('runTable').style.display = 'none';
+    document.getElementById('runTable').innerHTML = '';
+    document.getElementById('runError').style.display = 'none';
+    setReportsGridToolsVisible(false);
+    const varsPanel = document.getElementById('runVarsPanel');
+    varsPanel.style.display = 'none';
+    varsPanel.innerHTML = '';
+    document.getElementById('runEmpty').style.display = 'flex';
+    document.getElementById('runClearBtn').style.display = 'none';
+    syncReportsPicker(null);
+  }
+
+  function openRunReport(report) {
+    currentRunReport = report;
+    document.getElementById('runReportTitle').textContent = report.name;
+    document.getElementById('runReportSub').style.display = 'none';
+    document.getElementById('runExecuteBtn').disabled = false;
+    document.getElementById('runExportBtn').disabled = true;
+    document.getElementById('runTable').style.display = 'none';
+    document.getElementById('runTable').innerHTML = '';
+    document.getElementById('runError').style.display = 'none';
+    setReportsGridToolsVisible(false);
+    lastRunResult = null;
+
+    const varsPanel = document.getElementById('runVarsPanel');
+    const vars = report.variables || [];
+    if (vars.length) {
+      varsPanel.style.display = 'flex';
+      varsPanel.innerHTML = vars.map(reportVarControlHtml).join('');
+    } else {
+      varsPanel.style.display = 'none';
+      varsPanel.innerHTML = '';
+    }
+
+    document.getElementById('runEmpty').style.display = 'none';
+    document.getElementById('runClearBtn').style.display = vars.length ? '' : 'none';
+    syncReportsPicker(report.id);
+  }
+
+  async function runReportExecute() {
+    if (!currentRunReport) return;
+    document.getElementById('runLoading').style.display = 'block';
+    document.getElementById('runTable').style.display = 'none';
+    document.getElementById('runError').style.display = 'none';
+    setReportsGridToolsVisible(false);
+
+    const vars = collectRunVariables();
+    const rid = currentRunReport.id;
+    const loadEl = document.getElementById('runLoading');
+
+    try {
+      const result = await apiPost('/api/reports/reports/' + rid + '/run', { variables: vars });
+      if (!currentRunReport || currentRunReport.id !== rid) return;
+      lastRunResult = result;
+
+      if (!result.rows || !result.rows.length) {
+        document.getElementById('runTable').innerHTML = '<div class="rr-no-data">No rows returned</div>';
+        document.getElementById('runTable').style.display = 'block';
+        setReportsGridToolsVisible(false);
+      } else {
+        const cols = result.columns || Object.keys(result.rows[0]);
+        const dgCols = cols.map(c => {
+          const isNum = result.rows.some(r => r[c] != null && !isNaN(Number(r[c])));
+          return { key: c, label: c, align: isNum ? 'right' : 'left', sortable: true };
+        });
+        const runTableEl = document.getElementById('runTable');
+        runTableEl.innerHTML = '';
+        runTableEl.style.display = 'flex';
+        setReportsGridToolsVisible(true);
+        SuperGrid.create(runTableEl, {
+          columns: dgCols,
+          rows: result.rows,
+          options: {
+            search: true,
+            omitToolbar: true,
+            countElement: document.getElementById('reportsGridCount'),
+            searchInputElement: document.getElementById('reportsGridSearch'),
+            rowNumbers: true,
+            countLabel: 'rows',
+            exportBtn: false,
+            resizable: true,
+          },
+        });
+      }
+      document.getElementById('runExportBtn').disabled = false;
+    } catch (err) {
+      if (currentRunReport && currentRunReport.id === rid) {
+        document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message}</div>`;
+        document.getElementById('runError').style.display = 'block';
+      }
+    } finally {
+      loadEl.style.display = 'none';
+    }
+  }
+
+  window.__hubReportsOpenReport = async function(reportId) {
+    if (!reportId) {
+      showEmptyViewer();
+      return;
+    }
+    document.getElementById('runLoading').style.display = 'block';
+    try {
+      const report = await apiFetch('/api/reports/reports/' + encodeURIComponent(reportId));
+      openRunReport(report);
+      const vars = report.variables || [];
+      if (!vars.length) await runReportExecute();
+    } catch (err) {
+      document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message || 'Failed to load report'}</div>`;
+      document.getElementById('runError').style.display = 'block';
+      document.getElementById('runEmpty').style.display = 'none';
+    }
+    document.getElementById('runLoading').style.display = 'none';
+  };
+
+  document.getElementById('runClearBtn').addEventListener('click', () => {
+    resetRunVariableInputs();
+  });
+
+  document.getElementById('reportsRunnerPicker').addEventListener('change', function() {
+    if (pickerIgnoreChange) return;
+    const v = this.value;
+    if (window.Hub && typeof Hub.navigate === 'function') Hub.navigate('reports', { reportId: v || null });
+    else if (!v) showEmptyViewer();
+    else window.__hubReportsOpenReport(v);
+  });
+
+  document.getElementById('runExecuteBtn').addEventListener('click', () => runReportExecute());
+
+  document.getElementById('runExportBtn').addEventListener('click', async () => {
+    if (!currentRunReport || !lastRunResult) return;
+    const vars = collectRunVariables();
+    try {
+      await apiDownload('/api/reports/reports/' + currentRunReport.id + '/export', { variables: vars }, currentRunReport.name + '.xlsx');
+    } catch (err) { showSnackbar(err.message); }
+  });
+
+  populateReportsPicker().then(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rid = params.get('report');
+    if (rid) window.__hubReportsOpenReport(rid);
+    else showEmptyViewer();
+  });
+})();
+</script>

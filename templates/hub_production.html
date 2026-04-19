@@ -1,0 +1,79 @@
+<!-- Hub Production Section — Uses DataGrid -->
+<div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px">
+  <div class="ti-flex ti-gap-12" style="align-items:center">
+    <span style="font-size:24px">🏭</span>
+    <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright)">Production Dashboard</h2>
+  </div>
+  <div class="ti-flex ti-gap-12" style="align-items:center">
+    <input type="date" class="ti-input" id="prodDate" style="width:160px">
+    <button class="ti-btn ti-btn-primary" id="prodSearchBtn">🔍 Search</button>
+  </div>
+</div>
+
+<div id="prodLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+<div id="prodError" style="display:none"></div>
+<div id="prodGrid"></div>
+<div id="prodEmpty" class="ti-empty"><div class="ti-empty-icon">🏭</div><div class="ti-empty-text">Select a date and click Search</div></div>
+
+<script>
+(function() {
+  const dateInput = document.getElementById('prodDate');
+  const today = new Date().toISOString().split('T')[0];
+  dateInput.value = today;
+  let grid = null;
+
+  const columns = [
+    { key:'customer', label:'Customer', width: 140 },
+    { key:'partno', label:'Part No', className:'val-bold', width: 160 },
+    { key:'partname', label:'Part Name', width: 220 },
+    { key:'rm', label:'RM', width: 100 },
+    { key:'planDate', label:'Pln Dt', width: 110 },
+    { key:'planQty', label:'Pln Qty', align:'right', width: 100, format: v => formatIndianNumber(v) },
+    { key:'prodQty', label:'Prod Qty', align:'right', width: 100, format: v => formatIndianNumber(v) },
+    { key:'variance', label:'Var', align:'center', width: 100,
+      format: (v) => createVarianceChip(v, {invertColors:false, format:false}).outerHTML },
+    { key:'sw', label:'SW', align:'right', width: 80 },
+    { key:'sf', label:'SF', align:'right', width: 80 },
+    { key:'grsQty', label:'GRS Qty', align:'right', width: 100, format: v => formatIndianNumber(v) },
+    { key:'rmIssue', label:'RM ISU', align:'right', width: 100, format: v => Number(v||0).toFixed(2) },
+    { key:'rmRod', label:'RM ROD', align:'right', width: 100, format: v => Number(v||0).toFixed(2) },
+    { key:'fg', label:'FG', align:'right', width: 100, format: v => formatIndianNumber(v) },
+    { key:'wip', label:'WIP', align:'right', width: 100, format: v => formatIndianNumber(v) },
+    { key:'totalStock', label:'Total Stk', align:'right', width: 100, format: v => formatIndianNumber(v) },
+  ];
+
+  async function search() {
+    const date = dateInput.value;
+    if (!date) return;
+    document.getElementById('prodLoading').style.display = 'flex';
+    document.getElementById('prodGrid').style.display = 'none';
+    document.getElementById('prodEmpty').style.display = 'none';
+    document.getElementById('prodError').style.display = 'none';
+
+    try {
+      const data = await apiFetch('/api/production/' + date);
+      const rows = Array.isArray(data) ? data : (data.items || []);
+      document.getElementById('prodGrid').style.display = 'block';
+
+      grid = SuperGrid.create(document.getElementById('prodGrid'), {
+        columns,
+        rows,
+        options: {
+          search: true,
+          exportBtn: false,
+          rowNumbers: true,
+          emptyText: 'No production data for this date',
+          countLabel: 'items',
+        },
+      });
+    } catch(err) {
+      document.getElementById('prodError').innerHTML = `<div class="ti-alert ti-alert-error">${err.message}</div>`;
+      document.getElementById('prodError').style.display = 'block';
+    }
+    document.getElementById('prodLoading').style.display = 'none';
+  }
+
+  document.getElementById('prodSearchBtn').addEventListener('click', search);
+  dateInput.addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+})();
+</script>

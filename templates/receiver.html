@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tag Scanner — Warehouse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/titanium.css') }}">
+  <style>
+    body { background: var(--ti-bg); color: var(--ti-text); font-family: var(--ti-font); min-height: 100vh; display: flex; flex-direction: column; }
+    .rcv-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; border-bottom: 1px solid var(--ti-border);
+      background: var(--ti-glass); backdrop-filter: blur(12px);
+    }
+    .rcv-brand { display: flex; align-items: center; gap: 12px; }
+    .rcv-brand h1 { font-size: 18px; font-weight: 800; color: var(--ti-text-bright); }
+    .rcv-brand small { font-size: 10px; color: var(--ti-text-dim); font-weight: 600; }
+    .rcv-main { flex: 1; padding: 24px; max-width: 800px; margin: 0 auto; width: 100%; }
+
+    /* Scan input */
+    .scan-group { display: flex; gap: 10px; margin-bottom: 24px; }
+    .scan-input {
+      flex: 1; padding: 12px 16px; border-radius: var(--ti-radius-sm);
+      border: 1px solid var(--ti-border-strong); background: var(--ti-surface);
+      color: var(--ti-text); font-size: 14px; font-family: var(--ti-font);
+      outline: none;
+    }
+    .scan-input:focus { border-color: var(--ti-blue); box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+    .scan-btn {
+      padding: 12px 20px; border-radius: var(--ti-radius-sm); border: none;
+      background: var(--ti-blue); color: #fff; font-weight: 700;
+      font-family: var(--ti-font); cursor: pointer; font-size: 13px;
+      transition: all 150ms;
+    }
+    .scan-btn:hover { background: #2563eb; box-shadow: 0 4px 16px rgba(59,130,246,0.25); }
+
+    /* Tag info card */
+    .tag-card {
+      background: var(--ti-glass); border: 1px solid var(--ti-glass-border);
+      border-radius: var(--ti-radius); padding: 20px; margin-bottom: 20px;
+    }
+    .tag-card h3 { font-size: 14px; font-weight: 800; color: var(--ti-text-bright); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .tag-detail { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .tag-field label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ti-text-dim); margin-bottom: 2px; }
+    .tag-field span { font-size: 14px; font-weight: 600; color: var(--ti-text-bright); }
+
+    /* Action buttons */
+    .action-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .action-btn {
+      padding: 10px 18px; border-radius: var(--ti-radius-sm);
+      border: 1px solid var(--ti-border-strong); background: var(--ti-surface);
+      color: var(--ti-text); font-size: 12px; font-weight: 700;
+      font-family: var(--ti-font); cursor: pointer; transition: all 150ms;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .action-btn:hover { background: var(--ti-surface-2); border-color: var(--ti-text-dim); }
+    .action-btn.primary { background: var(--ti-blue); color: #fff; border-color: var(--ti-blue); }
+    .action-btn.primary:hover { background: #2563eb; }
+    .action-btn.danger { background: var(--ti-red); color: #fff; border-color: var(--ti-red); }
+    .action-btn.danger:hover { background: #dc2626; }
+    .action-btn.success { background: var(--ti-emerald); color: #fff; border-color: var(--ti-emerald); }
+    .action-btn.success:hover { background: #059669; }
+
+    /* Action forms */
+    .action-form { display: none; margin-top: 16px; padding: 16px; background: var(--ti-surface); border-radius: var(--ti-radius-sm); border: 1px solid var(--ti-border); }
+    .action-form.active { display: block; }
+    .action-form label { display: block; font-size: 11px; font-weight: 700; color: var(--ti-text-muted); margin-bottom: 4px; text-transform: uppercase; }
+    .action-form input, .action-form select {
+      width: 100%; padding: 8px 12px; border-radius: 6px;
+      border: 1px solid var(--ti-border-strong); background: var(--ti-surface-2);
+      color: var(--ti-text); font-family: var(--ti-font); font-size: 13px;
+      margin-bottom: 10px; outline: none;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Snackbar */
+    .rcv-snack { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; color: #fff; z-index: 999; opacity: 0; transition: opacity 300ms; pointer-events: none; }
+    .rcv-snack.show { opacity: 1; }
+    .rcv-snack.ok { background: var(--ti-emerald); }
+    .rcv-snack.err { background: var(--ti-red); }
+  </style>
+</head>
+<body>
+  <header class="rcv-header">
+    <div class="rcv-brand">
+      <div style="font-size:24px">📦</div>
+      <div><h1>Tag Scanner</h1><small>WAREHOUSE TAG LIFECYCLE</small></div>
+    </div>
+    <a href="/app" class="action-btn">← Back to Hub</a>
+  </header>
+
+  <main class="rcv-main">
+    <div class="scan-group">
+      <input id="tag-input" class="scan-input" type="text" placeholder="Enter or scan tag ID…" autofocus />
+      <button class="scan-btn" onclick="scanTag()">Scan</button>
+    </div>
+
+    <div id="tag-info" style="display:none">
+      <div class="tag-card">
+        <h3>Tag Details</h3>
+        <div class="tag-detail" id="tag-details"></div>
+      </div>
+
+      <div class="tag-card" id="locations-card" style="display:none">
+        <h3>Rack Locations</h3>
+        <div id="locations-list"></div>
+      </div>
+
+      <div class="action-bar" id="action-bar"></div>
+
+      <!-- INSPECT form -->
+      <div class="action-form" id="form-inspect">
+        <h3 style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--ti-text-bright)">QUALITY INSPECTION</h3>
+        <div class="form-row">
+          <div><label>Passed Qty</label><input id="inspect-passed" type="number" step="0.01" min="0" /></div>
+          <div><label>Rejected Qty</label><input id="inspect-rejected" type="number" step="0.01" min="0" /></div>
+        </div>
+        <button class="action-btn primary" onclick="doInspect()">Submit Inspection</button>
+      </div>
+
+      <!-- RACK form -->
+      <div class="action-form" id="form-rack">
+        <h3 style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--ti-text-bright)">ASSIGN RACK LOCATIONS</h3>
+        <div id="rack-entries"><div class="form-row"><div><label>Rack #</label><input class="rack-num" /></div><div><label>Qty</label><input class="rack-qty" type="number" step="0.01" /></div></div></div>
+        <button class="action-btn" onclick="addRackRow()" style="margin-bottom:10px">+ Add Location</button>
+        <button class="action-btn success" onclick="doRack()">Confirm Putaway</button>
+      </div>
+
+      <!-- ISSUE form -->
+      <div class="action-form" id="form-issue">
+        <h3 style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--ti-text-bright)">ISSUE MATERIAL</h3>
+        <div class="form-row">
+          <div><label>From Rack</label><select id="issue-rack"></select></div>
+          <div><label>Issue Qty</label><input id="issue-qty" type="number" step="0.01" min="0" /></div>
+        </div>
+        <button class="action-btn primary" onclick="doIssue()">Issue</button>
+      </div>
+
+      <!-- RETURN form -->
+      <div class="action-form" id="form-return">
+        <h3 style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--ti-text-bright)">RETURN MATERIAL</h3>
+        <div class="form-row">
+          <div><label>Return Qty</label><input id="return-qty" type="number" step="0.01" min="0" /></div>
+          <div><label>To Rack</label><input id="return-rack" /></div>
+        </div>
+        <button class="action-btn success" onclick="doReturn()">Return</button>
+      </div>
+
+      <!-- RETURN_SCRAP form -->
+      <div class="action-form" id="form-scrap">
+        <h3 style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--ti-text-bright)">SCRAP RETURN</h3>
+        <div><label>Scrap Qty</label><input id="scrap-qty" type="number" step="0.01" min="0" /></div>
+        <button class="action-btn danger" onclick="doScrap()">Mark as Scrap</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="snack" class="rcv-snack"></div>
+
+  <script>
+    let currentTag = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    // Auto-scan warehouse tag from QR url param
+    const qrTagId = urlParams.get('tag_id');
+    if (qrTagId) { document.getElementById('tag-input').value = qrTagId; setTimeout(scanTag, 300); }
+
+    document.getElementById('tag-input').addEventListener('keydown', e => { if (e.key === 'Enter') scanTag(); });
+
+    async function scanTag() {
+      const tagId = document.getElementById('tag-input').value.trim();
+      if (!tagId) return;
+      try {
+        const res = await fetch(`/api/wh/scan/${tagId}`);
+        const data = await res.json();
+        if (data.error) { showSnack(data.error, 'err'); return; }
+        currentTag = data;
+        renderTag(data);
+        document.getElementById('tag-info').style.display = '';
+      } catch (e) { showSnack('Failed to scan tag', 'err'); }
+    }
+
+    function renderTag(t) {
+      const d = document.getElementById('tag-details');
+      d.innerHTML = `
+        <div class="tag-field"><label>Tag ID</label><span style="font-size:12px;word-break:break-all">${t.tag_id}</span></div>
+        <div class="tag-field"><label>Status</label><span>${t.status}</span></div>
+        <div class="tag-field"><label>Item Code</label><span>${t.item_code}</span></div>
+        <div class="tag-field"><label>Description</label><span>${t.item_desc || '—'}</span></div>
+        <div class="tag-field"><label>Qty Received</label><span>${t.qty_received}</span></div>
+        <div class="tag-field"><label>Passed</label><span>${t.passed_qty}</span></div>
+        <div class="tag-field"><label>Rejected</label><span>${t.rejected_qty}</span></div>
+        <div class="tag-field"><label>Issued</label><span>${t.issued_qty}</span></div>
+        <div class="tag-field"><label>UOM</label><span>${t.uom || '—'}</span></div>
+        <div class="tag-field"><label>GRN</label><span>${t.grn_id}</span></div>
+      `;
+
+      // Locations
+      const locCard = document.getElementById('locations-card');
+      const locList = document.getElementById('locations-list');
+      if (t.locations && t.locations.length) {
+        locCard.style.display = '';
+        locList.innerHTML = t.locations.map(l =>
+          `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ti-border)">
+            <span style="font-weight:700">${l.rack_number}</span>
+            <span style="font-variant-numeric:tabular-nums">${l.current_qty}</span>
+          </div>`
+        ).join('');
+      } else { locCard.style.display = 'none'; }
+
+      // Actions
+      const bar = document.getElementById('action-bar');
+      const s = t.status;
+      let btns = '';
+      if (s === 'RECEIVED') btns += `<button class="action-btn primary" onclick="showForm('inspect')">🔍 Inspect</button>`;
+      if (s === 'INSPECTED') btns += `<button class="action-btn success" onclick="showForm('rack')">📥 Rack / Putaway</button>`;
+      if (s === 'RACKED' || s === 'PARTIALLY ISSUED') btns += `<button class="action-btn primary" onclick="showForm('issue')">📤 Issue</button>`;
+      if (s === 'ISSUED' || s === 'PARTIALLY ISSUED') {
+        btns += `<button class="action-btn" onclick="showForm('return')">↩ Return</button>`;
+        btns += `<button class="action-btn danger" onclick="showForm('scrap')">🗑 Scrap Return</button>`;
+      }
+      bar.innerHTML = btns;
+      document.querySelectorAll('.action-form').forEach(f => f.classList.remove('active'));
+    }
+
+    function showForm(name) {
+      document.querySelectorAll('.action-form').forEach(f => f.classList.remove('active'));
+      const form = document.getElementById(`form-${name}`);
+      if (form) form.classList.add('active');
+      if (name === 'issue' && currentTag?.locations) {
+        const sel = document.getElementById('issue-rack');
+        sel.innerHTML = currentTag.locations.map(l => `<option value="${l.rack_number}">${l.rack_number} (${l.current_qty})</option>`).join('');
+      }
+    }
+
+    function addRackRow() {
+      const c = document.getElementById('rack-entries');
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      row.innerHTML = `<div><label>Rack #</label><input class="rack-num" /></div><div><label>Qty</label><input class="rack-qty" type="number" step="0.01" /></div>`;
+      c.appendChild(row);
+    }
+
+    async function processAction(action, body) {
+      try {
+        const res = await fetch('/api/wh/process_tag', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tag_id: currentTag.tag_id, action, ...body })
+        });
+        const data = await res.json();
+        if (data.error) { showSnack(data.error, 'err'); return; }
+        showSnack(`${action} completed successfully`, 'ok');
+        scanTag();
+      } catch (e) { showSnack('Action failed', 'err'); }
+    }
+
+    function doInspect() {
+      processAction('INSPECT', {
+        passed_qty: document.getElementById('inspect-passed').value,
+        rejected_qty: document.getElementById('inspect-rejected').value
+      });
+    }
+    function doRack() {
+      const racks = Array.from(document.querySelectorAll('#rack-entries .form-row')).map(r => ({
+        rack: r.querySelector('.rack-num').value,
+        qty: r.querySelector('.rack-qty').value
+      })).filter(r => r.rack && r.qty);
+      processAction('RACK', { locations: racks });
+    }
+    function doIssue() {
+      processAction('ISSUE', {
+        issue_qty: document.getElementById('issue-qty').value,
+        issue_rack: document.getElementById('issue-rack').value
+      });
+    }
+    function doReturn() {
+      processAction('RETURN', {
+        return_qty: document.getElementById('return-qty').value,
+        return_rack: document.getElementById('return-rack').value
+      });
+    }
+    function doScrap() {
+      processAction('RETURN_SCRAP', {
+        scrap_qty: document.getElementById('scrap-qty').value
+      });
+    }
+
+    function showSnack(msg, type) {
+      const el = document.getElementById('snack');
+      el.textContent = msg;
+      el.className = `rcv-snack show ${type}`;
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>

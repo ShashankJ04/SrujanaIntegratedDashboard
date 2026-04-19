@@ -1,0 +1,70 @@
+<!-- Executive Dashboard — 4-Pillar War Room View (Hub Section) -->
+<section class="ti-section" data-section="executive" id="section-executive">
+
+  <div class="ti-exec-header">
+    <h2 class="ti-exec-title">Executive Command Center</h2>
+    <span class="ti-exec-updated" id="exec-updated">—</span>
+  </div>
+
+  <!-- ── 4-Pillar KPI Cards ── -->
+  <div class="ti-exec-pillars" id="exec-pillars">
+    <article class="ti-exec-pillar" data-pillar="customer_parts" data-status="healthy">
+      <div class="ti-exec-pillar-icon">🏭</div>
+      <h3 class="ti-exec-pillar-title">Customer Parts</h3>
+      <div class="ti-exec-pillar-metric" id="exec-cp-metric">Scheduled Today</div>
+      <div class="ti-exec-pillar-nums">
+        <div class="ti-exec-num"><span class="label">Required</span><span class="value" id="exec-cp-required">—</span></div>
+        <div class="ti-exec-num"><span class="label">Produced</span><span class="value" id="exec-cp-produced">—</span></div>
+        <div class="ti-exec-num"><span class="label">Balance</span><span class="value" id="exec-cp-balance">—</span></div>
+      </div>
+      <div class="ti-exec-pillar-status" id="exec-cp-status">●</div>
+    </article>
+
+    <article class="ti-exec-pillar" data-pillar="raw_material" data-status="healthy">
+      <div class="ti-exec-pillar-icon">🧱</div>
+      <h3 class="ti-exec-pillar-title">Raw Material</h3>
+      <div class="ti-exec-pillar-metric" id="exec-rm-metric">Shortage Status</div>
+      <div class="ti-exec-pillar-nums">
+        <div class="ti-exec-num"><span class="label">Status</span><span class="value" id="exec-rm-required">—</span></div>
+      </div>
+      <div class="ti-exec-pillar-status" id="exec-rm-status">●</div>
+    </article>
+
+    <article class="ti-exec-pillar" data-pillar="tools" data-status="healthy">
+      <div class="ti-exec-pillar-icon">🔧</div>
+      <h3 class="ti-exec-pillar-title">Tools &amp; Dies</h3>
+      <div class="ti-exec-pillar-metric" id="exec-tl-metric">Critical Dies</div>
+      <div class="ti-exec-pillar-nums">
+        <div class="ti-exec-num"><span class="label">Total</span><span class="value" id="exec-tl-total">—</span></div>
+        <div class="ti-exec-num"><span class="label">Critical</span><span class="value" id="exec-tl-critical">—</span></div>
+      </div>
+      <div class="ti-exec-pillar-status" id="exec-tl-status">●</div>
+    </article>
+
+    <article class="ti-exec-pillar" data-pillar="machines" data-status="healthy">
+      <div class="ti-exec-pillar-icon">⚙️</div>
+      <h3 class="ti-exec-pillar-title">Machines</h3>
+      <div class="ti-exec-pillar-metric" id="exec-mc-metric">Active Machines</div>
+      <div class="ti-exec-pillar-nums">
+        <div class="ti-exec-num"><span class="label">Active</span><span class="value" id="exec-mc-active">—</span></div>
+      </div>
+      <div class="ti-exec-pillar-status" id="exec-mc-status">●</div>
+    </article>
+  </div>
+
+  <!-- ── Drilldown Panels ── -->
+  <div class="ti-exec-drilldowns">
+    <div class="ti-card ti-exec-drill-card">
+      <h3 class="ti-exec-drill-title">🔴 Critical &amp; Warning Tools</h3>
+      <div id="exec-tools-list" class="ti-exec-drill-body"><em class="ti-text-dim">Loading…</em></div>
+    </div>
+    <div class="ti-card ti-exec-drill-card">
+      <h3 class="ti-exec-drill-title">🔴 RM Shortage Items</h3>
+      <div id="exec-rm-list" class="ti-exec-drill-body"><em class="ti-text-dim">Loading…</em></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  if (window.ExecPage && typeof ExecPage.init === 'function') ExecPage.init();
+</script>

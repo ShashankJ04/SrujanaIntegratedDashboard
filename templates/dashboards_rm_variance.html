@@ -1,0 +1,110 @@
+{% extends "base_dashboards.html" %}
+{% block title %}RM Variance{% endblock %}
+
+{% block content %}
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+  <div style="padding:16px 24px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    <span style="font-size:24px;">⇄</span>
+    <h1 class="dash-page-title" style="flex-grow:1;">RM Variance</h1>
+    <select class="dash-select" id="rmMonth" style="width:140px;"></select>
+    <select class="dash-select" id="rmYear" style="width:100px;"></select>
+    <input type="number" class="dash-input" id="rmPlant" value="3" min="1" placeholder="Plant ID" style="width:90px;">
+    <button class="dash-btn dash-btn-primary" id="rmSearchBtn">🔍 Search</button>
+  </div>
+
+  <div style="flex:1; padding:20px;">
+    <div id="rmLoading" class="dash-loading-center" style="display:none;"><div class="dash-spinner"></div></div>
+    <div id="rmError" style="display:none;"></div>
+    <div id="rmContent" style="display:none;"></div>
+    <div id="rmEmpty" class="dash-empty"><div class="dash-empty-icon">⇄</div><div class="dash-empty-text">Select Month, Year & Plant ID, then click Search</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now = new Date();
+  const monthSel = document.getElementById('rmMonth');
+  const yearSel = document.getElementById('rmYear');
+
+  months.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i + 1; opt.textContent = m;
+    if (i + 1 === now.getMonth() + 1) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+
+  for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+
+  const columns = [
+    { key:'partno', label:'Part No' }, { key:'rm', label:'RM' }, { key:'tool', label:'Tool' },
+    { key:'custReqQty', label:'Cust Req Qty', align:'right', fmt: v => formatIndianNumber(v) },
+    { key:'schQty', label:'Sch Qty', align:'right', fmt: v => formatIndianNumber(v) },
+    { key:'schKg', label:'Sch Kg', align:'right', fmt: v => Number(v).toFixed(2) },
+    { key:'prodQty', label:'Prod Qty', align:'right', fmt: v => formatIndianNumber(v) },
+    { key:'usedQty', label:'Used Qty (Kg)', align:'right', fmt: v => Number(v).toFixed(2) },
+    { key:'theoKg', label:'Theo Kg', align:'right', fmt: v => Number(v).toFixed(2) },
+    { key:'variance', label:'Variance', align:'center', fmt: v => createVarianceChip(v, { invertColors:true, format:true }).outerHTML },
+    { key:'variancePer', label:'Variance %', align:'center', fmt: v => createVarianceChip(v, { invertColors:true, format:true }).outerHTML },
+  ];
+
+  async function search() {
+    const m = monthSel.value, y = yearSel.value, pid = document.getElementById('rmPlant').value;
+    if (!pid || parseInt(pid) < 1) return;
+
+    document.getElementById('rmLoading').style.display = 'flex';
+    document.getElementById('rmContent').style.display = 'none';
+    document.getElementById('rmEmpty').style.display = 'none';
+    document.getElementById('rmError').style.display = 'none';
+
+    try {
+      const data = await apiFetch(`/api/rm-variance/${m}/${y}/${pid}`);
+      const entries = (data.entries || []).sort((a, b) => a.partno.localeCompare(b.partno));
+      const totals = data.totals;
+
+      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr><th>#</th>';
+      columns.forEach(c => html += `<th class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${c.label}</th>`);
+      html += '</tr></thead><tbody>';
+
+      entries.forEach((e, i) => {
+        html += `<tr><td style="color:var(--text-muted)">${i+1}</td>`;
+        columns.forEach(c => {
+          const val = c.fmt ? c.fmt(e[c.key], e) : (e[c.key] ?? '—');
+          html += `<td class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${val}</td>`;
+        });
+        html += '</tr>';
+      });
+
+      if (totals) {
+        html += '<tr class="totals-row"><td></td><td colspan="3"><strong>TOTAL</strong></td>';
+        html += `<td class="text-right">${formatIndianNumber(totals.custReqQty)}</td>`;
+        html += `<td class="text-right">${formatIndianNumber(totals.schQty)}</td>`;
+        html += `<td class="text-right">${totals.schKg.toFixed(2)}</td>`;
+        html += `<td class="text-right">${formatIndianNumber(totals.prodQty)}</td>`;
+        html += `<td class="text-right">${totals.usedQty.toFixed(2)}</td>`;
+        html += `<td class="text-right">${totals.theoKg.toFixed(2)}</td>`;
+        html += `<td class="text-center">${createVarianceChip(totals.variance, { invertColors:true, format:true }).outerHTML}</td>`;
+        html += '<td></td></tr>';
+      }
+
+      html += '</tbody></table></div>';
+      document.getElementById('rmContent').innerHTML = html;
+      document.getElementById('rmContent').style.display = 'block';
+    } catch(err) {
+      document.getElementById('rmError').innerHTML = `<div class="dash-alert dash-alert-error">${err.message}</div>`;
+      document.getElementById('rmError').style.display = 'block';
+    }
+    document.getElementById('rmLoading').style.display = 'none';
+  }
+
+  document.getElementById('rmSearchBtn').addEventListener('click', search);
+})();
+</script>
+{% endblock %}

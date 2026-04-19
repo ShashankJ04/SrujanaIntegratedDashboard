@@ -1,0 +1,105 @@
+<!-- Hub Admin Section — RBAC Admin -->
+<div class="ti-flex-between ti-mb-24" style="flex-wrap:wrap;gap:12px">
+  <div class="ti-flex ti-gap-12" style="align-items:center">
+    <span style="font-size:24px">⚙️</span>
+    <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright)">RBAC Admin</h2>
+  </div>
+  <input type="text" class="ti-input" id="rbacSearch" placeholder="Search users..." style="min-width:220px">
+</div>
+
+<div id="rbacLoading" class="ti-loading"><div class="ti-spinner"></div></div>
+
+<div class="ti-table-wrap" id="rbacTableWrap" style="display:none;flex:1;min-height:0;overflow:auto">
+  <table class="ti-table" id="rbacTable">
+    <thead><tr>
+      <th>Login</th><th>Name</th>
+      <th class="text-center">Tools</th><th class="text-center">PM</th>
+      <th class="text-center">Life</th><th class="text-center">Prod</th>
+      <th class="text-center">RM</th>
+      <th class="text-center">Exec</th>
+      <th class="text-center">REPT</th>
+      <th class="text-center">PM+</th><th class="text-center">DPR+</th>
+      <th class="text-center">Buf+</th>
+      <th class="text-center">REPT+</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="rbacTbody"></tbody>
+  </table>
+</div>
+
+<script>
+(function() {
+  const DASH_KEYS = ['tools','preventive_maintenance','life_report','production','rm_variance','executive','rept'];
+  const PLUS_KEYS = ['preventive_maintenance','edit_dpr','edit_buffer','rept_plus'];
+
+  let allUsers = [], rbacUsers = [];
+
+  async function load() {
+    document.getElementById('rbacLoading').style.display = 'flex';
+    try {
+      const [usersData, rbacData] = await Promise.all([
+        apiFetch('/api/admin/users'),
+        apiFetch('/api/admin/rbac'),
+      ]);
+      allUsers = usersData;
+      rbacUsers = rbacData.users || [];
+      renderTable();
+    } catch(err) { showSnackbar(err.message); }
+    document.getElementById('rbacLoading').style.display = 'none';
+  }
+
+  function getUserRBAC(userId) {
+    const id = Number(userId);
+    return rbacUsers.find(u => Number(u.userId) === id) || { access: [], plusAccess: [] };
+  }
+
+  function renderTable() {
+    const search = document.getElementById('rbacSearch').value.toLowerCase();
+    const filtered = allUsers.filter(u => {
+      if (!search) return true;
+      return u.login.toLowerCase().includes(search) || (u.firstName + ' ' + u.lastName).toLowerCase().includes(search);
+    });
+
+    const tbody = document.getElementById('rbacTbody');
+    tbody.innerHTML = '';
+
+    filtered.forEach(u => {
+      const rbac = getUserRBAC(u.id);
+      const tr = document.createElement('tr');
+      let html = `<td class="fw-600">${u.login}</td><td>${u.firstName} ${u.lastName}</td>`;
+
+      DASH_KEYS.forEach(key => {
+        const checked = rbac.access.includes(key) ? 'checked' : '';
+        html += `<td class="text-center"><input type="checkbox" ${checked} data-user="${u.id}" data-key="${key}" data-type="access" style="width:18px;height:18px;accent-color:var(--ti-blue);cursor:pointer"></td>`;
+      });
+
+      PLUS_KEYS.forEach(key => {
+        const checked = rbac.plusAccess.includes(key) ? 'checked' : '';
+        html += `<td class="text-center"><input type="checkbox" ${checked} data-user="${u.id}" data-key="${key}" data-type="plus" style="width:18px;height:18px;accent-color:var(--ti-emerald);cursor:pointer"></td>`;
+      });
+
+      html += `<td><button class="ti-btn ti-btn-primary ti-btn-xs" data-save="${u.id}">💾 Save</button></td>`;
+      tr.innerHTML = html;
+      tbody.appendChild(tr);
+
+      tr.querySelector('[data-save]').addEventListener('click', async () => {
+        const access = []; const plusAccess = [];
+        tr.querySelectorAll('input[data-type="access"]').forEach(cb => { if (cb.checked) access.push(cb.dataset.key); });
+        tr.querySelectorAll('input[data-type="plus"]').forEach(cb => { if (cb.checked) plusAccess.push(cb.dataset.key); });
+        try {
+          await apiPut('/api/admin/rbac/' + u.id, { login: u.login, access, plusAccess });
+          showSnackbar(`Saved for ${u.login}`);
+          const idx = rbacUsers.findIndex(r => r.userId === u.id);
+          if (idx >= 0) { rbacUsers[idx].access = access; rbacUsers[idx].plusAccess = plusAccess; }
+          else { rbacUsers.push({ userId: u.id, login: u.login, access, plusAccess }); }
+        } catch(err) { showSnackbar(err.message); }
+      });
+    });
+
+    document.getElementById('rbacTableWrap').style.display = 'block';
+  }
+
+  document.getElementById('rbacSearch').addEventListener('input', renderTable);
+  load();
+})();
+</script>

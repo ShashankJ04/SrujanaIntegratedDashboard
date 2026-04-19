@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Machine DPR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css', v='corp-v6') }}"
+    />
+  </head>
+  <body class="machine-dpr-body">
+    <header class="mdpr-topbar">
+      <span class="mdpr-brand">Machine DPR</span>
+      <a class="mdpr-logout" href="/logout">Log out</a>
+    </header>
+
+    <main class="mdpr-scroll">
+      <div class="mdpr-date-bar">
+        <label class="mdpr-date-label" for="mdpr-date">Production date</label>
+        <input id="mdpr-date" class="mdpr-date-input" type="date" />
+      </div>
+      <p id="machine-dpr-status" class="mdpr-status" aria-live="polite"></p>
+      <div id="machine-dpr-cards" class="mdpr-stack"></div>
+    </main>
+
+    <script>
+      window.MACHINE_QR_TOKEN = {{ token|tojson }};
+      window.CURRENT_USER = {{ user|tojson }};
+      window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|tojson }};
+      window.DPR_POLL_INTERVAL_MS = {{ dpr_poll_interval_ms|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/machine_dpr.js') }}"></script>
+  </body>
+</html>

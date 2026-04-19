@@ -1,0 +1,224 @@
+{% extends "base_dashboards.html" %}
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div style="padding:20px; height:100vh; display:flex; flex-direction:column; gap:16px;">
+  <div>
+    <h1 style="font-size:24px; font-weight:800;">Reports</h1>
+    <p style="color:var(--text-muted); font-size:13px;">Create groups and report definitions. Open any report to run it.</p>
+  </div>
+  <div id="rptError" style="display:none;"></div>
+
+  <div class="dash-two-panel">
+    <!-- Groups panel -->
+    <div class="dash-panel-left">
+      <div class="dash-panel-header">
+        <span style="font-weight:600; display:flex; align-items:center; gap:6px;">📁 Groups</span>
+        <button class="dash-btn dash-btn-primary dash-btn-sm" id="rptAddGroupBtn">+ Add</button>
+      </div>
+      <div class="dash-panel-body" id="rptGroupList"></div>
+    </div>
+
+    <!-- Reports panel -->
+    <div class="dash-panel-right">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div><h2 style="font-size:16px; font-weight:700;" id="rptGroupTitle">Select a group</h2><p style="font-size:12px; color:var(--text-muted);">Open a report to run and rerun with variables.</p></div>
+        <button class="dash-btn dash-btn-primary" id="rptAddReportBtn" disabled>+ New Report</button>
+      </div>
+      <div id="rptReportList" style="flex:1; overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Group Modal -->
+<div class="dash-modal-overlay" id="rptGroupModal">
+  <div class="dash-modal dash-modal-sm">
+    <div class="dash-modal-header"><h3>Create Group</h3></div>
+    <div class="dash-modal-body"><input type="text" class="dash-input" id="rptGroupName" placeholder="e.g. Tools" style="width:100%"></div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="document.getElementById('rptGroupModal').classList.remove('open')">Cancel</button>
+      <button class="dash-btn dash-btn-primary" id="rptGroupCreate">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit Report Modal -->
+<div class="dash-modal-overlay" id="rptReportModal">
+  <div class="dash-modal dash-modal-lg">
+    <div class="dash-modal-header"><h3 id="rptReportModalTitle">Create Report</h3></div>
+    <div class="dash-modal-body">
+      <input type="text" class="dash-input" id="rptReportName" placeholder="Report name" style="width:100%">
+      <textarea class="dash-input" id="rptReportQuery" placeholder="SELECT ... WHERE col >= {variable}" style="width:100%; min-height:150px; font-family:monospace;"></textarea>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:12px; color:var(--text-muted);">Variables detected:</span>
+        <span id="rptVarsDisplay" style="font-size:12px;">None</span>
+      </div>
+    </div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="document.getElementById('rptReportModal').classList.remove('open')">Cancel</button>
+      <button class="dash-btn dash-btn-primary" id="rptReportSubmit">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="dash-modal-overlay" id="rptDeleteModal">
+  <div class="dash-modal dash-modal-sm">
+    <div class="dash-modal-header"><h3 id="rptDeleteTitle">Delete</h3></div>
+    <div class="dash-modal-body"><p id="rptDeleteMsg"></p></div>
+    <div class="dash-modal-footer">
+      <button class="dash-btn dash-btn-outline" onclick="document.getElementById('rptDeleteModal').classList.remove('open')">Cancel</button>
+      <button class="dash-btn dash-btn-danger" id="rptDeleteConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let groups = [], reports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
+
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  function detectVars(q) { const re = /\{\s*([a-zA-Z_]\w*)\s*\}/g; const s = new Set(); let m; while ((m = re.exec(q)) !== null) s.add(m[1]); return [...s]; }
+
+  async function loadGroups() {
+    groups = await apiFetch('/api/reports/groups');
+    renderGroups();
+    if (!selectedGroupId && groups.length) { selectedGroupId = groups[0].id; }
+    if (selectedGroupId) loadReports();
+  }
+
+  function renderGroups() {
+    const el = document.getElementById('rptGroupList');
+    el.innerHTML = '';
+    groups.forEach(g => {
+      const div = document.createElement('div');
+      div.className = 'dash-list-item' + (g.id === selectedGroupId ? ' active' : '');
+      div.innerHTML = `<span style="flex:1">${g.name}</span><button class="dash-btn-icon danger" title="Delete group">🗑️</button>`;
+      div.querySelector('span').addEventListener('click', () => { selectedGroupId = g.id; renderGroups(); loadReports(); });
+      div.querySelector('button').addEventListener('click', e => { e.stopPropagation(); deleteAction = { type:'group', id:g.id, name:g.name }; document.getElementById('rptDeleteTitle').textContent='Delete Group'; document.getElementById('rptDeleteMsg').textContent=`Delete group "${g.name}" and all reports inside it?`; openModal('rptDeleteModal'); });
+      el.appendChild(div);
+    });
+  }
+
+  async function loadReports() {
+    const group = groups.find(g => g.id === selectedGroupId);
+    document.getElementById('rptGroupTitle').textContent = group ? `Reports: ${group.name}` : 'Select a group';
+    document.getElementById('rptAddReportBtn').disabled = !selectedGroupId;
+    if (!selectedGroupId) { document.getElementById('rptReportList').innerHTML = ''; return; }
+    reports = await apiFetch('/api/reports/reports?groupId=' + selectedGroupId);
+    renderReports();
+  }
+
+  function renderReports() {
+    const el = document.getElementById('rptReportList');
+    el.innerHTML = '';
+    if (!reports.length) { el.innerHTML = '<div style="padding:16px; border:1px dashed var(--border); border-radius:8px;"><p style="font-size:13px; color:var(--text-muted);">No reports in this group yet.</p></div>'; return; }
+    reports.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'dash-card';
+      div.style.marginBottom = '10px';
+      div.innerHTML = `
+        <div style="padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+            <strong style="font-size:14px;">📄 ${r.name}</strong>
+            <span class="dash-chip dash-chip-neutral">${r.variables.length > 0 ? r.variables.length + ' inputs' : 'No inputs'}</span>
+          </div>
+          <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button class="dash-btn dash-btn-outline dash-btn-sm" data-edit="${r.id}">✏️ Edit</button>
+            <button class="dash-btn dash-btn-primary dash-btn-sm" data-open="${r.id}">↗ Open</button>
+            <button class="dash-btn dash-btn-danger dash-btn-sm" data-del="${r.id}">🗑️</button>
+          </div>
+        </div>
+      `;
+      el.appendChild(div);
+
+      div.querySelector('[data-edit]').addEventListener('click', () => {
+        editingReportId = r.id;
+        document.getElementById('rptReportModalTitle').textContent = 'Edit Report';
+        document.getElementById('rptReportSubmit').textContent = 'Save';
+        document.getElementById('rptReportName').value = r.name;
+        document.getElementById('rptReportQuery').value = r.queryTemplate;
+        updateVarsDisplay();
+        openModal('rptReportModal');
+      });
+
+      div.querySelector('[data-open]').addEventListener('click', () => {
+        window.location.href = '/dashboards/reports/run?reportId=' + encodeURIComponent(r.id);
+      });
+
+      div.querySelector('[data-del]').addEventListener('click', () => {
+        deleteAction = { type:'report', id:r.id, name:r.name };
+        document.getElementById('rptDeleteTitle').textContent='Delete Report';
+        document.getElementById('rptDeleteMsg').textContent=`Delete report "${r.name}"?`;
+        openModal('rptDeleteModal');
+      });
+    });
+  }
+
+  function updateVarsDisplay() {
+    const vars = detectVars(document.getElementById('rptReportQuery').value);
+    document.getElementById('rptVarsDisplay').innerHTML = vars.length ? vars.map(v => `<span class="dash-chip dash-chip-neutral">{${v}}</span>`).join(' ') : 'None';
+  }
+
+  document.getElementById('rptReportQuery').addEventListener('input', updateVarsDisplay);
+
+  // Create group
+  document.getElementById('rptAddGroupBtn').addEventListener('click', () => { document.getElementById('rptGroupName').value = ''; openModal('rptGroupModal'); });
+  document.getElementById('rptGroupCreate').addEventListener('click', async () => {
+    const name = document.getElementById('rptGroupName').value.trim();
+    if (!name) return;
+    try { const g = await apiPost('/api/reports/groups', { name }); selectedGroupId = g.id; closeModal('rptGroupModal'); loadGroups(); } catch(err) { showSnackbar(err.message); }
+  });
+
+  // Create/Edit report
+  document.getElementById('rptAddReportBtn').addEventListener('click', () => {
+    editingReportId = null;
+    document.getElementById('rptReportModalTitle').textContent = 'Create Report';
+    document.getElementById('rptReportSubmit').textContent = 'Create';
+    document.getElementById('rptReportName').value = '';
+    document.getElementById('rptReportQuery').value = '';
+    document.getElementById('rptVarsDisplay').textContent = 'None';
+    openModal('rptReportModal');
+  });
+
+  document.getElementById('rptReportSubmit').addEventListener('click', async () => {
+    const name = document.getElementById('rptReportName').value.trim();
+    const query = document.getElementById('rptReportQuery').value.trim();
+    if (!name || !query) return;
+    try {
+      if (editingReportId) {
+        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query });
+      } else {
+        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query });
+        window.location.href = '/dashboards/reports/run?reportId=' + encodeURIComponent(r.id);
+        return;
+      }
+      closeModal('rptReportModal');
+      loadReports();
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  // Delete
+  document.getElementById('rptDeleteConfirm').addEventListener('click', async () => {
+    if (!deleteAction) return;
+    try {
+      if (deleteAction.type === 'group') {
+        await apiDelete('/api/reports/groups/' + deleteAction.id);
+        if (selectedGroupId === deleteAction.id) selectedGroupId = null;
+        loadGroups();
+      } else {
+        await apiDelete('/api/reports/reports/' + deleteAction.id);
+        loadReports();
+      }
+      closeModal('rptDeleteModal');
+    } catch(err) { showSnackbar(err.message); }
+  });
+
+  loadGroups();
+})();
+</script>
+{% endblock %}

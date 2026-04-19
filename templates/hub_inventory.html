@@ -1,0 +1,143 @@
+<!-- Hub Inventory — scroll inside grid so horizontal bar stays at bottom of view -->
+<div class="ti-hub-section-fill ti-hub-inventory">
+  <div class="ti-flex-between ti-mb-12 ti-hub-inventory__toolbar" style="flex-wrap:wrap;gap:12px;flex-shrink:0">
+    <div class="ti-flex ti-gap-12" style="align-items:center">
+      <span style="font-size:24px">📦</span>
+      <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">Inventory Report</h2>
+      <button id="hard-refresh-btn" type="button" class="ti-btn-icon" title="Hard refresh data" style="font-size:18px">⟳</button>
+    </div>
+    <div class="ti-flex ti-gap-12" style="align-items:center">
+      <input id="global-search" class="ti-input" type="search" placeholder="Search all columns…" style="min-width:220px">
+      <button id="export-btn" class="ti-btn ti-btn-success ti-btn-sm">Export to Excel</button>
+    </div>
+  </div>
+
+  <div class="ti-table-wrap ti-hub-inventory__scroll">
+    <div id="table-container" class="ti-table-container">
+      <div class="ti-placeholder">Loading data…</div>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+(function() {
+  // This reuses the existing DataTable, Pagination, and DashboardController modules
+  // which are already loaded via table.js and pagination.js in the master template
+
+  const REPORT_KEY = 'reports_main';
+  let pageSizeSelect, globalSearchInput, exportBtn, hardRefreshBtn;
+  let zoomRange, zoomOutBtn, zoomInBtn, zoomDisplay, currentZoom = 100;
+  let layoutSaveTimer = null;
+  const LAYOUT_STORAGE_PREFIX = 'reportLayout:';
+
+  function init() {
+    globalSearchInput = document.getElementById('global-search');
+    exportBtn = document.getElementById('export-btn');
+    hardRefreshBtn = document.getElementById('hard-refresh-btn');
+
+    if (typeof DataTable === 'undefined') {
+      console.warn('DataTable not loaded yet');
+      return;
+    }
+
+    DataTable.init({
+      containerId: 'table-container',
+      summaryId: null,
+      reportKey: REPORT_KEY,
+      onRequestReload: reload,
+      onLayoutChange: queueLayoutSave,
+      cellRenderer: renderCell,
+      rowClassName: getRowClassName,
+      statusColumns: ['production_pending', 'balance_production_qty'],
+    });
+    DataTable.attachGlobalHandlers();
+
+    wireControls();
+    loadInitial();
+  }
+
+  function wireControls() {
+    let searchTimer = null;
+    globalSearchInput.addEventListener('input', () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        DataTable.setExternalState({ search: globalSearchInput.value.trim(), page: 1 });
+        reload();
+      }, 250);
+    });
+
+    exportBtn.addEventListener('click', () => {
+      const state = DataTable.getState();
+      const url = ApiClient.buildExportUrl({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir });
+      const a = document.createElement('a'); a.href = url; a.download = 'table_export.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+
+    if (hardRefreshBtn) hardRefreshBtn.addEventListener('click', hardRefresh);
+  }
+
+  async function loadInitial() {
+    try {
+      DataTable.setLayout(loadLayoutFromStorage(REPORT_KEY));
+      DataTable.setExternalState({ pageSize: -1 }); // Force all records without pagination
+      await reload();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('table-container').innerHTML = '<div class="ti-placeholder">Failed to load table metadata.</div>';
+    }
+  }
+
+  async function hardRefresh() {
+    const c = document.getElementById('table-container');
+    if (c) c.classList.add('loading');
+    try { await ApiClient.refreshDashboard(); await reload(); }
+    catch (err) { console.error(err); if (c) c.innerHTML = '<div class="ti-placeholder">Error loading data.</div>'; }
+    finally { if (c) c.classList.remove('loading'); }
+  }
+
+  async function reload() {
+    const state = DataTable.getState();
+    const c = document.getElementById('table-container');
+    if (c) c.classList.add('loading');
+    try {
+      const result = await ApiClient.getDashboardRows({ page: state.page, pageSize: state.pageSize, search: state.search, sortBy: state.sortBy, sortDir: state.sortDir });
+      DataTable.setExternalState({ columns: result.columns, rows: result.rows, page: result.page, pageSize: result.pageSize, totalCount: result.totalCount, totalPages: Math.max(1, Math.ceil(result.totalCount / result.pageSize || 1)) });
+      DataTable.renderTable();
+    } catch (err) { console.error(err); if (c) c.innerHTML = '<div class="ti-placeholder">Error loading data.</div>'; }
+    finally { if (c) c.classList.remove('loading'); }
+  }
+
+  function getRowClassName({ row }) {
+    const pp = Number(row.production_pending); const bp = Number(row.balance_production_qty);
+    return (!isNaN(pp) && !isNaN(bp) && pp <= 0 && bp <= 0) ? 'row-ready' : '';
+  }
+
+  function renderCell({ row, col, value, td }) {
+    if (col.name !== 'buffer_qty' || !window.BUFFER_EDIT_ALLOWED) return false;
+    const wrapper = document.createElement('div'); wrapper.className = 'buffer-cell';
+    const input = document.createElement('input'); input.type = 'number'; input.step = '1'; input.className = 'buffer-input';
+    input.value = value == null ? '' : String(Number(value));
+    const applyBtn = document.createElement('button'); applyBtn.type = 'button'; applyBtn.className = 'buffer-apply-btn'; applyBtn.textContent = '✓';
+    applyBtn.addEventListener('click', async () => {
+      const pn = row.part_no; if (!pn) return;
+      const raw = input.value.trim(); if (raw === '') input.value = '0';
+      const qty = Number(input.value); if (isNaN(qty)) { input.value = value == null ? '0' : String(Number(value)); return; }
+      try { await ApiClient.updateBufferConfig(pn, qty); reload(); } catch (err) { console.error(err); }
+    });
+    wrapper.appendChild(input); wrapper.appendChild(applyBtn); td.appendChild(wrapper);
+    return true;
+  }
+
+  function queueLayoutSave({ reportKey, layout }) {
+    if (layoutSaveTimer) clearTimeout(layoutSaveTimer);
+    layoutSaveTimer = setTimeout(() => saveLayoutToStorage(reportKey || REPORT_KEY, layout || { columns: [] }), 400);
+  }
+  function storageKey(rk) { return LAYOUT_STORAGE_PREFIX + rk; }
+  function loadLayoutFromStorage(rk) { try { const r = localStorage.getItem(storageKey(rk)); if (!r) return { columns: [] }; const p = JSON.parse(r); return (p && Array.isArray(p.columns)) ? p : { columns: [] }; } catch { return { columns: [] }; } }
+  function saveLayoutToStorage(rk, layout) { try { localStorage.setItem(storageKey(rk), JSON.stringify(layout || { columns: [] })); } catch {} }
+
+  init();
+})();
+</script>

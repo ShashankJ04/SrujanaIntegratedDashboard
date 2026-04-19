@@ -1,0 +1,278 @@
+<!-- Hub Overview Section — Monitor + RM Shortage First + Charts + Urgent -->
+
+<!-- ═══ QUANTITY + PARTS PROGRESS MONITORS ═══ -->
+<div class="ti-monitor-row">
+  <!-- Quantity Progress -->
+  <div class="ti-monitor">
+    <div class="ti-monitor-top">
+      <span class="ti-monitor-title">Quantity Progress</span>
+      <span class="ti-monitor-pct" id="mon-qty-pct">–%</span>
+    </div>
+    <div class="ti-monitor-metrics">
+      <div>
+        <div class="ti-monitor-metric-label">Total SO Qty</div>
+        <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Pending Qty</div>
+        <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Produced Qty</div>
+        <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
+      </div>
+    </div>
+    <div class="ti-monitor-progress">
+      <div class="ti-monitor-bar" id="mon-qty-bar" style="width:0%"></div>
+    </div>
+    <div class="ti-monitor-footnote">0% = red (all pending), 100% = green (fully covered with stock/production)</div>
+  </div>
+
+  <!-- Parts Progress -->
+  <div class="ti-monitor">
+    <div class="ti-monitor-top">
+      <span class="ti-monitor-title">Parts Progress</span>
+      <span class="ti-monitor-pct" id="mon-parts-pct">–%</span>
+    </div>
+    <div class="ti-monitor-metrics">
+      <div>
+        <div class="ti-monitor-metric-label">Total Parts</div>
+        <div class="ti-monitor-metric-value" id="mon-parts-total">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Parts Completed</div>
+        <div class="ti-monitor-metric-value success" id="mon-parts-completed">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Parts Pending</div>
+        <div class="ti-monitor-metric-value alert" id="mon-parts-pending">–</div>
+      </div>
+    </div>
+    <div class="ti-monitor-progress">
+      <div class="ti-monitor-bar" id="mon-parts-bar" style="width:0%"></div>
+    </div>
+    <div class="ti-monitor-footnote">Completion is counted per part: balance production quantity ≤ zero</div>
+  </div>
+</div>
+
+<!-- ═══ ACTUAL RM SHORTAGE — FULL WIDTH, FIRST CHART ═══ -->
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header">
+      <div>
+        <div class="ti-card-title">Actual RM Shortage</div>
+        <div class="ti-card-subtitle">By RM code — Current Available Stock − Total Production Requirement</div>
+      </div>
+      <div class="ti-card-controls">
+        <label class="ti-control">
+          <span>Show:</span>
+          <select id="chart-rm-shortage-mode" class="ti-select ti-select--compact">
+            <option value="15">Top 15</option>
+            <option value="all">All Items</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="ti-card-body ti-card-body--chart">
+      <div id="chart-rm-shortage-by-material"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOOL KPI ROW ═══ -->
+<div class="ti-kpi-row" style="grid-template-columns: repeat(2, 1fr);">
+  <div class="ti-kpi ti-kpi--amber">
+    <div class="ti-kpi-label">Tool Health</div>
+    <div class="ti-kpi-value" id="kpi-tool-health">–</div>
+    <div class="ti-kpi-sub" id="kpi-tool-sub">Critical tools</div>
+  </div>
+  <div class="ti-kpi ti-kpi--blue">
+    <div class="ti-kpi-label">PM Status</div>
+    <div class="ti-kpi-value" id="kpi-pm-status">–</div>
+    <div class="ti-kpi-sub" id="kpi-pm-sub">Safe / Warning / Critical</div>
+  </div>
+</div>
+
+<!-- ═══ PM Donut (now in its own full row since RM shortage was moved up) ═══ -->
+<div class="ti-grid-2 ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Tool Maintenance Status</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-pm-donut"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Completion Mix</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-completion-buckets"></div></div>
+  </div>
+</div>
+
+<!-- ═══ RM Charts Row 1 ═══ -->
+<div class="ti-grid-3 ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Top RM Requirement</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-top-rm-requirement"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">RM Req vs Inward</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-rm-req-vs-inward"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Material Mix</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-material-mix"></div></div>
+  </div>
+</div>
+
+<!-- ═══ RM Charts Row 2 ═══ -->
+<div class="ti-grid-3 ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Stock vs Requirement</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-rm-stock-vs-req"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">RM Utilized by Material</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-material-rm-utilized"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">RM Balance (Kgs)</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-top-rm-balance"></div></div>
+  </div>
+</div>
+
+<!-- ═══ Full Width Charts ═══ -->
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">RM Shortage (by Part)</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-rm-shortage-actual"></div></div>
+  </div>
+</div>
+
+<div class="ti-grid-3 ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Pending Treemap</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-pending-treemap"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Pending vs Excess</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-pending-excess"></div></div>
+  </div>
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Top Shortages (Chart)</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-top-pending"></div></div>
+  </div>
+</div>
+
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Requirement vs Balance</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-production-vs-req"></div></div>
+  </div>
+</div>
+
+<!-- ═══ URGENT ITEMS ═══ -->
+<div class="ti-urgent" id="urgent-panel" style="display:none">
+  <div class="ti-urgent-title">🚨 Urgent Action Items</div>
+  <div id="urgent-items"></div>
+</div>
+
+<!-- ═══ TOP PENDING TABLE (using DataGrid) ═══ -->
+<div id="pending-grid-container" class="ti-mb-24" style="display:none"></div>
+
+<script>
+(async function loadOverview() {
+  // ── Monitor cards (Quantity + Parts Progress) ──
+  try {
+    const summary = await Hub.api.getReportSummary();
+
+    const totalSo = Number(summary.total_so_qty) || 0;
+    const totalProduced = Number(summary.total_produced_qty) || 0;
+    const pendingQty = Number(summary.total_pending_qty) || 0;
+    const totalRequirement = Number(summary.total_production_requirement) || 0;
+    const partsTotal = Number(summary.parts_total) || 0;
+    const partsCompleted = Number(summary.parts_completed) || 0;
+    const partsPending = Number(summary.parts_pending) || 0;
+
+    // Quantity monitor
+    document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(totalSo);
+    document.getElementById('mon-pending-qty').textContent = Hub.utils.formatIndian(pendingQty);
+    document.getElementById('mon-produced-qty').textContent = Hub.utils.formatIndian(totalProduced);
+    
+    // Percentage = Produced / SO (matching original dash)
+    const qtyPct = totalSo > 0 ? Math.round((totalProduced / totalSo) * 100) : 0;
+    document.getElementById('mon-qty-pct').textContent = qtyPct + '%';
+    const qtyBar = document.getElementById('mon-qty-bar');
+    qtyBar.style.width = Math.min(100, Math.max(0, qtyPct)) + '%';
+    qtyBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, qtyPct) / 100) * 120));
+
+    // Parts monitor
+    document.getElementById('mon-parts-total').textContent = Hub.utils.formatIndian(partsTotal);
+    document.getElementById('mon-parts-completed').textContent = Hub.utils.formatIndian(partsCompleted);
+    document.getElementById('mon-parts-pending').textContent = Hub.utils.formatIndian(partsPending);
+    const partsPct = partsTotal > 0 ? Math.round((partsCompleted / partsTotal) * 100) : 0;
+    document.getElementById('mon-parts-pct').textContent = partsPct + '%';
+    const partsBar = document.getElementById('mon-parts-bar');
+    partsBar.style.width = Math.min(100, Math.max(0, partsPct)) + '%';
+    partsBar.style.setProperty('--monitor-hue', Math.round((partsPct / 100) * 120));
+  } catch (e) { console.error('Monitor load error:', e); }
+
+  // ── Tool health ──
+  try {
+    const pmData = await Hub.api.get('/api/pm/status?mode=all');
+    if (Array.isArray(pmData)) {
+      const critical = pmData.filter(d => d.pmPercentage >= 100).length;
+      const warning = pmData.filter(d => d.pmPercentage >= 80 && d.pmPercentage < 100).length;
+      const safe = pmData.filter(d => d.pmPercentage < 80).length;
+
+      document.getElementById('kpi-tool-health').textContent = `${safe}/${pmData.length}`;
+      document.getElementById('kpi-tool-sub').textContent = `${critical} critical, ${warning} warning`;
+      document.getElementById('kpi-pm-status').textContent = `${safe} / ${warning} / ${critical}`;
+      document.getElementById('kpi-pm-sub').textContent = 'Safe / Warning / Critical';
+
+      // Urgent items
+      const urgentPanel = document.getElementById('urgent-panel');
+      const urgentItems = document.getElementById('urgent-items');
+      const criticalTools = pmData.filter(d => d.pmPercentage >= 100);
+      if (criticalTools.length > 0 && urgentPanel && urgentItems) {
+        urgentPanel.style.display = '';
+        urgentItems.innerHTML = criticalTools.slice(0, 8).map(t =>
+          `<div class="ti-urgent-item"><div class="ti-urgent-dot"></div><div>Tool <b>${t.toolNo}</b> at <b>${t.pmPercentage}%</b> — maintenance overdue (${Hub.utils.formatIndian(t.totalLifetimeStrokes)}/${Hub.utils.formatIndian(t.nextStroke)} strokes)</div></div>`
+        ).join('');
+      }
+    }
+  } catch (e) { console.error('Tool health error:', e); }
+
+  // ── Top Pending (DataGrid) ──
+  try {
+    const sf = await Hub.api.getTopShortfalls(20);
+    if (Array.isArray(sf) && sf.length > 0) {
+      const gridContainer = document.getElementById('pending-grid-container');
+      gridContainer.style.display = 'block';
+
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'ti-flex-between ti-mb-16';
+      titleDiv.innerHTML = '<div><h3 style="font-size:16px;font-weight:700;color:var(--ti-text-bright)">Top Pending Components</h3><p style="font-size:12px;color:var(--ti-text-dim)">By Balance Production Quantity</p></div>';
+      gridContainer.appendChild(titleDiv);
+
+      const tableDiv = document.createElement('div');
+      gridContainer.appendChild(tableDiv);
+
+      DataGrid.render(tableDiv, {
+        columns: [
+          { key: 'part_no', label: 'Part Number', className: 'val-bold' },
+          { key: 'part_name', label: 'Part Name' },
+          { key: 'required_qty', label: 'Req Qty', align: 'right', format: v => Hub.utils.formatIndian(v) },
+          { key: 'pending_qty', label: 'Pending', align: 'right',
+            format: v => Hub.utils.formatIndian(Math.max(v || 0, 0)),
+            className: (v) => (v > 0 ? 'val-neg' : '') },
+          { key: 'excess_qty', label: 'Excess', align: 'right',
+            format: v => Hub.utils.formatIndian(Math.max(v || 0, 0)),
+            className: (v) => (v > 0 ? 'val-pos' : '') },
+        ],
+        rows: sf,
+        options: { search: true, rowNumbers: true, countLabel: 'components' },
+      });
+    }
+  } catch (e) { console.error('Shortfalls error:', e); }
+
+  // ── Charts ──
+  if (typeof HubCharts !== 'undefined') HubCharts.loadOverview();
+})();
+</script>

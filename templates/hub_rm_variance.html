@@ -1,0 +1,117 @@
+<!-- Hub RM Variance — one control band (filters + count + filter); no duplicate page title -->
+<div class="ti-hub-section-fill ti-rm-variance">
+  <div class="ti-rm-header">
+    <div class="ti-rm-header-filters">
+      <select class="ti-select" id="rmMonth" aria-label="Month" style="width:128px"></select>
+      <select class="ti-select" id="rmYear" aria-label="Year" style="width:88px"></select>
+      <input type="number" class="ti-input" id="rmPlant" value="3" min="1" placeholder="Plant" style="width:76px" title="Plant ID">
+      <button type="button" class="ti-btn ti-btn-primary ti-btn-sm" id="rmSearchBtn">🔍 Search</button>
+    </div>
+    <div class="ti-rm-header-tail">
+      <span class="ti-rm-count" id="rmItemCount">—</span>
+      <input type="search" class="ti-input ti-rm-grid-search" id="rmGridSearch" placeholder="Filter rows…" autocomplete="off" disabled aria-label="Filter table"/>
+    </div>
+  </div>
+
+  <div id="rmLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+  <div id="rmError" style="display:none;flex-shrink:0"></div>
+  <div id="rmGrid" class="ti-hub-section-fill__grid" style="display:none"></div>
+  <div id="rmEmpty" class="ti-empty" style="flex-shrink:0"><div class="ti-empty-icon">📈</div><div class="ti-empty-text">Select month, year & plant, then Search</div></div>
+</div>
+
+<script>
+(function() {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now = new Date();
+  const monthSel = document.getElementById('rmMonth');
+  const yearSel = document.getElementById('rmYear');
+  const rmGridSearch = document.getElementById('rmGridSearch');
+  const rmItemCount = document.getElementById('rmItemCount');
+
+  months.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i + 1; opt.textContent = m;
+    if (i + 1 === now.getMonth() + 1) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+  for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+
+  const columns = [
+    { key:'partno', label:'Part No', className:'val-bold' },
+    { key:'rm', label:'RM' },
+    { key:'tool', label:'Tool' },
+    { key:'custReqQty', label:'Cust Req', align:'right', format: v => formatIndianNumber(v) },
+    { key:'schQty', label:'Sch Qty', align:'right', format: v => formatIndianNumber(v) },
+    { key:'schKg', label:'Sch Kg', align:'right', format: v => Number(v||0).toFixed(2) },
+    { key:'prodQty', label:'Prod Qty', align:'right', format: v => formatIndianNumber(v) },
+    { key:'usedQty', label:'Used Kg', align:'right', format: v => Number(v||0).toFixed(2) },
+    { key:'theoKg', label:'Theo Kg', align:'right', format: v => Number(v||0).toFixed(2) },
+    { key:'variance', label:'Variance', align:'center',
+      format: v => createVarianceChip(v, {invertColors:true, format:true}).outerHTML },
+    { key:'variancePer', label:'Var %', align:'center',
+      format: v => createVarianceChip(v, {invertColors:true, format:true}).outerHTML },
+  ];
+
+  let grid = null;
+
+  async function search() {
+    const m = monthSel.value, y = yearSel.value, pid = document.getElementById('rmPlant').value;
+    if (!pid || parseInt(pid) < 1) return;
+    document.getElementById('rmLoading').style.display = 'flex';
+    document.getElementById('rmGrid').style.display = 'none';
+    document.getElementById('rmEmpty').style.display = 'none';
+    document.getElementById('rmError').style.display = 'none';
+    rmGridSearch.disabled = true;
+    rmItemCount.textContent = '—';
+
+    try {
+      const data = await apiFetch(`/api/rm-variance/${m}/${y}/${pid}`);
+      const entries = (data.entries || []).sort((a, b) => (a.partno||'').localeCompare(b.partno||''));
+      document.getElementById('rmGrid').style.display = '';
+      rmGridSearch.disabled = false;
+      rmGridSearch.value = '';
+
+      const totals = data.totals;
+      let statusText = null;
+      if (totals) {
+        statusText = () => `<div class="ti-flex ti-gap-16" style="flex-wrap:wrap;align-items:center">
+          <span><strong>Total</strong></span>
+          <span>Cust Req: <strong>${formatIndianNumber(totals.custReqQty)}</strong></span>
+          <span>Sch Qty: <strong>${formatIndianNumber(totals.schQty)}</strong></span>
+          <span>Sch Kg: <strong>${totals.schKg.toFixed(2)}</strong></span>
+          <span>Prod Qty: <strong>${formatIndianNumber(totals.prodQty)}</strong></span>
+          <span>Used Kg: <strong>${totals.usedQty.toFixed(2)}</strong></span>
+          <span>Theo Kg: <strong>${totals.theoKg.toFixed(2)}</strong></span>
+          <span>Variance: <strong>${totals.variance.toFixed(2)}</strong></span>
+        </div>`;
+      }
+
+      if (grid && grid.destroy) grid.destroy();
+      grid = SuperGrid.create(document.getElementById('rmGrid'), {
+        columns,
+        rows: entries,
+        omitToolbar: true,
+        options: {
+          countElement: rmItemCount,
+          searchInputElement: rmGridSearch,
+          search: true,
+          rowNumbers: true,
+          emptyText: 'No variance data for this period',
+          countLabel: 'items',
+          statusText,
+        },
+      });
+    } catch(err) {
+      document.getElementById('rmError').innerHTML = `<div class="ti-alert ti-alert-error">${err.message}</div>`;
+      document.getElementById('rmError').style.display = 'block';
+    }
+    document.getElementById('rmLoading').style.display = 'none';
+  }
+  document.getElementById('rmSearchBtn').addEventListener('click', search);
+})();
+</script>

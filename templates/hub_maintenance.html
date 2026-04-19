@@ -1,0 +1,517 @@
+<!-- Hub Maintenance Section — Tabbed: Tools Today / PM Status / Life Report -->
+<div class="ti-hub-section-fill">
+
+<!-- Tabs row: tab buttons (left), PM/Life controls (right) -->
+<div class="ti-tabs ti-tabs--maint" id="maint-tabs">
+  <div class="ti-tabs__nav">
+    <button class="ti-tab active" data-tab="tools">🔧 Tools Today</button>
+    <button class="ti-tab" data-tab="pm">🛠️ Preventive Maintenance</button>
+    <button class="ti-tab" data-tab="life">📊 Life Report</button>
+  </div>
+  <div class="ti-tabs__inline ti-tabs__inline--pm" id="maint-inline-pm" hidden>
+    <span id="pmStatusCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
+    <input type="text" class="ti-input" id="pmSearch" placeholder="Search tool / part no…" style="width:min(240px,36vw)">
+    <button class="ti-btn ti-btn-outline ti-btn-sm" id="pmExportBtn">⬇ Export</button>
+    <button class="ti-filter-btn safe" id="pmSafeBtn">Safe <span id="pmSafeCount">0</span></button>
+    <button class="ti-filter-btn warning" id="pmWarnBtn">Warning <span id="pmWarnCount">0</span></button>
+    <button class="ti-filter-btn critical" id="pmCritBtn">Critical <span id="pmCritCount">0</span></button>
+  </div>
+  <div class="ti-tabs__inline ti-tabs__inline--life" id="maint-inline-life" hidden>
+    <div id="lifeSummary" class="ti-maint-life-kpis ti-maint-life-kpis--inline"></div>
+    <span id="lifeStatusCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
+    <input type="text" class="ti-input" id="lifeSearch" placeholder="Filter tool no…" style="width:min(200px,32vw)" autocomplete="off"/>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     TAB 1: TOOLS TODAY
+     ════════════════════════════════════════════════════════════════════ -->
+<div class="ti-tab-panel active" id="panel-tools">
+  <div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright)">Tool Management</h2>
+      <p style="font-size:12px;color:var(--ti-text-dim)" id="toolsDate"></p>
+    </div>
+    <div class="ti-flex ti-gap-8 ti-flex-wrap" id="toolsStats"></div>
+  </div>
+
+  <div id="toolsLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+  <div class="ti-flex ti-gap-12 ti-mb-16" style="flex-shrink:0" id="toolsStatCards"></div>
+
+  <div class="ti-three-col" id="toolsColumns" style="display:none;min-height:500px">
+    <div class="ti-column">
+      <div class="ti-column-header" style="background:var(--ti-blue)">
+        <span>Today</span>
+        <button class="ti-btn-icon" style="color:#fff" id="todayReverseBtn" title="Toggle">▲</button>
+      </div>
+      <div class="ti-column-body scrollable" id="todayBody"></div>
+    </div>
+    <div class="ti-column">
+      <div class="ti-column-header" style="background:var(--ti-emerald);gap:8px">
+        <button class="ti-btn-icon" style="color:#fff" id="futureBackBtn">◀</button>
+        <span id="futureLabel">Tomorrow</span>
+        <button class="ti-btn-icon" style="color:#fff" id="futureNextBtn">▶</button>
+      </div>
+      <div class="ti-column-body scrollable" id="futureBody"></div>
+    </div>
+    <div class="ti-column">
+      <div class="ti-column-header" style="background:var(--ti-amber)">
+        <span>Maintenance Required</span>
+      </div>
+      <div class="ti-column-body scrollable" id="maintBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     TAB 2: PREVENTIVE MAINTENANCE
+     ════════════════════════════════════════════════════════════════════ -->
+<div class="ti-tab-panel" id="panel-pm">
+  <div id="pmLoading" class="ti-loading"><div class="ti-spinner"></div></div>
+
+  <div id="pmGrid" class="ti-hub-section-fill__grid" style="display:none"></div>
+  <div id="pmEmpty" class="ti-empty" style="display:none"><div class="ti-empty-icon">🛠️</div><div class="ti-empty-text">No tools match</div></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     TAB 3: LIFE REPORT
+     ════════════════════════════════════════════════════════════════════ -->
+<div class="ti-tab-panel" id="panel-life">
+  <div id="lifeLoading" class="ti-loading"><div class="ti-spinner"></div></div>
+
+  <div id="lifeGrid" class="ti-hub-section-fill__grid" style="display:none"></div>
+</div>
+
+</div><!-- /.ti-hub-section-fill -->
+
+<!-- ════════════════════════════════════════════════════════════════════
+     PM MODALS (shared across tabs)
+     ════════════════════════════════════════════════════════════════════ -->
+<!-- Add Tool Modal -->
+<div class="ti-modal-overlay" id="pmAddModal">
+  <div class="ti-modal">
+    <div class="ti-modal-header"><h3 id="pmAddTitle">Add Tool for PM</h3></div>
+    <div class="ti-modal-body">
+      <div><label class="ti-form-label">Search Tool</label><input type="text" class="ti-input" id="pmAddSearch" placeholder="Type tool number..." style="width:100%"></div>
+      <div id="pmAddSearchResults" style="max-height:100px;overflow-y:auto"></div>
+      <div id="pmAddSelectedTool" style="display:none"><label class="ti-form-label">Selected</label><input type="text" class="ti-input" id="pmAddToolDisplay" disabled style="width:100%"></div>
+      <div><label class="ti-form-label">Tool Life (strokes)</label><input type="number" class="ti-input" id="pmAddLife" placeholder="e.g. 100000" min="1" style="width:100%"></div>
+      <div><label class="ti-form-label">SPM</label><input type="number" class="ti-input" id="pmAddSpm" placeholder="e.g. 100" min="1" style="width:100%"></div>
+      <div><label class="ti-form-label">PM Strokes</label><input type="number" class="ti-input" id="pmAddPmStrokes" placeholder="e.g. 50000" min="1" style="width:100%"></div>
+      <div id="pmAddStrokesInfo" style="display:none"><label class="ti-form-label">Current Strokes</label><input type="text" class="ti-input" id="pmAddCurrent" disabled style="width:100%"></div>
+      <div id="pmAddNextDiv" style="display:none"><label class="ti-form-label">Next PM Stroke</label><input type="number" class="ti-input" id="pmAddNext" style="width:100%"></div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closePmModal('pmAddModal')">Cancel</button>
+      <button class="ti-btn ti-btn-primary" id="pmAddSubmit">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="ti-modal-overlay" id="pmEditModal">
+  <div class="ti-modal ti-modal-sm">
+    <div class="ti-modal-header"><h3>Edit Tool Settings</h3></div>
+    <div class="ti-modal-body">
+      <div><label class="ti-form-label">Tool Life</label><input type="number" class="ti-input" id="pmEditLife" min="1" style="width:100%"></div>
+      <div><label class="ti-form-label">SPM</label><input type="number" class="ti-input" id="pmEditSpm" min="1" style="width:100%"></div>
+      <div><label class="ti-form-label">PM Strokes</label><input type="number" class="ti-input" id="pmEditPmStrokes" min="1" style="width:100%"></div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closePmModal('pmEditModal')">Cancel</button>
+      <button class="ti-btn ti-btn-primary" id="pmEditSubmit">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Maintenance Modal -->
+<div class="ti-modal-overlay" id="pmConfirmModal">
+  <div class="ti-modal ti-modal-sm">
+    <div class="ti-modal-header"><h3>Confirm Maintenance</h3></div>
+    <div class="ti-modal-body">
+      <p style="font-size:13px;color:var(--ti-text-muted)">Confirm maintenance for tool <strong id="pmConfirmToolNo"></strong></p>
+      <div><label class="ti-form-label">Current Stroke</label><input type="text" class="ti-input" id="pmConfirmCurrent" disabled style="width:100%"></div>
+      <div><label class="ti-form-label">Next PM Stroke</label><input type="number" class="ti-input" id="pmConfirmNext" style="width:100%"></div>
+      <div><label class="ti-form-label">PM Sheet Attachment</label><input type="file" id="pmConfirmFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="color:var(--ti-text-muted);font-size:12px"></div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closePmModal('pmConfirmModal')">Cancel</button>
+      <button class="ti-btn ti-btn-success" id="pmConfirmSubmit">✓ Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="ti-modal-overlay" id="pmDeleteModal">
+  <div class="ti-modal ti-modal-sm">
+    <div class="ti-modal-header"><h3>Delete Tool</h3></div>
+    <div class="ti-modal-body"><p style="font-size:13px">Remove tool <strong id="pmDeleteToolNo"></strong> from PM tracking?</p></div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closePmModal('pmDeleteModal')">Cancel</button>
+      <button class="ti-btn ti-btn-danger" id="pmDeleteSubmit">🗑 Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="ti-modal-overlay" id="pmHistoryModal">
+  <div class="ti-modal ti-modal-lg">
+    <div class="ti-modal-header"><h3 id="pmHistoryTitle">Maintenance History</h3></div>
+    <div class="ti-modal-body" id="pmHistoryBody"></div>
+    <div class="ti-modal-footer"><button class="ti-btn ti-btn-outline" onclick="closePmModal('pmHistoryModal')">Close</button></div>
+  </div>
+</div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────────────
+(function() {
+  function setMaintInlineTools(tabName) {
+    const pm = document.getElementById('maint-inline-pm');
+    const life = document.getElementById('maint-inline-life');
+    if (pm) pm.hidden = tabName !== 'pm';
+    if (life) life.hidden = tabName !== 'life';
+  }
+
+  document.querySelectorAll('#maint-tabs .ti-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#maint-tabs .ti-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.ti-tab-panel').forEach(p => p.classList.remove('active'));
+      const panel = document.getElementById('panel-' + tab.dataset.tab);
+      if (panel) { panel.classList.add('active'); }
+
+      const name = tab.dataset.tab || 'tools';
+      setMaintInlineTools(name);
+
+      // Lazy-load tabs
+      if (tab.dataset.tab === 'pm' && !window._pmLoaded) { window._pmLoaded = true; loadPmData(); }
+      if (tab.dataset.tab === 'life' && !window._lifeLoaded) { window._lifeLoaded = true; loadLifeData(); }
+    });
+  });
+  setMaintInlineTools('tools');
+})();
+
+// ── Modal helpers ─────────────────────────────────────────────────────
+function closePmModal(id) { document.getElementById(id).classList.remove('open'); }
+function openPmModal(id) { document.getElementById(id).classList.add('open'); }
+
+// ══════════════════════════════════════════════════════════════════════
+// TOOLS TODAY TAB
+// ══════════════════════════════════════════════════════════════════════
+(function() {
+  let futureOffset = 1;
+  const todayBody = document.getElementById('todayBody');
+  const futureBody = document.getElementById('futureBody');
+  const maintBody = document.getElementById('maintBody');
+  const futureLabel = document.getElementById('futureLabel');
+  const loading = document.getElementById('toolsLoading');
+  const columns = document.getElementById('toolsColumns');
+  const statCards = document.getElementById('toolsStatCards');
+  const statsBar = document.getElementById('toolsStats');
+
+  function dateOffset(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+  function formatDate(d) { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
+  function offsetLabel(o) { if (o===1) return 'Tomorrow'; if (o===2) return 'Day After'; return new Date(dateOffset(o)+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',month:'short',day:'numeric'}); }
+
+  function flattenTools(tools) {
+    const flat = [];
+    (tools||[]).forEach(t => (t.machines||[]).forEach(m => flat.push({...t, machineId:m.machineId, machineName:m.machineName, scheduledQty:m.scheduledQty, scheduledStrokes:m.scheduledStrokes})));
+    return flat;
+  }
+
+  function makeToolCard(entry, pmMap) {
+    const pm = pmMap.get(entry.toolNo);
+    const hasPM = !!pm;
+    const pmPct = pm ? pm.pmPercentage : 0;
+    const lifePct = hasPM && pm.toolLife > 0 ? Math.min(Math.round((pm.totalLifetimeStrokes/pm.toolLife)*100),100) : 0;
+    const pmRange = hasPM ? pm.nextStroke - pm.pmCurrentStroke : 0;
+    const projPct = hasPM && pmRange>0 ? Math.round(((pm.totalLifetimeStrokes+entry.scheduledStrokes-pm.pmCurrentStroke)/pmRange)*100) : 0;
+    const willCross = hasPM && projPct>=100;
+    const willWarn = hasPM && projPct>=80 && !willCross;
+
+    const cls = willCross ? 'ti-tool-card blink-danger' : willWarn ? 'ti-tool-card warning-border' : 'ti-tool-card';
+    const pmBarColor = pmPct>=80?'var(--ti-red)':pmPct>=50?'var(--ti-amber)':'var(--ti-emerald)';
+    const lifeBarColor = lifePct>=80?'var(--ti-red)':lifePct>=50?'var(--ti-amber)':'var(--ti-emerald)';
+
+    const el = document.createElement('div'); el.className = cls;
+    let bars = '';
+    if (hasPM) {
+      const pmVal = pm.totalLifetimeStrokes - pm.pmCurrentStroke;
+      const pmMax = pm.nextStroke - pm.pmCurrentStroke;
+      bars = `<div class="ti-mini-bars"><div class="ti-mini-bar"><div class="ti-mini-bar-header"><span class="ti-mini-bar-label">PM</span><span class="ti-mini-bar-value">${formatIndianCompact(pmVal)}/${formatIndianCompact(pmMax)} (${pmPct}%)</span></div><div class="ti-progress ti-progress-sm"><div class="ti-progress-bar" style="width:${Math.min(pmPct,100)}%;background:${pmBarColor}"></div></div></div><div class="ti-mini-bar"><div class="ti-mini-bar-header"><span class="ti-mini-bar-label">Life</span><span class="ti-mini-bar-value">${formatIndianCompact(pm.totalLifetimeStrokes)}/${formatIndianCompact(pm.toolLife)} (${lifePct}%)</span></div><div class="ti-progress ti-progress-sm"><div class="ti-progress-bar" style="width:${Math.min(lifePct,100)}%;background:${lifeBarColor}"></div></div></div></div>`;
+    } else {
+      bars = '<div class="ti-mini-bars"><div class="ti-mini-bar"><span class="ti-mini-bar-label">PM ∞</span></div><div class="ti-mini-bar"><span class="ti-mini-bar-label">Life ∞</span></div></div>';
+    }
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:700;color:var(--ti-text-bright)">${entry.toolNo}</span><span style="flex:1"></span><span style="background:var(--ti-surface-3);padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;color:var(--ti-text-muted)">${entry.machineName}</span><span style="font-size:12px;font-weight:700;color:var(--ti-blue)">${formatIndianCompact(entry.scheduledQty)}</span></div><div style="font-size:10px;font-weight:700;color:var(--ti-text);margin:2px 0 4px">${entry.partName} <span style="color:var(--ti-text-dim)">(${entry.partNo})</span></div>${bars}`;
+    return el;
+  }
+
+  function makeMaintCard(entry) {
+    const isCritical = entry.pmPercentage >= 100;
+    const barColor = isCritical ? 'var(--ti-red)' : 'var(--ti-amber)';
+    const lifePct = entry.toolLife > 0 ? Math.min(Math.round((entry.totalLifetimeStrokes/entry.toolLife)*100),100) : 0;
+    const lifeBar = lifePct>=80?'var(--ti-red)':lifePct>=50?'var(--ti-amber)':'var(--ti-emerald)';
+    const pmVal = entry.totalLifetimeStrokes - entry.pmCurrentStroke;
+    const pmMax = entry.nextStroke - entry.pmCurrentStroke;
+
+    const el = document.createElement('div'); el.className = 'ti-tool-card';
+    el.style.borderColor = isCritical ? 'var(--ti-red)' : 'var(--ti-amber)';
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><span style="font-size:12px;font-weight:700;color:var(--ti-text-bright)">${entry.toolNo}</span><span class="ti-chip ${isCritical?'ti-chip-danger':'ti-chip-warning'}">${isCritical?'Critical':'Warning'}</span></div><div style="margin-top:8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:10px;color:var(--ti-text-dim)">Next PM</span><span style="font-size:10px;font-weight:600;color:var(--ti-text)">${formatIndianCompact(pmVal)}/${formatIndianCompact(pmMax)} (${entry.pmPercentage}%)</span></div><div class="ti-progress ti-progress-sm"><div class="ti-progress-bar" style="width:${Math.min(entry.pmPercentage,100)}%;background:${barColor}"></div></div></div><div style="margin-top:8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:10px;color:var(--ti-text-dim)">Tool Life</span><span style="font-size:10px;font-weight:600;color:var(--ti-text)">${formatIndianCompact(entry.totalLifetimeStrokes)}/${formatIndianCompact(entry.toolLife)} (${lifePct}%)</span></div><div class="ti-progress ti-progress-sm"><div class="ti-progress-bar" style="width:${lifePct}%;background:${lifeBar}"></div></div></div>`;
+    return el;
+  }
+
+  async function loadTools() {
+    loading.style.display='flex'; columns.style.display='none';
+    try {
+      const [todayData, futureData, pmStatus, pmAll, toolsCount] = await Promise.all([
+        apiFetch('/api/tools/today'), apiFetch('/api/tools/for-date/'+dateOffset(futureOffset)),
+        apiFetch('/api/pm/status?threshold=80&mode=above'), apiFetch('/api/pm/status?mode=all'),
+        apiFetch('/api/tools/count'),
+      ]);
+      document.getElementById('toolsDate').textContent = formatDate(todayData.date||new Date().toISOString().slice(0,10));
+
+      const pmByToolNo = new Map();
+      pmAll.forEach(e => pmByToolNo.set(e.toolNo, e));
+
+      const totalTools = toolsCount.total||0;
+      const warnTools = pmAll.filter(t => { const p = t.toolLife>0?(t.totalLifetimeStrokes/t.toolLife)*100:0; return p>=50&&p<80; }).length;
+      const critTools = pmAll.filter(t => { const p = t.toolLife>0?(t.totalLifetimeStrokes/t.toolLife)*100:0; return p>=80; }).length;
+
+      statsBar.innerHTML = `
+        <div class="ti-kpi ti-kpi--blue" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">Distinct</div><div class="ti-kpi-value" style="font-size:18px">${totalTools}</div></div>
+        <div class="ti-kpi ti-kpi--emerald" style="padding:10px 14px;gap:4px;cursor:pointer" onclick="document.querySelector('[data-tab=life]').click()"><div class="ti-kpi-label">All Life</div><div class="ti-kpi-value" style="font-size:18px">${pmAll.length}</div></div>
+        <div class="ti-kpi ti-kpi--amber" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">50-80%</div><div class="ti-kpi-value" style="font-size:18px">${warnTools}</div></div>
+        <div class="ti-kpi ti-kpi--red" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">≥80%</div><div class="ti-kpi-value" style="font-size:18px">${critTools}</div></div>
+      `;
+
+      statCards.innerHTML = `
+        <div class="ti-kpi ti-kpi--blue" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">Today</div><div class="ti-kpi-value" style="font-size:18px">${todayData.count??'—'}</div></div>
+        <div class="ti-kpi ti-kpi--emerald" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">${offsetLabel(futureOffset)}</div><div class="ti-kpi-value" style="font-size:18px">${futureData.count??'—'}</div></div>
+        <div class="ti-kpi ti-kpi--amber" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">Maintenance</div><div class="ti-kpi-value" style="font-size:18px">${pmStatus.length}</div></div>
+      `;
+
+      todayBody.innerHTML=''; const todayFlat=flattenTools(todayData.tools);
+      if(!todayFlat.length) todayBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No tools today</div></div>';
+      else todayFlat.forEach(e=>todayBody.appendChild(makeToolCard(e,pmByToolNo)));
+
+      futureBody.innerHTML=''; futureLabel.textContent=offsetLabel(futureOffset);
+      const futureFlat=flattenTools(futureData.tools);
+      if(!futureFlat.length) futureBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No tools scheduled</div></div>';
+      else futureFlat.forEach(e=>futureBody.appendChild(makeToolCard(e,pmByToolNo)));
+
+      maintBody.innerHTML='';
+      if(!pmStatus.length) maintBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No maintenance alerts</div></div>';
+      else pmStatus.forEach(e=>maintBody.appendChild(makeMaintCard(e)));
+
+      columns.style.display='flex';
+    } catch(err) { todayBody.innerHTML=`<div class="ti-alert ti-alert-error">${err.message}</div>`; columns.style.display='flex'; } finally { loading.style.display='none'; }
+  }
+
+  document.getElementById('futureBackBtn').addEventListener('click',()=>{if(futureOffset>1){futureOffset--;loadTools();}});
+  document.getElementById('futureNextBtn').addEventListener('click',()=>{futureOffset++;loadTools();});
+  document.getElementById('todayReverseBtn').addEventListener('click',function(){this.textContent=this.textContent==='▲'?'▼':'▲';});
+
+  loadTools();
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// PREVENTIVE MAINTENANCE TAB
+// ══════════════════════════════════════════════════════════════════════
+let _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
+let _pmSearchFilter='', _pmThresholdFilter='all';
+let _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
+
+async function loadPmData() {
+  document.getElementById('pmLoading').style.display='flex';
+  try {
+    [_pmEntries, _pmAllTools, _pmStatusAll] = await Promise.all([
+      apiFetch('/api/pm/'), apiFetch('/api/tools/all'), apiFetch('/api/pm/status?mode=all'),
+    ]);
+    renderPmTable();
+  } catch(err) { showSnackbar(err.message); }
+  document.getElementById('pmLoading').style.display='none';
+}
+
+function getPmEntryByToolNo(toolNo) {
+  const m = _pmEntries.filter(e => e.toolNo === toolNo);
+  if (!m.length) return null;
+  return m.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+}
+
+function renderPmTable() {
+  const pctMap = new Map(); const lifeMap = new Map();
+  _pmStatusAll.forEach(s => { pctMap.set(s.toolNo, s.pmPercentage); lifeMap.set(s.toolNo, s.totalLifetimeStrokes); });
+
+  let safe=0,warn=0,crit=0;
+  _pmAllTools.forEach(t => { const p=pctMap.get(t.toolNo)||0; if(p>=100)crit++; else if(p>=80)warn++; else safe++; });
+  document.getElementById('pmSafeCount').textContent=safe;
+  document.getElementById('pmWarnCount').textContent=warn;
+  document.getElementById('pmCritCount').textContent=crit;
+
+  let rows = _pmAllTools.map(t => ({tool:t, entry:(()=>{const e=getPmEntryByToolNo(t.toolNo); return e?{...e,totalLifetimeStrokes:lifeMap.get(t.toolNo)||0}:null;})()}));
+
+  if (_pmThresholdFilter!=='all') {
+    rows=rows.filter(r=>{const p=pctMap.get(r.tool.toolNo)||0;if(_pmThresholdFilter==='critical')return p>=100;if(_pmThresholdFilter==='warning')return p>=80&&p<100;return p<80;});
+  }
+  if (_pmSearchFilter) { const q=_pmSearchFilter.toLowerCase(); rows=rows.filter(r=>r.tool.toolNo.toLowerCase().includes(q)||r.tool.partNo.toLowerCase().includes(q)); }
+
+  const columns = [
+    { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:140 },
+    { key:'partNo', label:'Part No', width:160 },
+    { key:'toolLife', label:'Tool Life', align:'right', width:120, format:v=>formatIndianNumber(v) },
+    { key:'spm', label:'SPM', align:'right', width:80, format:v=>formatIndianNumber(v) },
+    { key:'pmStrokes', label:'PM Strokes', align:'right', width:120, format:v=>formatIndianNumber(v) },
+    { key:'strokesDone', label:'Strokes Done', align:'right', width:140, format:v=>formatIndianNumber(v) },
+    { key:'nextPm', label:'Next PM', align:'right', width:120, format:v=>formatIndianNumber(v) },
+    { key:'lastMaint', label:'Last Maint.', width:120 },
+    { key:'pmCount', label:'PM Count', align:'right', width:100 },
+    { key:'actions', label:'Actions', width:180, format:(v,r)=>r.actionsHtml }
+  ];
+
+  const gridRows = rows.map((r,i)=>{
+    const e = r.entry, t = r.tool;
+    const latest = e&&e.maintenanceHistory&&e.maintenanceHistory.length>0 ? e.maintenanceHistory[e.maintenanceHistory.length-1] : null;
+    let actionsHtml = '';
+    if (e) {
+      actionsHtml = `<button class="ti-btn-icon" title="Edit" data-edit="${e.toolId}">✏️</button><button class="ti-btn-icon" title="History" data-history="${e.toolId}">🕐</button><button class="ti-btn-icon" title="Delete" data-delete="${e.toolId}" style="color:var(--ti-red)">🗑️</button><button class="ti-btn-icon" title="Confirm PM" data-confirm="${e.toolId}" style="color:var(--ti-emerald)">✅</button>`;
+    } else {
+      actionsHtml = `<button class="ti-btn ti-btn-outline ti-btn-xs" data-configure="${t.toolNo}">+ Configure</button>`;
+    }
+    return {
+      toolNo: t.toolNo,
+      partNo: t.partNo||'-',
+      toolLife: e?e.toolLife:null,
+      spm: e?e.spm:null,
+      pmStrokes: e?e.pmStrokes:null,
+      strokesDone: e?e.totalLifetimeStrokes:null,
+      nextPm: e?(latest?latest.nextStroke:'Not set'):null,
+      lastMaint: e?(latest?new Date(latest.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'No maint.'):'-',
+      pmCount: e?e.maintenanceHistory.length:null,
+      actionsHtml
+    };
+  });
+
+  if (!gridRows.length) { document.getElementById('pmGrid').style.display='none'; document.getElementById('pmEmpty').style.display='block'; return; }
+  document.getElementById('pmEmpty').style.display='none'; document.getElementById('pmGrid').style.display='flex';
+
+  if (window._pmGrid) window._pmGrid.destroy();
+  window._pmGrid = SuperGrid.create(document.getElementById('pmGrid'), {
+    columns,
+    rows: gridRows,
+    options: { search: false, rowNumbers: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('pmStatusCount') }
+  });
+
+  // Global listener for action buttons inside SuperGrid
+  const gridEl=document.getElementById('pmGrid');
+  gridEl.onclick = async function(e) {
+    const btn = e.target.closest('button[data-edit], button[data-history], button[data-delete], button[data-confirm], button[data-configure]');
+    if (!btn) return;
+    if (btn.hasAttribute('data-edit')) {
+      _pmEditToolId=parseInt(btn.getAttribute('data-edit')); const e=_pmEntries.find(x=>x.toolId===_pmEditToolId); if(!e)return; document.getElementById('pmEditLife').value=e.toolLife; document.getElementById('pmEditSpm').value=e.spm; document.getElementById('pmEditPmStrokes').value=e.pmStrokes; openPmModal('pmEditModal');
+    } else if (btn.hasAttribute('data-history')) {
+      const id=parseInt(btn.getAttribute('data-history')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; document.getElementById('pmHistoryTitle').textContent='History — '+e.toolNo; const body=document.getElementById('pmHistoryBody'); if(!e.maintenanceHistory||!e.maintenanceHistory.length){body.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No history</div></div>';}else{let h='<div class="ti-table-wrap"><table class="ti-table"><thead><tr><th>Date</th><th class="text-right">Current</th><th class="text-right">Next</th><th>Attachment</th></tr></thead><tbody>';e.maintenanceHistory.forEach(r=>{h+=`<tr><td>${new Date(r.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td><td class="text-right">${formatIndianNumber(r.currentStroke)}</td><td class="text-right">${formatIndianNumber(r.nextStroke)}</td><td>${r.attachment?'<a href="'+r.attachment+'" target="_blank" style="color:var(--ti-blue)">View</a>':'—'}</td></tr>`;});h+='</tbody></table></div>';body.innerHTML=h;}openPmModal('pmHistoryModal');
+    } else if (btn.hasAttribute('data-delete')) {
+      _pmDeleteToolId=parseInt(btn.getAttribute('data-delete')); const e=_pmEntries.find(x=>x.toolId===_pmDeleteToolId); document.getElementById('pmDeleteToolNo').textContent=e?e.toolNo:_pmDeleteToolId; openPmModal('pmDeleteModal');
+    } else if (btn.hasAttribute('data-confirm')) {
+      const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value=''; openPmModal('pmConfirmModal'); try{const info=await apiFetch('/api/pm/'+id+'/stroke-info'); document.getElementById('pmConfirmCurrent').value=formatIndianNumber(info.currentStroke); document.getElementById('pmConfirmNext').value=info.suggestedNextStroke;}catch{}
+    } else if (btn.hasAttribute('data-configure')) {
+      const toolNo = btn.getAttribute('data-configure'); const tool=_pmAllTools.find(t=>t.toolNo===toolNo); if(tool){_pmSelectedAddTool=tool; document.getElementById('pmAddTitle').textContent='Configure: '+tool.toolNo; document.getElementById('pmAddSearch').parentElement.style.display='none'; document.getElementById('pmAddSearchResults').style.display='none'; document.getElementById('pmAddSelectedTool').style.display='block'; document.getElementById('pmAddToolDisplay').value=tool.toolNo; document.getElementById('pmAddLife').value=''; document.getElementById('pmAddSpm').value=''; document.getElementById('pmAddPmStrokes').value=''; loadPmToolStrokes(tool.id); openPmModal('pmAddModal');}
+    }
+  };
+}
+
+async function loadPmToolStrokes(toolId){try{const d=await apiFetch('/api/pm/tool-strokes/'+toolId);document.getElementById('pmAddStrokesInfo').style.display='';document.getElementById('pmAddCurrent').value=formatIndianNumber(d.totalStrokes);document.getElementById('pmAddNextDiv').style.display='';const ps=parseInt(document.getElementById('pmAddPmStrokes').value)||0;document.getElementById('pmAddNext').value=d.totalStrokes+ps;}catch{}}
+
+document.getElementById('pmSearch').addEventListener('input',e=>{_pmSearchFilter=e.target.value.trim();renderPmTable();});
+['safe','warning','critical'].forEach(key=>{const btn=document.getElementById(key==='safe'?'pmSafeBtn':key==='warning'?'pmWarnBtn':'pmCritBtn');btn.addEventListener('click',()=>{_pmThresholdFilter=_pmThresholdFilter===key?'all':key;document.querySelectorAll('.ti-filter-btn').forEach(b=>b.classList.remove('active'));if(_pmThresholdFilter!=='all')btn.classList.add('active');renderPmTable();});});
+
+document.getElementById('pmExportBtn').addEventListener('click',()=>{apiDownloadGet('/api/pm/export?mode='+_pmThresholdFilter+'&search='+_pmSearchFilter,'preventive_maintenance.xlsx');});
+document.getElementById('pmAddPmStrokes').addEventListener('input',()=>{if(_pmSelectedAddTool){const cur=parseInt((document.getElementById('pmAddCurrent').value||'').replace(/,/g,''))||0;const ps=parseInt(document.getElementById('pmAddPmStrokes').value)||0;document.getElementById('pmAddNext').value=cur+ps;}});
+document.getElementById('pmAddSubmit').addEventListener('click',async()=>{if(!_pmSelectedAddTool)return;try{await apiPost('/api/pm/',{toolId:_pmSelectedAddTool.id,toolNo:_pmSelectedAddTool.toolNo,toolLife:parseInt(document.getElementById('pmAddLife').value),spm:parseInt(document.getElementById('pmAddSpm').value),pmStrokes:parseInt(document.getElementById('pmAddPmStrokes').value),nextStroke:parseInt(document.getElementById('pmAddNext').value)});closePmModal('pmAddModal');loadPmData();}catch(e){showSnackbar(e.message);}});
+document.getElementById('pmEditSubmit').addEventListener('click',async()=>{try{await apiPatch('/api/pm/'+_pmEditToolId,{toolLife:parseInt(document.getElementById('pmEditLife').value),spm:parseInt(document.getElementById('pmEditSpm').value),pmStrokes:parseInt(document.getElementById('pmEditPmStrokes').value)});closePmModal('pmEditModal');loadPmData();}catch(e){showSnackbar(e.message);}});
+document.getElementById('pmConfirmSubmit').addEventListener('click',async()=>{if(!_pmConfirmEntry)return;const fd=new FormData();fd.append('nextStroke',document.getElementById('pmConfirmNext').value);const f=document.getElementById('pmConfirmFile');if(f.files.length)fd.append('attachment',f.files[0]);try{await apiPostForm('/api/pm/'+_pmConfirmEntry.toolId+'/confirm',fd);closePmModal('pmConfirmModal');loadPmData();}catch(e){showSnackbar(e.message);}});
+document.getElementById('pmDeleteSubmit').addEventListener('click',async()=>{try{await apiDelete('/api/pm/'+_pmDeleteToolId);closePmModal('pmDeleteModal');loadPmData();}catch(e){showSnackbar(e.message);}});
+
+// ══════════════════════════════════════════════════════════════════════
+// LIFE REPORT TAB
+// ══════════════════════════════════════════════════════════════════════
+let _lifePmAll = null;
+let _lifeSearchFilter = '';
+
+async function loadLifeData() {
+  document.getElementById('lifeLoading').style.display='flex';
+  try {
+    _lifePmAll = await apiFetch('/api/pm/status?mode=all');
+    const ls = document.getElementById('lifeSearch');
+    _lifeSearchFilter = (ls && ls.value) ? ls.value.trim() : '';
+    renderLifeGrid();
+    document.getElementById('lifeGrid').style.display = '';
+  } catch(err) { showSnackbar(err.message); }
+  document.getElementById('lifeLoading').style.display='none';
+}
+
+function renderLifeGrid() {
+  if (!_lifePmAll) return;
+  const pmAll = _lifePmAll;
+  const total = pmAll.length;
+  const warnCount = pmAll.filter(t => { const p = t.toolLife > 0 ? Math.min(Math.round((t.totalLifetimeStrokes / t.toolLife) * 100), 100) : 0; return p >= 50 && p < 80; }).length;
+  const critCount = pmAll.filter(t => { const p = t.toolLife > 0 ? Math.min(Math.round((t.totalLifetimeStrokes / t.toolLife) * 100), 100) : 0; return p >= 80; }).length;
+
+  document.getElementById('lifeSummary').innerHTML = `
+    <div class="ti-kpi ti-kpi--blue"><div class="ti-kpi-label">Total</div><div class="ti-kpi-value">${total}</div></div>
+    <div class="ti-kpi ti-kpi--amber"><div class="ti-kpi-label">50–80%</div><div class="ti-kpi-value">${warnCount}</div></div>
+    <div class="ti-kpi ti-kpi--red"><div class="ti-kpi-label">≥80%</div><div class="ti-kpi-value">${critCount}</div></div>
+  `;
+
+  let list = [...pmAll].sort((a, b) => {
+    const pa = a.toolLife > 0 ? (a.totalLifetimeStrokes / a.toolLife) * 100 : 0;
+    const pb = b.toolLife > 0 ? (b.totalLifetimeStrokes / b.toolLife) * 100 : 0;
+    return pb - pa;
+  });
+  if (_lifeSearchFilter) {
+    const q = _lifeSearchFilter.toLowerCase();
+    list = list.filter(t => (t.toolNo || '').toLowerCase().includes(q));
+  }
+
+  const columns = [
+    { key: 'toolNo', label: 'Tool No', className: 'val-bold', pinned: true, width: 140 },
+    { key: 'toolLife', label: 'Tool Life', align: 'right', width: 96, format: (v) => formatIndianCompact(v) },
+    { key: 'totalLifetimeStrokes', label: 'Lifetime strokes', align: 'right', width: 128, format: (v) => formatIndianCompact(v) },
+    {
+      key: 'lifeUsed',
+      label: 'Life used',
+      width: 200,
+      format: (v, r) => `<div style="display:flex;align-items:center;gap:8px;min-width:0"><div class="ti-progress" style="flex:1;min-width:56px;height:8px"><div class="ti-progress-bar" style="width:${r.pct}%;background:${r.color}"></div></div><strong style="color:${r.color};font-size:12px;white-space:nowrap">${r.pct}%</strong></div>`
+    },
+    {
+      key: 'pmCol',
+      label: 'PM progress',
+      width: 220,
+      format: (v, r) => r.pmRange > 0
+        ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0"><div class="ti-progress" style="flex:1;min-width:56px;height:8px"><div class="ti-progress-bar" style="width:${Math.min(r.pmPct, 100)}%;background:${r.pmColor}"></div></div><span style="font-size:10px;white-space:nowrap;color:var(--ti-text-muted)">${formatIndianCompact(r.totalLifetimeStrokes - r.pmCurrentStroke)}/${formatIndianCompact(r.pmRange)}</span><strong style="color:${r.pmColor};font-size:12px;white-space:nowrap">${r.pmPct}%</strong></div>`
+        : '<span style="color:var(--ti-text-dim)">—</span>'
+    }
+  ];
+
+  const gridRows = list.map(entry => {
+    const pct = entry.toolLife > 0 ? Math.min(Math.round((entry.totalLifetimeStrokes / entry.toolLife) * 100), 100) : 0;
+    const color = pct >= 80 ? 'var(--ti-red)' : pct >= 50 ? 'var(--ti-amber)' : 'var(--ti-emerald)';
+    const pmRange = entry.nextStroke - entry.pmCurrentStroke;
+    const pmPct = pmRange > 0 ? Math.round(((entry.totalLifetimeStrokes - entry.pmCurrentStroke) / pmRange) * 100) : 0;
+    const pmColor = pmPct >= 80 ? 'var(--ti-red)' : pmPct >= 50 ? 'var(--ti-amber)' : 'var(--ti-emerald)';
+    return { ...entry, pct, color, pmRange, pmPct, pmColor };
+  });
+
+  if (window._lifeGrid) window._lifeGrid.destroy();
+  window._lifeGrid = SuperGrid.create(document.getElementById('lifeGrid'), {
+    columns,
+    rows: gridRows,
+    options: { search: false, rowNumbers: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('lifeStatusCount') }
+  });
+}
+
+document.getElementById('lifeSearch').addEventListener('input', (e) => {
+  _lifeSearchFilter = e.target.value.trim();
+  if (_lifePmAll) renderLifeGrid();
+});
+</script>

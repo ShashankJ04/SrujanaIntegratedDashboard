@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Operations Hub</title>
+  <meta name="description" content="Central Operations Hub — Production, Inventory, Maintenance & Reporting"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/titanium.css') }}"/>
+</head>
+<body>
+  <div class="ti-shell">
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="ti-sidebar" id="sidebar">
+      <div class="ti-pulse-bar" id="pulse-bar"></div>
+
+      <div class="ti-sidebar-header">
+        <img class="ti-sidebar-logo" src="{{ url_for('static', filename='images/side-logo.png') }}" alt="Logo" onerror="this.style.display='none'"/>
+        <div class="ti-sidebar-brand">
+          <h2>Operations</h2>
+          <small>Command Center</small>
+        </div>
+      </div>
+
+      <ul class="ti-nav">
+        <li class="ti-nav-section">
+          <li class="ti-nav-item">
+            <a class="ti-nav-link active" data-section="overview" href="/app">
+              <span class="ti-nav-icon">📊</span>
+              <span class="ti-nav-label">Overview</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="production" href="/app?section=production">
+              <span class="ti-nav-icon">🏭</span>
+              <span class="ti-nav-label">Production</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="inventory" href="/app?section=inventory">
+              <span class="ti-nav-icon">📦</span>
+              <span class="ti-nav-label">Inventory</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="maintenance" href="/app?section=maintenance">
+              <span class="ti-nav-icon">🔧</span>
+              <span class="ti-nav-label">Maintenance</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="rm-variance" href="/app?section=rm-variance">
+              <span class="ti-nav-icon">📈</span>
+              <span class="ti-nav-label">RM Variance</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="dpr" href="/app?section=dpr">
+              <span class="ti-nav-icon">📝</span>
+              <span class="ti-nav-label">DPR</span>
+            </a>
+          </li>
+        </li>
+
+        <li class="ti-nav-section">
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="executive" href="/app?section=executive">
+              <span class="ti-nav-icon">🎯</span>
+              <span class="ti-nav-label">Executive View</span>
+            </a>
+          </li>
+          {% if has_rept %}
+          <li class="ti-nav-item ti-nav-expandable" id="ti-nav-reports-wrap">
+            <div class="ti-nav-row">
+              <a class="ti-nav-link ti-nav-link--grow" data-section="reports" href="/app?section=reports">
+                <span class="ti-nav-icon">📋</span>
+                <span class="ti-nav-label">Reports</span>
+              </a>
+              <button type="button" class="ti-nav-chevron" id="ti-nav-reports-chevron" aria-expanded="false" aria-label="Expand report list">▸</button>
+            </div>
+            <ul class="ti-nav-tree" id="ti-nav-reports-tree" hidden></ul>
+          </li>
+          {% endif %}
+          {% if has_rept_plus %}
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="reports-manage" href="/app?section=reports-manage">
+              <span class="ti-nav-icon">🗂️</span>
+              <span class="ti-nav-label">Report management</span>
+            </a>
+          </li>
+          {% endif %}
+        </li>
+
+        <li class="ti-nav-section">
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="admin" href="/app?section=admin">
+              <span class="ti-nav-icon">⚙️</span>
+              <span class="ti-nav-label">Admin</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" href="/logout">
+              <span class="ti-nav-icon">🚪</span>
+              <span class="ti-nav-label">Logout</span>
+            </a>
+          </li>
+        </li>
+      </ul>
+
+      <div class="ti-sidebar-footer">
+        <button class="ti-collapse-btn" title="Toggle sidebar">
+          <span class="icon">◀</span>
+          <span class="label">Collapse</span>
+        </button>
+      </div>
+    </aside>
+
+    {% if has_rept %}
+    <!-- Report list flyout when sidebar is collapsed (positioned via JS) -->
+    <div id="ti-reports-flyout" class="ti-reports-flyout" hidden aria-hidden="true">
+      <ul class="ti-nav-tree ti-reports-flyout-tree" id="ti-reports-flyout-inner"></ul>
+    </div>
+    {% endif %}
+
+    <!-- Mobile overlay -->
+    <div class="ti-mobile-overlay" id="mobile-overlay"></div>
+
+    <!-- ═══ MAIN ═══ -->
+    <div class="ti-main">
+      <!-- Top Bar -->
+      <header class="ti-topbar">
+        <div class="ti-topbar-left">
+          <button class="ti-sidebar-mobile-toggle" title="Menu">☰</button>
+          <h1 class="ti-section-title">Overview</h1>
+        </div>
+        <div class="ti-pulse-wrap">
+          <span class="ti-pulse-label">PULSE:</span>
+          <div class="ti-pulse-ticker" id="pulse-ticker" role="status" aria-live="polite">
+            <div class="ti-pulse-ticker-viewport">
+              <div class="ti-pulse-ticker-track" id="pulse-ticker-track">
+                <span class="ti-pulse-ticker-seg" id="pulse-ticker-a">Initializing real-time feed…</span>
+                <span class="ti-pulse-ticker-seg" id="pulse-ticker-b" aria-hidden="true">Initializing real-time feed…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ti-topbar-right">
+          <button class="ti-search-trigger" title="Search (Ctrl+K)">
+            🔍 Search…
+            <kbd>Ctrl+K</kbd>
+          </button>
+          <button class="ti-theme-toggle" id="theme-toggle" title="Toggle Light/Dark theme">🌙</button>
+          <div class="ti-user-badge">
+            <div class="ti-user-avatar">{{ user.name[:2]|upper if user.name else 'U' }}</div>
+            <span>{{ user.name or user.login or 'User' }}</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dynamic Content -->
+      <main class="ti-content" id="hub-content">
+        <div class="ti-loading"><div class="ti-spinner"></div></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ═══ COMMAND PALETTE ═══ -->
+  <div class="ti-cmdpal-overlay" id="cmdpal-overlay">
+    <div class="ti-cmdpal">
+      <input class="ti-cmdpal-input" type="text" placeholder="Search sections, tools, parts…" autocomplete="off"/>
+      <div class="ti-cmdpal-results"></div>
+    </div>
+  </div>
+
+  <!-- ═══ SCRIPTS ═══ -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    window.DASHBOARD_DEFAULT_PAGE_SIZE = {{ config.DEFAULT_PAGE_SIZE|default(25)|int }};
+    window.DASHBOARD_MAX_PAGE_SIZE = {{ config.MAX_PAGE_SIZE|default(200)|int }};
+    window.BUFFER_EDIT_ALLOWED = {{ buffer_edit_allowed|default(false)|tojson }};
+    window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};
+    window.DPR_POLL_INTERVAL_MS = {{ dpr_poll_interval_ms|tojson }};
+    window.CURRENT_USER = {{ user|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/supergrid.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/excel_display.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/datagrid.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/hub.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/hub_charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/table.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dpr.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/executive.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRN Tag Generator — Warehouse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/titanium.css') }}">
+  <style>
+    body { background: var(--ti-bg); color: var(--ti-text); font-family: var(--ti-font); min-height: 100vh; display: flex; flex-direction: column; }
+    .gen-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; border-bottom: 1px solid var(--ti-border);
+      background: var(--ti-glass); backdrop-filter: blur(12px);
+    }
+    .gen-brand { display: flex; align-items: center; gap: 12px; }
+    .gen-brand h1 { font-size: 18px; font-weight: 800; color: var(--ti-text-bright); }
+    .gen-brand small { font-size: 10px; color: var(--ti-text-dim); font-weight: 600; }
+    .gen-main { flex: 1; padding: 24px; max-width: 900px; margin: 0 auto; width: 100%; overflow-y: auto; }
+    .gen-card { background: var(--ti-glass); border: 1px solid var(--ti-glass-border); border-radius: var(--ti-radius); padding: 20px; margin-bottom: 20px; }
+    .gen-card h3 { font-size: 14px; font-weight: 800; color: var(--ti-text-bright); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .gen-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ti-text-dim); margin-bottom: 4px; display: block; }
+    .gen-select, .gen-input {
+      width: 100%; padding: 10px 14px; border-radius: var(--ti-radius-sm);
+      border: 1px solid var(--ti-border-strong); background: var(--ti-surface);
+      color: var(--ti-text); font-size: 13px; font-family: var(--ti-font);
+      outline: none; margin-bottom: 14px;
+    }
+    .gen-select:focus, .gen-input:focus { border-color: var(--ti-blue); box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+    .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .gen-btn {
+      padding: 10px 20px; border-radius: var(--ti-radius-sm); border: none;
+      font-size: 13px; font-weight: 700; font-family: var(--ti-font);
+      cursor: pointer; transition: all 150ms;
+    }
+    .gen-btn-primary { background: var(--ti-blue); color: #fff; }
+    .gen-btn-primary:hover { background: #2563eb; box-shadow: 0 4px 16px rgba(59,130,246,0.25); }
+    .gen-btn-outline { background: var(--ti-surface); color: var(--ti-text); border: 1px solid var(--ti-border-strong); }
+    .gen-btn-outline:hover { background: var(--ti-surface-2); }
+
+    /* Line items table */
+    .line-items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .line-items-table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ti-text-dim); padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--ti-border); }
+    .line-items-table td { padding: 8px 10px; border-bottom: 1px solid var(--ti-border); }
+    .line-items-table input { width: 80px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--ti-border-strong); background: var(--ti-surface-2); color: var(--ti-text); font-family: var(--ti-font); font-size: 12px; }
+    .line-items-table input[type="checkbox"] { width: auto; }
+
+    /* Generated tags */
+    .gen-tags { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .gen-tag-card { background: var(--ti-surface); border: 1px solid var(--ti-border); border-radius: var(--ti-radius-sm); padding: 14px; text-align: center; }
+    .gen-tag-card img { max-width: 160px; margin: 8px auto; }
+    .gen-tag-card .tag-id { font-size: 10px; color: var(--ti-text-dim); word-break: break-all; margin-top: 4px; }
+    .gen-tag-card .tag-item { font-weight: 700; font-size: 13px; color: var(--ti-text-bright); }
+
+    .gen-snack { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; color: #fff; z-index: 999; opacity: 0; transition: opacity 300ms; pointer-events: none; }
+    .gen-snack.show { opacity: 1; }
+    .gen-snack.ok { background: var(--ti-emerald); }
+    .gen-snack.err { background: var(--ti-red); }
+  </style>
+</head>
+<body>
+  <header class="gen-header">
+    <div class="gen-brand">
+      <div style="font-size:24px">🏷️</div>
+      <div><h1>GRN Tag Generator</h1><small>GENERATE QR-CODED INVENTORY TAGS</small></div>
+    </div>
+    <a href="/app" class="gen-btn gen-btn-outline">← Back to Hub</a>
+  </header>
+
+  <main class="gen-main">
+    <!-- Step 1: Supplier Selection -->
+    <div class="gen-card" id="step-supplier">
+      <h3>Step 1 — Select Supplier</h3>
+      <label class="gen-label">Supplier</label>
+      <select id="supplier-select" class="gen-select" onchange="loadPOs()">
+        <option value="">Choose a supplier…</option>
+      </select>
+    </div>
+
+    <!-- Step 2: PO Selection -->
+    <div class="gen-card" id="step-po" style="display:none">
+      <h3>Step 2 — Select Purchase Order</h3>
+      <label class="gen-label">PO Number</label>
+      <select id="po-select" class="gen-select" onchange="loadLineItems()">
+        <option value="">Choose a PO…</option>
+      </select>
+    </div>
+
+    <!-- Step 3: Line Items + Qty -->
+    <div class="gen-card" id="step-items" style="display:none">
+      <h3>Step 3 — Select Items & Quantities</h3>
+      <table class="line-items-table">
+        <thead><tr><th>✓</th><th>Item Code</th><th>Description</th><th>PO Qty</th><th>Receive Qty</th><th>UOM</th></tr></thead>
+        <tbody id="line-items-body"></tbody>
+      </table>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="gen-btn gen-btn-primary" onclick="generateGRN()">Generate GRN Tags</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Generated Tags -->
+    <div class="gen-card" id="step-tags" style="display:none">
+      <h3>Generated Tags</h3>
+      <div class="gen-tags" id="tags-grid"></div>
+      <div style="margin-top:16px">
+        <button class="gen-btn gen-btn-outline" onclick="window.print()">🖨 Print Tags</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="gen-snack" class="gen-snack"></div>
+
+  <script>
+    // Load suppliers on page load
+    (async function init() {
+      try {
+        const res = await fetch('/api/wh/suppliers');
+        const suppliers = await res.json();
+        const sel = document.getElementById('supplier-select');
+        suppliers.forEach(s => {
+          sel.innerHTML += `<option value="${s.MCM_Id}">${s.MCM_Name}</option>`;
+        });
+      } catch (e) { showSnack('Failed to load suppliers', 'err'); }
+    })();
+
+    async function loadPOs() {
+      const supplierId = document.getElementById('supplier-select').value;
+      if (!supplierId) { document.getElementById('step-po').style.display = 'none'; return; }
+      try {
+        const res = await fetch(`/api/wh/pos/${supplierId}`);
+        const pos = await res.json();
+        const sel = document.getElementById('po-select');
+        sel.innerHTML = '<option value="">Choose a PO…</option>';
+        pos.forEach(p => { sel.innerHTML += `<option value="${p.po_no}">${p.po_no} — ${p.po_date || ''}</option>`; });
+        document.getElementById('step-po').style.display = '';
+        document.getElementById('step-items').style.display = 'none';
+        document.getElementById('step-tags').style.display = 'none';
+      } catch (e) { showSnack('Failed to load POs', 'err'); }
+    }
+
+    async function loadLineItems() {
+      const poNo = document.getElementById('po-select').value;
+      if (!poNo) { document.getElementById('step-items').style.display = 'none'; return; }
+      try {
+        const res = await fetch(`/api/wh/po/${poNo}`);
+        const data = await res.json();
+        const items = data.items || data;
+        const tbody = document.getElementById('line-items-body');
+        tbody.innerHTML = '';
+        items.forEach((item, i) => {
+          tbody.innerHTML += `<tr>
+            <td><input type="checkbox" class="item-check" data-idx="${i}" checked /></td>
+            <td style="font-weight:700">${item.part_no || item.item_code}</td>
+            <td style="font-size:12px;color:var(--ti-text-muted)">${item.part_name || item.description || ''}</td>
+            <td style="font-variant-numeric:tabular-nums">${item.qty || item.po_qty || 0}</td>
+            <td><input type="number" class="item-qty" data-idx="${i}" value="${item.qty || item.po_qty || 0}" step="0.01" min="0" /></td>
+            <td>${item.uom || 'NOS'}</td>
+          </tr>`;
+        });
+        // Store items for later
+        window._poItems = items;
+        document.getElementById('step-items').style.display = '';
+        document.getElementById('step-tags').style.display = 'none';
+      } catch (e) { showSnack('Failed to load line items', 'err'); }
+    }
+
+    async function generateGRN() {
+      const poNo = document.getElementById('po-select').value;
+      const items = [];
+      document.querySelectorAll('.item-check:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.idx);
+        const qtyInput = document.querySelector(`.item-qty[data-idx="${idx}"]`);
+        const poItem = window._poItems[idx];
+        items.push({
+          po_line_item_id: poItem.id || poItem.po_line_item_id,
+          item_code: poItem.part_no || poItem.item_code,
+          item_desc: poItem.part_name || poItem.description || '',
+          qty_received: parseFloat(qtyInput.value) || 0,
+          uom: poItem.uom || 'NOS'
+        });
+      });
+
+      if (!items.length) { showSnack('Select at least one item', 'err'); return; }
+
+      try {
+        const res = await fetch('/api/wh/generate_grn', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ po_no: poNo, items })
+        });
+        const data = await res.json();
+        if (data.error) { showSnack(data.error, 'err'); return; }
+
+        // Show generated tags with QR codes
+        const grid = document.getElementById('tags-grid');
+        grid.innerHTML = '';
+        const tags = data.tags || [];
+        for (const tag of tags) {
+          let qrHtml = '';
+          try {
+            const qrRes = await fetch(`/api/wh/get_qr/${tag.tag_id}`);
+            const qrData = await qrRes.json();
+            if (qrData.qr) qrHtml = `<img src="data:image/png;base64,${qrData.qr}" alt="QR" />`;
+          } catch (e) { /* skip QR */ }
+          grid.innerHTML += `<div class="gen-tag-card">
+            <div class="tag-item">${tag.item_code}</div>
+            <div style="font-size:12px;color:var(--ti-text-muted);margin:4px 0">${tag.item_desc}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--ti-amber)">Qty: ${tag.qty_received} ${tag.uom || ''}</div>
+            ${qrHtml}
+            <div class="tag-id">${tag.tag_id}</div>
+          </div>`;
+        }
+        document.getElementById('step-tags').style.display = '';
+        showSnack(`GRN created with ${tags.length} tag(s)`, 'ok');
+      } catch (e) { showSnack('GRN generation failed', 'err'); }
+    }
+
+    function showSnack(msg, type) {
+      const el = document.getElementById('gen-snack');
+      el.textContent = msg;
+      el.className = `gen-snack show ${type}`;
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>
