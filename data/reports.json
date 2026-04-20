@@ -294,14 +294,10 @@
       "id": "ed5fe6a9-1fe0-4a1c-b633-f801c4e1f9ec",
       "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
       "name": "Weekly Closing Stock",
-      "queryTemplate": "SELECT CH_PLANTID csPlantId,CH_CompId csCompId,CH_StageId csStageId,CH_QTY csQty \nFROM comp_stockhistory where ch_week ={week} and ch_month ={month} and ch_year={year}",
-      "variables": [
-        "week",
-        "month",
-        "year"
-      ],
+      "queryTemplate": "SELECT * \nFROM comp_opstages",
+      "variables": [],
       "createdAt": "2026-04-18T13:25:05.735152+00:00",
-      "updatedAt": "2026-04-18T13:25:05.735152+00:00"
+      "updatedAt": "2026-04-19T20:38:10.681784+00:00"
     },
     {
       "id": "5c7c5e6c-6f88-4f6e-9b69-bc0f63c8a663",

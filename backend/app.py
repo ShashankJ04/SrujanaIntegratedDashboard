@@ -37,6 +37,7 @@ def create_app() -> Flask:
     from .tools_api import tools_bp
     from .production_api import production_bp
     from .rm_variance_api import rm_variance_bp
+    from .rm_correction_api import rm_correction_bp
     from .schedule_api import schedule_bp
     from .reports_api import reports_bp
     from .admin_api import admin_bp
@@ -49,6 +50,7 @@ def create_app() -> Flask:
     app.register_blueprint(tools_bp)
     app.register_blueprint(production_bp)
     app.register_blueprint(rm_variance_bp)
+    app.register_blueprint(rm_correction_bp)
     app.register_blueprint(schedule_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(admin_bp)
@@ -127,8 +129,8 @@ def create_app() -> Flask:
 
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
-        "rm-variance", "reports", "reports-manage", "admin", "dpr",
-        "executive",
+        "rm-variance", "rm-correction", "reports", "reports-manage",
+        "admin", "dpr", "executive",
     }
 
     @app.route("/app")
@@ -136,6 +138,12 @@ def create_app() -> Flask:
     def hub() -> str:
         user = g.current_user
         from .auth import is_buffer_editor, is_dpr_editor
+        from . import rbac
+        perms = rbac.get_effective_permissions(
+            user.get("userId", 0),
+            user.get("login", ""),
+            user.get("userId") == 43,
+        )
 
         return render_template(
             "hub.html",
@@ -148,6 +156,7 @@ def create_app() -> Flask:
             ),
             has_rept=has_rept_access(user),
             has_rept_plus=has_rept_plus_access(user),
+            effective_permissions=perms,
         )
 
     @app.route("/portal/machine/<int:mid>")
@@ -177,15 +186,20 @@ def create_app() -> Flask:
         # Mapping section name to RBAC key (access list)
         key_map = {
             "production": "production",
-            "inventory": "rm_variance",
-            "maintenance": "preventive_maintenance",
+            "inventory": "rept",
+            # Maintenance page is visible when user has any maintenance subsection access
             "rm-variance": "rm_variance",
+            # RM Variance access governs both RM pages in current RBAC UI
+            "rm-correction": "rm_variance",
             "reports": "rept",
-            "dpr": "production",  # View access via production
+            "dpr": "rept",  # View access via reports
             "executive": "executive",
         }
 
-        if name == "reports-manage":
+        if name == "maintenance":
+            if not any(k in perms["access"] for k in ("tools", "preventive_maintenance", "life_report")):
+                return "Access denied", 403
+        elif name == "reports-manage":
             if "rept_plus" not in perms.get("plusAccess", []):
                 return "Access denied", 403
         elif name in key_map and key_map[name] not in perms["access"]:

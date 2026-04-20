@@ -1,0 +1,361 @@
+<!-- Hub RM Correction Section — Port of RMCorrectionPage.tsx -->
+<div class="ti-hub-section-fill">
+
+<div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px;padding:0 4px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:24px">✏️</span>
+    <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">RM Correction</h2>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <label style="font-size:12px;font-weight:600;color:var(--ti-text-muted)">Start Date</label>
+    <input type="date" class="ti-input" id="rmcStartDate" style="width:170px" />
+    <span id="rmcEntryCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
+    <button class="ti-btn ti-btn-primary" id="rmcSubmitBtn">Submit</button>
+  </div>
+</div>
+
+<div id="rmcLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+<div id="rmcError" class="ti-alert ti-alert-error" style="display:none;margin:16px 4px"></div>
+<div id="rmcEmpty" class="ti-empty" style="display:none"><div class="ti-empty-icon">📋</div><div class="ti-empty-text">No records found.</div></div>
+
+<div id="rmcTableWrap" style="display:none;overflow:auto;flex:1;border:1px solid var(--ti-border);border-radius:8px;margin:0 4px">
+  <table class="ti-table" id="rmcTable" style="width:100%;min-width:1100px;font-size:12px;table-layout:fixed">
+    <colgroup>
+      <col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:8%">
+      <col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:13%">
+      <col style="width:9%"><col style="width:13%"><col style="width:7%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Raw Material</th>
+        <th>Batch</th>
+        <th class="text-right">Total Inwarded</th>
+        <th class="text-right">RM Given</th>
+        <th class="text-right">Theo RM Remaining</th>
+        <th class="text-right">Scrap</th>
+        <th>Actual RM</th>
+        <th>RM Remarks</th>
+        <th>Actual Scrap</th>
+        <th>Scrap Remarks</th>
+        <th style="text-align:center">Action</th>
+      </tr>
+    </thead>
+    <tbody id="rmcTbody"></tbody>
+  </table>
+</div>
+
+<div id="rmcMoreWrap" style="display:none;text-align:center;padding:12px 0">
+  <button class="ti-btn ti-btn-outline" id="rmcMoreBtn">⋯ Load More</button>
+</div>
+
+</div><!-- /.ti-hub-section-fill -->
+
+<script>
+(function() {
+  const PAGE_SIZE = 30;
+  let _entries = [];
+  let _visibleCount = PAGE_SIZE;
+  let _form = {};  // key -> { rmCorrection, rmRemarks, scrapCorrection, scrapRemarks }
+  let _editing = {};  // key -> boolean
+  let _expanded = {};  // key -> boolean
+  let _batchCache = {};  // batch -> { entries, loading, error }
+
+  // ── Init date ──────────────────────────────────────────────────────
+  const dateInput = document.getElementById('rmcStartDate');
+  const d = new Date();
+  d.setDate(d.getDate() - 10);
+  const defaultStart = d.toISOString().slice(0, 10);
+  dateInput.value = defaultStart;
+  dateInput.max = new Date().toISOString().slice(0, 10);
+
+  function rowKey(entry) { return entry.rawMaterial + '__' + entry.batch; }
+
+  function getForm(key) {
+    return _form[key] || { rmCorrection: '', rmRemarks: '', scrapCorrection: '', scrapRemarks: '' };
+  }
+
+  // ── Load entries ───────────────────────────────────────────────────
+  async function loadEntries() {
+    const loading = document.getElementById('rmcLoading');
+    const errorEl = document.getElementById('rmcError');
+    const tableWrap = document.getElementById('rmcTableWrap');
+    const emptyEl = document.getElementById('rmcEmpty');
+    const moreWrap = document.getElementById('rmcMoreWrap');
+
+    loading.style.display = 'flex';
+    errorEl.style.display = 'none';
+    tableWrap.style.display = 'none';
+    emptyEl.style.display = 'none';
+    moreWrap.style.display = 'none';
+
+    try {
+      const startDate = dateInput.value;
+      const data = await apiFetch('/api/rm-correction/?startDate=' + encodeURIComponent(startDate));
+      _entries = data.entries || [];
+      _visibleCount = PAGE_SIZE;
+      _form = {};
+      _editing = {};
+      _expanded = {};
+      _batchCache = {};
+      renderTable();
+    } catch (err) {
+      errorEl.textContent = err.message || 'Failed to load RM correction data';
+      errorEl.style.display = 'block';
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  // ── Render table ───────────────────────────────────────────────────
+  function renderTable() {
+    const tableWrap = document.getElementById('rmcTableWrap');
+    const emptyEl = document.getElementById('rmcEmpty');
+    const moreWrap = document.getElementById('rmcMoreWrap');
+    const tbody = document.getElementById('rmcTbody');
+    const countEl = document.getElementById('rmcEntryCount');
+
+    countEl.textContent = _entries.length + ' entries';
+
+    if (!_entries.length) {
+      tableWrap.style.display = 'none';
+      emptyEl.style.display = 'block';
+      moreWrap.style.display = 'none';
+      return;
+    }
+
+    tableWrap.style.display = '';
+    emptyEl.style.display = 'none';
+
+    const displayed = _entries.slice(0, _visibleCount);
+    tbody.innerHTML = '';
+
+    displayed.forEach((entry, idx) => {
+      const key = rowKey(entry);
+      const f = getForm(key);
+      const editing = !!_editing[key];
+      const expanded = !!_expanded[key];
+
+      // Main row
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--ti-border)';
+
+      const rmDisabled = entry.rmRemaining === 0;
+
+      tr.innerHTML = `
+        <td style="font-weight:600">${entry.rawMaterial || '—'}</td>
+        <td>
+          <button class="ti-btn-icon" data-expand="${key}" data-batch="${entry.batch}" style="color:var(--ti-blue);font-weight:600;font-size:12px;padding:0;text-decoration:underline;background:none;border:none;cursor:pointer">
+            ${entry.batch} ${expanded ? '▲' : '▼'}
+          </button>
+        </td>
+        <td class="text-right">${entry.totalInwarded.toFixed(2)}</td>
+        <td class="text-right">${entry.rmGiven.toFixed(2)}</td>
+        <td class="text-right">${entry.rmRemaining.toFixed(2)}</td>
+        <td class="text-right">${entry.scrap.toFixed(2)}</td>
+        <td>${editing
+          ? '<input type="number" class="ti-input" data-field="rmCorrection" data-key="'+key+'" value="'+(f.rmCorrection)+'" step="0.01" min="0" placeholder="'+(rmDisabled?'NA':'0.00')+'" style="width:100%;font-size:11px;padding:4px 6px" '+(rmDisabled?'disabled':'')+'>'
+          : '<span style="color:'+(f.rmCorrection?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.rmCorrection||'—')+'</span>'
+        }</td>
+        <td>${editing
+          ? '<input type="text" class="ti-input" data-field="rmRemarks" data-key="'+key+'" value="'+(f.rmRemarks||'')+'" placeholder="'+(rmDisabled?'NA':'Enter remarks')+'" style="width:100%;font-size:11px;padding:4px 6px" '+(rmDisabled?'disabled':'')+'>'
+          : '<span style="color:'+(f.rmRemarks?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.rmRemarks||'—')+'</span>'
+        }</td>
+        <td>${editing
+          ? '<input type="number" class="ti-input" data-field="scrapCorrection" data-key="'+key+'" value="'+(f.scrapCorrection)+'" step="0.01" placeholder="0.00" style="width:100%;font-size:11px;padding:4px 6px">'
+          : '<span style="color:'+(f.scrapCorrection?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.scrapCorrection||'—')+'</span>'
+        }</td>
+        <td>${editing
+          ? '<input type="text" class="ti-input" data-field="scrapRemarks" data-key="'+key+'" value="'+(f.scrapRemarks||'')+'" placeholder="Enter remarks" style="width:100%;font-size:11px;padding:4px 6px">'
+          : '<span style="color:'+(f.scrapRemarks?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.scrapRemarks||'—')+'</span>'
+        }</td>
+        <td style="text-align:center">
+          <button class="ti-btn ${editing?'ti-btn-primary':'ti-btn-outline'} ti-btn-xs" data-toggle-edit="${key}" style="font-size:11px">${editing?'Done':'Edit'}</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+
+      // Expanded detail row
+      if (expanded) {
+        const detailTr = document.createElement('tr');
+        detailTr.innerHTML = '<td colspan="11" style="background:var(--ti-surface-2);padding:8px 12px" id="detail-' + key + '"></td>';
+        tbody.appendChild(detailTr);
+        loadBatchDetail(entry.batch, key);
+      }
+    });
+
+    // More button
+    const hasMore = _visibleCount < _entries.length;
+    moreWrap.style.display = hasMore ? '' : 'none';
+    if (hasMore) {
+      const remaining = Math.min(PAGE_SIZE, _entries.length - _visibleCount);
+      document.getElementById('rmcMoreBtn').textContent = '⋯ More (' + remaining + ' more)';
+    }
+  }
+
+  // ── Batch detail drill-down ────────────────────────────────────────
+  async function loadBatchDetail(batch, key) {
+    const container = document.getElementById('detail-' + key);
+    if (!container) return;
+
+    if (_batchCache[batch] && _batchCache[batch].entries) {
+      renderBatchDetail(container, _batchCache[batch].entries);
+      return;
+    }
+
+    container.innerHTML = '<span style="color:var(--ti-text-muted);font-size:12px">Loading batch production details…</span>';
+
+    try {
+      const data = await apiFetch('/api/rm-correction/batch/' + encodeURIComponent(batch));
+      _batchCache[batch] = { entries: data.entries || [] };
+      renderBatchDetail(container, _batchCache[batch].entries);
+    } catch (err) {
+      container.innerHTML = '<div class="ti-alert ti-alert-error" style="margin:4px 0;font-size:12px">' + (err.message || 'Failed to load batch details') + '</div>';
+    }
+  }
+
+  function renderBatchDetail(container, rows) {
+    if (!rows.length) {
+      container.innerHTML = '<span style="color:var(--ti-text-dim);font-size:12px">No production rows found for this batch in selected date range.</span>';
+      return;
+    }
+
+    // Compute totals
+    let totals = { noOfComp:0, calCompWt:0, sfRejNos:0, suWastageNos:0, scrapKg:0, partWtKg:0, theoRmKg:0 };
+    rows.forEach(r => {
+      totals.noOfComp += r.noOfComp;
+      totals.calCompWt += r.calCompWt;
+      totals.sfRejNos += r.sfRejNos;
+      totals.suWastageNos += r.suWastageNos;
+      totals.scrapKg += r.scrapKg;
+      totals.partWtKg += r.partWtKg;
+      totals.theoRmKg += r.theoRmKg;
+    });
+
+    let html = '<table class="ti-table" style="width:100%;font-size:11px;table-layout:fixed"><thead><tr>';
+    html += '<th>Production Date</th><th>Part No</th><th>Lot No</th><th>Tool</th>';
+    html += '<th class="text-right">No Of Comp</th><th class="text-right">Cal Comp Wt (Kg)</th>';
+    html += '<th class="text-right">SF Rej(Nos)</th><th class="text-right">SU Wastage(Nos)</th>';
+    html += '<th class="text-right">Scrap(Kg)</th><th class="text-right">Part Wt(Kg)</th>';
+    html += '<th class="text-right">Theo RM(Kg)</th></tr></thead><tbody>';
+
+    rows.forEach(r => {
+      html += `<tr>
+        <td>${r.productionDate}</td>
+        <td>${r.partNo || '—'}</td>
+        <td>${r.lotNo || '—'}</td>
+        <td>${r.tool || '—'}</td>
+        <td class="text-right">${r.noOfComp}</td>
+        <td class="text-right">${r.calCompWt.toFixed(4)}</td>
+        <td class="text-right">${r.sfRejNos}</td>
+        <td class="text-right">${r.suWastageNos}</td>
+        <td class="text-right">${r.scrapKg.toFixed(2)}</td>
+        <td class="text-right">${r.partWtKg.toFixed(2)}</td>
+        <td class="text-right">${r.theoRmKg.toFixed(4)}</td>
+      </tr>`;
+    });
+
+    // Totals row
+    html += `<tr style="font-weight:700;background:var(--ti-surface-3)">
+      <td colspan="4">Total</td>
+      <td class="text-right">${totals.noOfComp}</td>
+      <td class="text-right">${totals.calCompWt.toFixed(4)}</td>
+      <td class="text-right">${totals.sfRejNos}</td>
+      <td class="text-right">${totals.suWastageNos}</td>
+      <td class="text-right">${totals.scrapKg.toFixed(2)}</td>
+      <td class="text-right">${totals.partWtKg.toFixed(2)}</td>
+      <td class="text-right">${totals.theoRmKg.toFixed(4)}</td>
+    </tr>`;
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+  // ── Validation & Submit ────────────────────────────────────────────
+  function validateAndSubmit() {
+    for (let i = 0; i < _entries.length; i++) {
+      const entry = _entries[i];
+      const key = rowKey(entry);
+      const f = getForm(key);
+
+      const rmEntered = f.rmCorrection.toString().trim() !== '';
+      const scrapEntered = f.scrapCorrection.toString().trim() !== '';
+
+      if (rmEntered) {
+        if (entry.rmRemaining === 0) {
+          showSnackbar('Row ' + (i+1) + ': RM Correction cannot be entered when RM Remaining is 0.');
+          return;
+        }
+        const rmVal = Number(f.rmCorrection);
+        if (isNaN(rmVal) || rmVal < 0) {
+          showSnackbar('Row ' + (i+1) + ': RM Correction must be a valid non-negative number.');
+          return;
+        }
+        if (rmVal > entry.rmRemaining) {
+          showSnackbar('Row ' + (i+1) + ': RM Correction (' + rmVal + ') cannot be more than RM Remaining (' + entry.rmRemaining + ').');
+          return;
+        }
+        if (!f.rmRemarks.trim()) {
+          showSnackbar('Row ' + (i+1) + ': RM Remarks is required when RM Correction is entered.');
+          return;
+        }
+      }
+
+      if (scrapEntered) {
+        const scrapVal = Number(f.scrapCorrection);
+        if (isNaN(scrapVal)) {
+          showSnackbar('Row ' + (i+1) + ': Scrap Correction must be a valid number.');
+          return;
+        }
+        if (!f.scrapRemarks.trim()) {
+          showSnackbar('Row ' + (i+1) + ': Scrap Remarks is required when Scrap Correction is entered.');
+          return;
+        }
+      }
+    }
+
+    showSnackbar('Under Testing');
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────
+  const tableWrap = document.getElementById('rmcTableWrap');
+
+  // Toggle edit / expand / input changes via delegation
+  tableWrap.addEventListener('click', function(e) {
+    const editBtn = e.target.closest('[data-toggle-edit]');
+    if (editBtn) {
+      const key = editBtn.getAttribute('data-toggle-edit');
+      if (_editing[key]) {
+        // Commit — read all inputs for this key
+        tableWrap.querySelectorAll('input[data-key="' + key + '"]').forEach(inp => {
+          const field = inp.getAttribute('data-field');
+          if (!_form[key]) _form[key] = { rmCorrection:'', rmRemarks:'', scrapCorrection:'', scrapRemarks:'' };
+          _form[key][field] = inp.value;
+        });
+      }
+      _editing[key] = !_editing[key];
+      renderTable();
+      return;
+    }
+
+    const expandBtn = e.target.closest('[data-expand]');
+    if (expandBtn) {
+      const key = expandBtn.getAttribute('data-expand');
+      _expanded[key] = !_expanded[key];
+      renderTable();
+      return;
+    }
+  });
+
+  dateInput.addEventListener('change', loadEntries);
+
+  document.getElementById('rmcMoreBtn').addEventListener('click', function() {
+    _visibleCount = Math.min(_visibleCount + PAGE_SIZE, _entries.length);
+    renderTable();
+  });
+
+  document.getElementById('rmcSubmitBtn').addEventListener('click', validateAndSubmit);
+
+  // ── Initial load ───────────────────────────────────────────────────
+  loadEntries();
+})();
+</script>

@@ -150,12 +150,48 @@ const Hub = (() => {
     inventory:   { title: 'Inventory',       icon: '📦' },
     maintenance: { title: 'Maintenance',     icon: '🔧' },
     'rm-variance':{ title: 'RM Variance',    icon: '📈' },
+    'rm-correction':{ title: 'RM Correction', icon: '✏️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
     executive:   { title: 'Executive View',  icon: '🎯' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
     admin:       { title: 'Administration',  icon: '⚙️' },
   };
+  const ACCESS = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
+  const PLUS_ACCESS = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.plusAccess) || []);
+
+  function canAccessSection(section) {
+    if (section === 'overview') return true;
+    if (section === 'admin') return Number(window.CURRENT_USER?.userId || 0) === 43;
+    if (section === 'production') return ACCESS.has('production');
+    if (section === 'dpr') return ACCESS.has('rept');
+    if (section === 'inventory') return ACCESS.has('rept');
+    if (section === 'rm-variance' || section === 'rm-correction') return ACCESS.has('rm_variance');
+    if (section === 'executive') return ACCESS.has('executive');
+    if (section === 'reports') return ACCESS.has('rept');
+    if (section === 'reports-manage') return PLUS_ACCESS.has('rept_plus');
+    if (section === 'maintenance') {
+      return ACCESS.has('tools') || ACCESS.has('preventive_maintenance') || ACCESS.has('life_report');
+    }
+    return true;
+  }
+
+  function getDefaultSection() {
+    const order = ['overview', 'production', 'maintenance', 'rm-variance', 'executive', 'reports', 'admin'];
+    return order.find(canAccessSection) || 'overview';
+  }
+
+  function applyNavVisibility() {
+    utils.$$('.ti-nav-link[data-section]').forEach(link => {
+      const section = link.dataset.section;
+      const navItem = link.closest('.ti-nav-item');
+      if (!section || !navItem) return;
+      const allowed = canAccessSection(section);
+      navItem.style.display = allowed ? '' : 'none';
+      link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+      if (!allowed) link.classList.remove('active');
+    });
+  }
 
   function getReportIdFromLocation() {
     return new URLSearchParams(window.location.search).get('report');
@@ -365,6 +401,7 @@ const Hub = (() => {
 
   async function navigate(section, opts = {}) {
     if (!SECTIONS[section]) section = 'overview';
+    if (!canAccessSection(section)) section = getDefaultSection();
     const skipHistory = opts.skipHistory === true;
 
     let reportId = null;
@@ -574,9 +611,11 @@ const Hub = (() => {
     const container = utils.$('.ti-cmdpal-results');
     if (!container) return;
 
-    const items = Object.entries(SECTIONS).map(([key, info]) => ({
+    const items = Object.entries(SECTIONS)
+      .filter(([key]) => canAccessSection(key))
+      .map(([key, info]) => ({
       key, label: info.title, icon: info.icon, type: 'section'
-    }));
+      }));
 
     const q = query.toLowerCase();
     const filtered = q ? items.filter(i => i.label.toLowerCase().includes(q)) : items;
@@ -643,6 +682,8 @@ const Hub = (() => {
     // Sidebar collapse state
     const sidebar = utils.$('.ti-sidebar');
     if (sidebar && sidebarCollapsed) sidebar.classList.add('collapsed');
+
+    applyNavVisibility();
 
     // Nav click handlers
     utils.$$('.ti-nav-link[data-section]').forEach(link => {
@@ -713,7 +754,8 @@ const Hub = (() => {
 
   function getInitialSection() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('section') || 'overview';
+    const requested = params.get('section') || 'overview';
+    return canAccessSection(requested) ? requested : getDefaultSection();
   }
 
   // ── Public API ─────────────────────────────────────────────────────

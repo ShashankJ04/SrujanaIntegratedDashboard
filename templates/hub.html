@@ -57,6 +57,12 @@
             </a>
           </li>
           <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="rm-correction" href="/app?section=rm-correction">
+              <span class="ti-nav-icon">✏️</span>
+              <span class="ti-nav-label">RM Correction</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
             <a class="ti-nav-link" data-section="dpr" href="/app?section=dpr">
               <span class="ti-nav-icon">📝</span>
               <span class="ti-nav-label">DPR</span>
@@ -183,6 +189,7 @@
     window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};
     window.DPR_POLL_INTERVAL_MS = {{ dpr_poll_interval_ms|tojson }};
     window.CURRENT_USER = {{ user|tojson }};
+    window.CURRENT_PERMISSIONS = {{ effective_permissions|tojson }};
   </script>
   <script src="{{ url_for('static', filename='js/supergrid.js') }}"></script>
   <script src="{{ url_for('static', filename='js/excel_display.js') }}"></script>

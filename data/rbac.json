@@ -7,17 +7,12 @@
         "tools",
         "preventive_maintenance",
         "life_report",
-        "production",
-        "rm_variance",
-        "executive",
         "rept"
       ],
       "plusAccess": [
-        "preventive_maintenance",
-        "edit_buffer",
-        "rept_plus"
+        "preventive_maintenance"
       ],
-      "updatedAt": "2026-04-19T20:14:49.145847+00:00"
+      "updatedAt": "2026-04-20T07:02:27.108712+00:00"
     },
     {
       "userId": 2,
@@ -37,5 +32,5 @@
       "updatedAt": "2026-04-18T21:01:24.384846+00:00"
     }
   ],
-  "updatedAt": "2026-04-19T20:14:49.145847+00:00"
+  "updatedAt": "2026-04-20T07:02:27.108712+00:00"
 }

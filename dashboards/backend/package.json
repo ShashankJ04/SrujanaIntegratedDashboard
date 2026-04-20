@@ -1,0 +1,25 @@
+{
+  "name": "dashboards-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "db:generate-types": "bun run src/db/generate-types.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "hono": "^4.11.9",
+    "jose": "^5.9.6",
+    "kysely": "^0.28.11",
+    "mysql2": "^3.17.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "bun-types": "^1.3.9"
+  }
+}

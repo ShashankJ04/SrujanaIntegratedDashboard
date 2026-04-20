@@ -36,12 +36,14 @@
   </div>
 
   <div id="toolsLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
-  <div class="ti-flex ti-gap-12 ti-mb-16" style="flex-shrink:0" id="toolsStatCards"></div>
 
   <div class="ti-three-col" id="toolsColumns" style="display:none;min-height:500px">
     <div class="ti-column">
       <div class="ti-column-header" style="background:var(--ti-blue)">
-        <span>Today</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span>Today</span>
+          <span id="todayCount" style="background:rgba(255,255,255,.26);padding:4px 10px;border-radius:999px;font-size:14px;font-weight:800;line-height:1;min-width:28px;text-align:center">0</span>
+        </span>
         <button class="ti-btn-icon" style="color:#fff" id="todayReverseBtn" title="Toggle">▲</button>
       </div>
       <div class="ti-column-body scrollable" id="todayBody"></div>
@@ -49,19 +51,45 @@
     <div class="ti-column">
       <div class="ti-column-header" style="background:var(--ti-emerald);gap:8px">
         <button class="ti-btn-icon" style="color:#fff" id="futureBackBtn">◀</button>
-        <span id="futureLabel">Tomorrow</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span id="futureLabel">Tomorrow</span>
+          <span id="futureCount" style="background:rgba(255,255,255,.26);padding:4px 10px;border-radius:999px;font-size:14px;font-weight:800;line-height:1;min-width:28px;text-align:center">0</span>
+        </span>
         <button class="ti-btn-icon" style="color:#fff" id="futureNextBtn">▶</button>
       </div>
       <div class="ti-column-body scrollable" id="futureBody"></div>
     </div>
     <div class="ti-column">
       <div class="ti-column-header" style="background:var(--ti-amber)">
-        <span>Maintenance Required</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span>Maintenance Required</span>
+          <span id="maintCount" style="background:rgba(255,255,255,.26);padding:4px 10px;border-radius:999px;font-size:14px;font-weight:800;line-height:1;min-width:28px;text-align:center">0</span>
+        </span>
       </div>
-      <div class="ti-column-body scrollable" id="maintBody"></div>
+      <div class="ti-column-body scrollable" id="maintBody" style="max-height:500px;overflow-y:auto"></div>
     </div>
   </div>
 </div>
+<style>
+  /* Keep Maintenance scrollbar thin and subtle */
+  #maintBody {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  }
+  #maintBody::-webkit-scrollbar {
+    width: 5px;
+  }
+  #maintBody::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  #maintBody::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 10px;
+  }
+  #maintBody::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
+  }
+</style>
 
 <!-- ════════════════════════════════════════════════════════════════════
      TAB 2: PREVENTIVE MAINTENANCE
@@ -165,12 +193,29 @@
 <script>
 // ── Tab switching ─────────────────────────────────────────────────────
 (function() {
+  const access = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
+  const tabAccessMap = { tools: 'tools', pm: 'preventive_maintenance', life: 'life_report' };
+
   function setMaintInlineTools(tabName) {
     const pm = document.getElementById('maint-inline-pm');
     const life = document.getElementById('maint-inline-life');
     if (pm) pm.hidden = tabName !== 'pm';
     if (life) life.hidden = tabName !== 'life';
   }
+
+  const tabs = Array.from(document.querySelectorAll('#maint-tabs .ti-tab'));
+  tabs.forEach(tab => {
+    const key = tabAccessMap[tab.dataset.tab];
+    const allowed = key ? access.has(key) : true;
+    if (!allowed) {
+      tab.style.display = 'none';
+      const panel = document.getElementById('panel-' + tab.dataset.tab);
+      if (panel) panel.style.display = 'none';
+    }
+  });
+
+  const visibleTabs = tabs.filter(t => t.style.display !== 'none');
+  if (!visibleTabs.length) return;
 
   document.querySelectorAll('#maint-tabs .ti-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -188,7 +233,16 @@
       if (tab.dataset.tab === 'life' && !window._lifeLoaded) { window._lifeLoaded = true; loadLifeData(); }
     });
   });
-  setMaintInlineTools('tools');
+
+  document.querySelectorAll('#maint-tabs .ti-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ti-tab-panel').forEach(p => p.classList.remove('active'));
+  const firstTab = visibleTabs[0];
+  firstTab.classList.add('active');
+  const firstPanel = document.getElementById('panel-' + firstTab.dataset.tab);
+  if (firstPanel) firstPanel.classList.add('active');
+  setMaintInlineTools(firstTab.dataset.tab || 'tools');
+  if (firstTab.dataset.tab === 'pm' && !window._pmLoaded) { window._pmLoaded = true; loadPmData(); }
+  if (firstTab.dataset.tab === 'life' && !window._lifeLoaded) { window._lifeLoaded = true; loadLifeData(); }
 })();
 
 // ── Modal helpers ─────────────────────────────────────────────────────
@@ -199,6 +253,9 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 // TOOLS TODAY TAB
 // ══════════════════════════════════════════════════════════════════════
 (function() {
+  const access = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
+  if (!access.has('tools')) return;
+
   let futureOffset = 1;
   const todayBody = document.getElementById('todayBody');
   const futureBody = document.getElementById('futureBody');
@@ -206,8 +263,13 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
   const futureLabel = document.getElementById('futureLabel');
   const loading = document.getElementById('toolsLoading');
   const columns = document.getElementById('toolsColumns');
-  const statCards = document.getElementById('toolsStatCards');
   const statsBar = document.getElementById('toolsStats');
+  const todayCount = document.getElementById('todayCount');
+  const futureCount = document.getElementById('futureCount');
+  const maintCount = document.getElementById('maintCount');
+  const todayScrollState = { timer: null, paused: false };
+  const futureScrollState = { timer: null, paused: false };
+  const maintScrollState = { timer: null, paused: false };
 
   function dateOffset(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
   function formatDate(d) { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
@@ -260,6 +322,29 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
     return el;
   }
 
+  function stopAutoScroll(state) {
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+  }
+
+  function startAutoScroll(body, state) {
+    stopAutoScroll(state);
+    if (!body) return;
+    state.timer = setInterval(() => {
+      if (state.paused) return;
+      const limit = body.scrollHeight - body.clientHeight;
+      if (limit <= 8) { body.scrollTop = 0; return; }
+      const next = body.scrollTop + 0.8;
+      if (next >= (limit - 1)) {
+        body.scrollTop = 0;
+        return;
+      }
+      body.scrollTop = next;
+    }, 20);
+  }
+
   async function loadTools() {
     loading.style.display='flex'; columns.style.display='none';
     try {
@@ -284,32 +369,40 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
         <div class="ti-kpi ti-kpi--red" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">≥80%</div><div class="ti-kpi-value" style="font-size:18px">${critTools}</div></div>
       `;
 
-      statCards.innerHTML = `
-        <div class="ti-kpi ti-kpi--blue" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">Today</div><div class="ti-kpi-value" style="font-size:18px">${todayData.count??'—'}</div></div>
-        <div class="ti-kpi ti-kpi--emerald" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">${offsetLabel(futureOffset)}</div><div class="ti-kpi-value" style="font-size:18px">${futureData.count??'—'}</div></div>
-        <div class="ti-kpi ti-kpi--amber" style="padding:10px 14px;gap:4px"><div class="ti-kpi-label">Maintenance</div><div class="ti-kpi-value" style="font-size:18px">${pmStatus.length}</div></div>
-      `;
-
       todayBody.innerHTML=''; const todayFlat=flattenTools(todayData.tools);
+      todayCount.textContent = String(todayData.count ?? todayFlat.length ?? 0);
       if(!todayFlat.length) todayBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No tools today</div></div>';
       else todayFlat.forEach(e=>todayBody.appendChild(makeToolCard(e,pmByToolNo)));
 
       futureBody.innerHTML=''; futureLabel.textContent=offsetLabel(futureOffset);
       const futureFlat=flattenTools(futureData.tools);
+      futureCount.textContent = String(futureData.count ?? futureFlat.length ?? 0);
       if(!futureFlat.length) futureBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No tools scheduled</div></div>';
       else futureFlat.forEach(e=>futureBody.appendChild(makeToolCard(e,pmByToolNo)));
 
       maintBody.innerHTML='';
+      maintCount.textContent = String(pmStatus.length || 0);
       if(!pmStatus.length) maintBody.innerHTML='<div class="ti-empty"><div class="ti-empty-text">No maintenance alerts</div></div>';
       else pmStatus.forEach(e=>maintBody.appendChild(makeMaintCard(e)));
 
       columns.style.display='flex';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        startAutoScroll(todayBody, todayScrollState);
+        startAutoScroll(futureBody, futureScrollState);
+        startAutoScroll(maintBody, maintScrollState);
+      }));
     } catch(err) { todayBody.innerHTML=`<div class="ti-alert ti-alert-error">${err.message}</div>`; columns.style.display='flex'; } finally { loading.style.display='none'; }
   }
 
   document.getElementById('futureBackBtn').addEventListener('click',()=>{if(futureOffset>1){futureOffset--;loadTools();}});
   document.getElementById('futureNextBtn').addEventListener('click',()=>{futureOffset++;loadTools();});
   document.getElementById('todayReverseBtn').addEventListener('click',function(){this.textContent=this.textContent==='▲'?'▼':'▲';});
+  todayBody.addEventListener('mouseenter', () => { todayScrollState.paused = true; });
+  todayBody.addEventListener('mouseleave', () => { todayScrollState.paused = false; });
+  futureBody.addEventListener('mouseenter', () => { futureScrollState.paused = true; });
+  futureBody.addEventListener('mouseleave', () => { futureScrollState.paused = false; });
+  maintBody.addEventListener('mouseenter', () => { maintScrollState.paused = true; });
+  maintBody.addEventListener('mouseleave', () => { maintScrollState.paused = false; });
 
   loadTools();
 })();
@@ -317,9 +410,9 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 // ══════════════════════════════════════════════════════════════════════
 // PREVENTIVE MAINTENANCE TAB
 // ══════════════════════════════════════════════════════════════════════
-let _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
-let _pmSearchFilter='', _pmThresholdFilter='all';
-let _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
+var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
+var _pmSearchFilter='', _pmThresholdFilter='all';
+var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
 
 async function loadPmData() {
   document.getElementById('pmLoading').style.display='flex';
@@ -365,6 +458,16 @@ function renderPmTable() {
     { key:'nextPm', label:'Next PM', align:'right', width:120, format:v=>formatIndianNumber(v) },
     { key:'lastMaint', label:'Last Maint.', width:120 },
     { key:'pmCount', label:'PM Count', align:'right', width:100 },
+    {
+      key:'pmPct',
+      label:'PM %',
+      width:160,
+      format: (v, r) => {
+        if (v == null) return '<span style="color:var(--ti-text-dim)">—</span>';
+        const color = v >= 100 ? 'var(--ti-red)' : v >= 80 ? 'var(--ti-amber)' : 'var(--ti-emerald)';
+        return `<div style="display:flex;align-items:center;gap:6px;min-width:0"><div class="ti-progress" style="flex:1;min-width:40px;height:8px"><div class="ti-progress-bar" style="width:${Math.min(v,100)}%;background:${color}"></div></div><strong style="color:${color};font-size:12px;white-space:nowrap">${v}%</strong></div>`;
+      }
+    },
     { key:'actions', label:'Actions', width:180, format:(v,r)=>r.actionsHtml }
   ];
 
@@ -387,6 +490,7 @@ function renderPmTable() {
       nextPm: e?(latest?latest.nextStroke:'Not set'):null,
       lastMaint: e?(latest?new Date(latest.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'No maint.'):'-',
       pmCount: e?e.maintenanceHistory.length:null,
+      pmPct: pctMap.get(t.toolNo)||null,
       actionsHtml
     };
   });
@@ -435,8 +539,8 @@ document.getElementById('pmDeleteSubmit').addEventListener('click',async()=>{try
 // ══════════════════════════════════════════════════════════════════════
 // LIFE REPORT TAB
 // ══════════════════════════════════════════════════════════════════════
-let _lifePmAll = null;
-let _lifeSearchFilter = '';
+var _lifePmAll = null;
+var _lifeSearchFilter = '';
 
 async function loadLifeData() {
   document.getElementById('lifeLoading').style.display='flex';

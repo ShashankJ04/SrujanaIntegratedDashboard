@@ -52,7 +52,6 @@ def pm_status():
             tl.TL_life_span        AS toolLife,
             tl.TL_spm              AS spm,
             tl.TL_preventive_maintenance_strokes AS pmStrokes,
-            pm.PM_current_stroke   AS pmCurrentStroke,
             pm.PM_next_stroke      AS nextStroke,
             pm.PM_date             AS lastMaintenanceDate,
             COALESCE(strokes.totalStrokes, 0) AS totalLifetimeStrokes,
@@ -95,39 +94,44 @@ def pm_status():
             ORDER BY tl2.TL_created_at DESC, tl2.TL_tool_id DESC
             LIMIT 1
         )
+          AND EXISTS (
+            SELECT 1
+            FROM components_tool ct_active
+            WHERE ct_active.CT_TOOLNO = tl.TL_tool_number
+              AND ct_active.CT_ACTIVEYN = 'Y'
+          )
         """
     )
 
     results = []
     for r in rows:
-        pm_current = int(r["pmCurrentStroke"] or 0)
+        pm_strokes = int(r["pmStrokes"] or 0)
         next_stroke = int(r["nextStroke"] or 0)
         total_lifetime = int(r["totalLifetimeStrokes"] or 0)
 
-        pm_range = next_stroke - pm_current
-        if pm_range > 0:
-            pm_pct = round((total_lifetime - pm_current) / pm_range * 100)
-        else:
-            pm_pct = 0
+        # Match original pm.ts: cycleStartStroke = nextStroke - pmStrokes
+        cycle_start_stroke = next_stroke - pm_strokes
+        completed_in_cycle = total_lifetime - cycle_start_stroke
+        pm_pct = max(0, round((completed_in_cycle / pm_strokes) * 100)) if pm_strokes > 0 else 0
 
         entry = {
             "toolId": r["toolId"],
             "toolNo": r["toolNo"],
             "toolLife": int(r["toolLife"]),
             "spm": int(r["spm"]),
-            "pmStrokes": int(r["pmStrokes"]),
-            "pmCurrentStroke": pm_current,
+            "pmStrokes": pm_strokes,
+            "pmCurrentStroke": cycle_start_stroke,
             "nextStroke": next_stroke,
             "totalLifetimeStrokes": total_lifetime,
             "pmPercentage": pm_pct,
+            "lastMaintenanceDate": str(r["lastMaintenanceDate"] or ""),
             "maintenanceCount": int(r["maintenanceCount"]),
         }
 
         if mode == "all":
             results.append(entry)
-        elif mode == "above" or mode not in ("all",):
-            if pm_pct >= threshold:
-                results.append(entry)
+        elif pm_pct >= threshold:
+            results.append(entry)
 
     return jsonify(results)
 
@@ -251,7 +255,7 @@ def export_pm():
     mode = request.args.get("mode", "all")
     search = request.args.get("search", "").strip().lower()
 
-    # Reuse the same status query
+    # Reuse the same status query with active-tool filter
     rows = fetch_all(
         """
         SELECT
@@ -260,7 +264,6 @@ def export_pm():
             tl.TL_life_span        AS toolLife,
             tl.TL_spm              AS spm,
             tl.TL_preventive_maintenance_strokes AS pmStrokes,
-            pm.PM_current_stroke   AS pmCurrentStroke,
             pm.PM_next_stroke      AS nextStroke,
             pm.PM_date             AS lastMaintenanceDate,
             COALESCE(strokes.totalStrokes, 0) AS totalLifetimeStrokes,
@@ -303,17 +306,26 @@ def export_pm():
             ORDER BY tl2.TL_created_at DESC, tl2.TL_tool_id DESC
             LIMIT 1
         )
+          AND EXISTS (
+            SELECT 1
+            FROM components_tool ct_active
+            WHERE ct_active.CT_TOOLNO = tl.TL_tool_number
+              AND ct_active.CT_ACTIVEYN = 'Y'
+          )
         ORDER BY tl.TL_tool_number
         """
     )
 
     processed = []
     for r in rows:
-        pm_current = int(r["pmCurrentStroke"] or 0)
+        pm_strokes = int(r["pmStrokes"] or 0)
         next_stroke = int(r["nextStroke"] or 0)
         total_lifetime = int(r["totalLifetimeStrokes"] or 0)
-        pm_range = next_stroke - pm_current
-        pm_pct = round((total_lifetime - pm_current) / pm_range * 100) if pm_range > 0 else 0
+
+        # Match original pm.ts: cycleStartStroke = nextStroke - pmStrokes
+        cycle_start_stroke = next_stroke - pm_strokes
+        completed_in_cycle = total_lifetime - cycle_start_stroke
+        pm_pct = max(0, round((completed_in_cycle / pm_strokes) * 100)) if pm_strokes > 0 else 0
 
         tool_no = str(r["toolNo"]).lower()
         if search and search not in tool_no:
@@ -329,7 +341,7 @@ def export_pm():
             "toolNo": r["toolNo"],
             "toolLife": int(r["toolLife"]),
             "spm": int(r["spm"]),
-            "pmStrokes": int(r["pmStrokes"]),
+            "pmStrokes": pm_strokes,
             "totalLifetimeStrokes": total_lifetime,
             "nextStroke": next_stroke,
             "pmPercentage": pm_pct,

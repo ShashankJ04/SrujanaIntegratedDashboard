@@ -48,11 +48,11 @@ def all_tools():
         SELECT
             MIN(ct.CT_ID) AS id,
             ct.CT_TOOLNO AS toolNo,
-            COALESCE(c.CO_PARTNO, '') AS partNo
+            GROUP_CONCAT(DISTINCT c.CO_PARTNO ORDER BY c.CO_PARTNO SEPARATOR ', ') AS partNo
         FROM components_tool ct
-        LEFT JOIN components c ON ct.CT_COMPID = c.CO_ID
+        INNER JOIN components c ON ct.CT_COMPID = c.CO_ID
         WHERE ct.CT_ACTIVEYN = 'Y'
-        GROUP BY ct.CT_TOOLNO, c.CO_PARTNO
+        GROUP BY ct.CT_TOOLNO
         ORDER BY ct.CT_TOOLNO
         """
     )
@@ -61,7 +61,7 @@ def all_tools():
         result.append({
             "id": r["id"],
             "toolNo": r["toolNo"],
-            "partNo": r["partNo"],
+            "partNo": r["partNo"] or "",
         })
     return jsonify(result)
 
@@ -102,75 +102,114 @@ def search_tools():
 
 # ── Tools for date helper ───────────────────────────────────────────────
 
-def _get_tools_for_date(date_str: str):
-    """Get tools scheduled for a given date (YYYY-MM-DD).
+def _get_tools_for_date(mode: str = "today", base_date: str | None = None, offset: int = 0):
+    """Get tools scheduled for a given date.
 
-    Uses the correct table/column names from the original:
-    scheduled_production (PS_), components_tool (CT_), components (CO_), machinemaster (MCM_).
+    Matches the original tools.ts getToolsForDate() exactly:
+    - Uses CURDATE() / DATE_ADD() in SQL (not Python date)
+    - Groups by toolId (PS_TOOLID), not toolNo
+    - Returns distinct tool count, machineCount, totalScheduledQty, totalScheduledStrokes
     """
-    rows = fetch_all(
-        """
+
+    # Build the date SQL expression to match the original exactly
+    if base_date:
+        # base_date is a validated YYYY-MM-DD string
+        date_expr = f"DATE_ADD(%s, INTERVAL {int(offset)} DAY)"
+        params = (base_date,)
+    elif offset > 0:
+        date_expr = f"DATE_ADD(CURDATE(), INTERVAL {int(offset)} DAY)"
+        params = ()
+    else:
+        date_expr = "CURDATE()"
+        params = ()
+
+    sql = f"""
         SELECT
+            DATE_FORMAT(ps.PS_DATE, '%%Y-%%m-%%d') AS `date`,
             ps.PS_TOOLID AS toolId,
             ct.CT_TOOLNO AS toolNo,
             ct.CT_DRAWINGNO AS drawingNo,
-            COALESCE(c.CO_PARTNO, '') AS partNo,
-            COALESCE(c.CO_PARTNAME, '') AS partName,
+            c.CO_PARTNO AS partNo,
+            c.CO_PARTNAME AS partName,
             GREATEST(COALESCE(ct.CT_NO_OF_CAVITY, 1), 1) AS cavity,
             ps.PS_MCID AS machineId,
-            COALESCE(mm.MCM_Name, CONCAT('Machine #', ps.PS_MCID)) AS machineName,
-            COALESCE(mm.MCM_Capacity, '') AS machineCapacity,
-            COALESCE(mm.MCM_Make, '') AS machineMake,
+            mm.MCM_Name AS machineName,
+            mm.MCM_Capacity AS machineCapacity,
+            mm.MCM_Make AS machineMake,
             ps.PS_QTY AS scheduledQty,
             ps.PS_QTY / GREATEST(COALESCE(ct.CT_NO_OF_CAVITY, 1), 1) AS scheduledStrokes
         FROM scheduled_production ps
         INNER JOIN components_tool ct ON ct.CT_ID = ps.PS_TOOLID
         INNER JOIN components c ON c.CO_ID = ct.CT_COMPID
         INNER JOIN machinemaster mm ON mm.MCM_Id = ps.PS_MCID
-        WHERE DATE(ps.PS_DATE) = %s
+        WHERE ps.PS_DATE = {date_expr}
         ORDER BY ct.CT_TOOLNO, mm.MCM_Name
-        """,
-        (date_str,),
-    )
+    """
 
-    # Group by tool
+    rows = fetch_all(sql, params if params else None)
+
+    # Group by toolId (integer), matching the original exactly
     tools_map = {}
     for r in rows:
         tid = r["toolId"]
-        tool_no = r["toolNo"]
 
         cavity = max(int(r["cavity"]), 1)
         scheduled_qty = int(r["scheduledQty"])
         scheduled_strokes = int(r["scheduledStrokes"])
 
-        if tool_no not in tools_map:
-            tools_map[tool_no] = {
+        if tid not in tools_map:
+            tools_map[tid] = {
                 "toolId": tid,
-                "toolNo": tool_no,
-                "drawingNo": r.get("drawingNo", ""),
-                "partNo": r["partNo"],
-                "partName": r["partName"],
+                "toolNo": r["toolNo"],
+                "drawingNo": r.get("drawingNo") or "",
+                "partNo": r["partNo"] or "",
+                "partName": r["partName"] or "",
                 "cavity": cavity,
+                "machineCount": 0,
+                "totalScheduledQty": 0,
+                "totalScheduledStrokes": 0,
                 "machines": [],
             }
 
-        tools_map[tool_no]["machines"].append({
+        tools_map[tid]["machines"].append({
             "machineId": r["machineId"],
-            "machineName": r["machineName"],
-            "machineCapacity": r["machineCapacity"],
-            "machineMake": r["machineMake"],
+            "machineName": r["machineName"] or "",
+            "machineCapacity": r["machineCapacity"] or "",
+            "machineMake": r["machineMake"] or "",
             "scheduledQty": scheduled_qty,
             "scheduledStrokes": scheduled_strokes,
         })
+        tools_map[tid]["totalScheduledQty"] += scheduled_qty
+        tools_map[tid]["totalScheduledStrokes"] += scheduled_strokes
+
+    # Compute machineCount per tool (distinct machine IDs)
+    for tool in tools_map.values():
+        tool["machineCount"] = len(set(m["machineId"] for m in tool["machines"]))
 
     tools_list = list(tools_map.values())
-    total_count = sum(len(t["machines"]) for t in tools_list)
+
+    # Fallback date for the response
+    from datetime import date as dt_date, timedelta
+    if rows:
+        date_str = rows[0]["date"]
+    elif base_date:
+        d = dt_date.fromisoformat(base_date) + timedelta(days=offset)
+        date_str = d.isoformat()
+    else:
+        d = dt_date.today() + timedelta(days=offset)
+        date_str = d.isoformat()
 
     return {
         "date": date_str,
-        "count": total_count,
+        "count": len(tools_map),  # distinct tool count, matching original
         "tools": tools_list,
     }
+
+
+def _is_valid_date(s: str | None) -> bool:
+    """Check if string is a valid YYYY-MM-DD date."""
+    import re
+    return bool(s and re.match(r"^\d{4}-\d{2}-\d{2}$", s))
 
 
 # ── GET /today ──────────────────────────────────────────────────────────
@@ -178,11 +217,9 @@ def _get_tools_for_date(date_str: str):
 @tools_bp.route("/today", methods=["GET"])
 @require_access("tools")
 def tools_today():
-    from datetime import date
-    date_str = request.args.get("date")
-    if not date_str:
-        date_str = date.today().isoformat()
-    return jsonify(_get_tools_for_date(date_str))
+    date_param = request.args.get("date")
+    base_date = date_param if _is_valid_date(date_param) else None
+    return jsonify(_get_tools_for_date("today", base_date, offset=0))
 
 
 # ── GET /tomorrow ───────────────────────────────────────────────────────
@@ -190,11 +227,9 @@ def tools_today():
 @tools_bp.route("/tomorrow", methods=["GET"])
 @require_access("tools")
 def tools_tomorrow():
-    from datetime import date, timedelta
-    date_str = request.args.get("date")
-    if not date_str:
-        date_str = (date.today() + timedelta(days=1)).isoformat()
-    return jsonify(_get_tools_for_date(date_str))
+    date_param = request.args.get("date")
+    base_date = date_param if _is_valid_date(date_param) else None
+    return jsonify(_get_tools_for_date("tomorrow", base_date, offset=1))
 
 
 # ── GET /for-date/<date_str> ────────────────────────────────────────────
@@ -202,4 +237,7 @@ def tools_tomorrow():
 @tools_bp.route("/for-date/<date_str>", methods=["GET"])
 @require_access("tools")
 def tools_for_date(date_str):
-    return jsonify(_get_tools_for_date(date_str))
+    if _is_valid_date(date_str):
+        return jsonify(_get_tools_for_date("today", date_str, offset=0))
+    else:
+        return jsonify(_get_tools_for_date("today", offset=0))

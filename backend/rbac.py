@@ -23,6 +23,7 @@ DASHBOARD_KEYS: List[str] = [
     "life_report",
     "production",
     "rm_variance",
+    "rm_correction",
     "rept",
     "rept_plus",
     "edit_dpr",

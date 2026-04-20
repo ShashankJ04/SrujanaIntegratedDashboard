@@ -1,0 +1,55 @@
+{
+  "users": [
+    {
+      "userId": 43,
+      "login": "vivaan",
+      "access": [
+        "tools",
+        "preventive_maintenance",
+        "life_report",
+        "production",
+        "rm_variance",
+        "reports"
+      ],
+      "plusAccess": [
+        "preventive_maintenance",
+        "reports"
+      ],
+      "updatedAt": "2026-03-28T00:00:00.000Z"
+    },
+    {
+      "userId": 2,
+      "login": "mr",
+      "access": [],
+      "plusAccess": [],
+      "updatedAt": "2026-03-28T07:26:11.824Z"
+    },
+    {
+      "userId": 270,
+      "login": "chetanas",
+      "access": [
+        "preventive_maintenance",
+        "tools",
+        "life_report",
+        "reports"
+      ],
+      "plusAccess": [
+        "preventive_maintenance"
+      ],
+      "updatedAt": "2026-03-30T04:43:40.430Z"
+    },
+    {
+      "userId": 65,
+      "login": "CHETHAN",
+      "access": [
+        "tools",
+        "preventive_maintenance"
+      ],
+      "plusAccess": [
+        "preventive_maintenance"
+      ],
+      "updatedAt": "2026-04-14T05:28:09.521Z"
+    }
+  ],
+  "updatedAt": "2026-04-14T05:28:09.521Z"
+}
