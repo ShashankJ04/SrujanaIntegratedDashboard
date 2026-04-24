@@ -378,8 +378,8 @@ const Hub = (() => {
       const groups = await api.get('/api/reports/groups');
       const bundles = [];
       for (const g of groups) {
-        const reports = await api.get(`/api/reports/reports?groupId=${encodeURIComponent(g.id)}`);
-        bundles.push({ g, reports });
+        const reports = await api.get(`/api/reports/reports?groupId=${encodeURIComponent(g.id)}&pinnedOnly=1`);
+        if (reports.length) bundles.push({ g, reports });
       }
       const fill = (container) => {
         if (!container) return;

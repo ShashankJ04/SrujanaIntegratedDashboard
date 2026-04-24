@@ -502,7 +502,7 @@ function renderPmTable() {
   window._pmGrid = SuperGrid.create(document.getElementById('pmGrid'), {
     columns,
     rows: gridRows,
-    options: { search: false, rowNumbers: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('pmStatusCount') }
+    options: { search: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('pmStatusCount') }
   });
 
   // Global listener for action buttons inside SuperGrid
@@ -610,7 +610,7 @@ function renderLifeGrid() {
   window._lifeGrid = SuperGrid.create(document.getElementById('lifeGrid'), {
     columns,
     rows: gridRows,
-    options: { search: false, rowNumbers: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('lifeStatusCount') }
+    options: { search: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('lifeStatusCount') }
   });
 }
 

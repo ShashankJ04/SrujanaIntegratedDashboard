@@ -1079,7 +1079,8 @@ body {
   background: var(--ti-emerald-soft);
 }
 
-.ti-table-wrap .data-table .is-pinned-left {
+.ti-table-wrap .data-table td.is-pinned-left,
+.ti-table-wrap .data-table th.is-pinned-left {
   position: sticky;
   z-index: 25;
   background: var(--ti-bg-subtle);
@@ -3235,7 +3236,8 @@ body {
   fill: currentColor;
 }
 
-.ti-dpr-table-wrap .data-table .is-pinned-left {
+.ti-dpr-table-wrap .data-table td.is-pinned-left,
+.ti-dpr-table-wrap .data-table th.is-pinned-left {
   position: sticky;
 }
 
@@ -3257,11 +3259,24 @@ body {
 
 .ti-dpr-table-wrap .data-table tbody td.is-pinned-left {
   z-index: 1;
-  background: var(--ti-surface);
+  /* Keep pinned cells fully opaque so scrolled columns never bleed through */
+  background: #ffffff;
+  background-image: none;
 }
 
 .ti-dpr-table-wrap .data-table tbody tr:hover td.is-pinned-left {
-  background: var(--ti-glass-hover);
+  background: #edf2f9;
+  background-image: none;
+}
+
+.ti-dpr-table-wrap .data-table tbody tr:nth-child(even) td.is-pinned-left {
+  background: #f8fafc;
+  background-image: none;
+}
+
+.ti-dpr-table-wrap .data-table tbody tr.row-ready td.is-pinned-left {
+  background: #ecfdf5;
+  background-image: none;
 }
 
 .ti-dpr-table-wrap .data-table .is-pinned-left-last {
@@ -5255,22 +5270,13 @@ body.sg-resizing {
   text-align: center;
 }
 
-.sg-col-num {
-  text-align: center;
-  color: var(--ti-text-dim);
-  font-size: 11px;
-  font-weight: 600;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  padding: 9px 4px;
-}
-
-/* Pinned columns */
-.sg-pinned {
+/* Pinned columns — specificity must beat .sg-table td (0-1-1) */
+.sg-table .sg-pinned {
   position: sticky;
-  z-index: 25;
-  background: var(--ti-bg-subtle);
+  z-index: 40;
+  /* Always opaque so scrolled columns never bleed through */
+  background: #ffffff;
+  background-image: none;
 }
 
 .sg-table thead .sg-pinned {
@@ -5281,14 +5287,18 @@ body.sg-resizing {
 }
 
 .sg-table tbody tr:nth-child(even) .sg-pinned {
-  background:
-    linear-gradient(var(--ti-surface), var(--ti-surface)), var(--ti-bg-subtle) !important;
+  background: #f8fafc !important;
+  background-image: none !important;
 }
 
 .sg-table tbody tr:hover .sg-pinned {
-  background:
-    linear-gradient(var(--ti-surface-2), var(--ti-surface-2)),
-    var(--ti-bg-subtle) !important;
+  background: #edf2f9 !important;
+  background-image: none !important;
+}
+
+.sg-table tbody tr.sg-clickable:hover .sg-pinned {
+  background: #edf2f9 !important;
+  background-image: none !important;
 }
 
 .sg-pinned-last {
@@ -5414,16 +5424,19 @@ body.sg-resizing {
   background: #edf2f9;
 }
 
-[data-theme="light"] .sg-pinned {
+[data-theme="light"] .sg-table .sg-pinned {
   background: #fff;
+  background-image: none;
 }
 
 [data-theme="light"] .sg-table tbody tr:nth-child(even) .sg-pinned {
   background: #f8fafc;
+  background-image: none;
 }
 
 [data-theme="light"] .sg-table tbody tr:hover .sg-pinned {
   background: #edf2f9;
+  background-image: none;
 }
 
 [data-theme="light"] .sg-pagination {

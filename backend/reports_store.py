@@ -39,9 +39,10 @@ def _read_store() -> Dict[str, Any]:
         if not content:
             return {"groups": [], "reports": []}
         parsed = json.loads(content)
+    reports = _normalize_reports(parsed.get("reports") or [])
     return {
         "groups": parsed.get("groups") or [],
-        "reports": parsed.get("reports") or [],
+        "reports": reports,
     }
 
 
@@ -60,6 +61,132 @@ def _extract_variables(query_template: str) -> List[str]:
             seen.add(name)
             found.append(name)
     return found
+
+
+def _is_safe_drilldown_column_name(name: str) -> bool:
+    return bool(re.fullmatch(r"[a-zA-Z0-9_ .()/%-]+", str(name or "")))
+
+
+def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    report_by_id = {
+        str(r.get("id")): r
+        for r in reports
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    normalized: List[Dict[str, Any]] = []
+    for report in reports:
+        if not isinstance(report, dict):
+            continue
+        next_report = dict(report)
+        next_report["pinned"] = bool(report.get("pinned", False))
+        drilldowns = _normalize_drilldowns(
+            report,
+            report_by_id,
+            source_report_vars=report.get("variables") or [],
+        )
+        if drilldowns:
+            next_report["drilldowns"] = drilldowns
+        else:
+            next_report.pop("drilldowns", None)
+        normalized.append(next_report)
+    return normalized
+
+
+def _normalize_source_spec(
+    source: Any,
+    source_report_vars: List[str],
+) -> Optional[Dict[str, str]]:
+    # Backward compatible format: "Part No" => column source
+    if isinstance(source, str):
+        col = source.strip()
+        if not col or not _is_safe_drilldown_column_name(col):
+            return None
+        return {"type": "column", "value": col}
+
+    if not isinstance(source, dict):
+        return None
+
+    source_type = str(source.get("type", "")).strip().lower()
+    source_value = str(source.get("value", "")).strip()
+    if not source_type or not source_value:
+        return None
+
+    if source_type == "column":
+        if not _is_safe_drilldown_column_name(source_value):
+            return None
+        return {"type": "column", "value": source_value}
+
+    if source_type == "parentvariable":
+        if source_value not in set(source_report_vars or []):
+            return None
+        return {"type": "parentVariable", "value": source_value}
+
+    return None
+
+
+def _normalize_drilldowns(
+    report: Dict[str, Any],
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    raw = report.get("drilldowns")
+    if not isinstance(raw, list):
+        return []
+
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        column = str(item.get("column", "")).strip()
+        target_id = str(item.get("targetReportId", "")).strip()
+        mapping = item.get("variables")
+        if not column or not target_id or not isinstance(mapping, dict):
+            continue
+        if not _is_safe_drilldown_column_name(column):
+            continue
+        target = report_by_id.get(target_id)
+        if not target:
+            continue
+        target_vars = set(target.get("variables") or [])
+        normalized_map: Dict[str, Dict[str, str]] = {}
+        src_vars = source_report_vars or []
+        for target_var, source_spec in mapping.items():
+            t = str(target_var).strip()
+            if not t:
+                continue
+            if t not in target_vars:
+                continue
+            normalized_source = _normalize_source_spec(source_spec, src_vars)
+            if not normalized_source:
+                continue
+            normalized_map[t] = normalized_source
+        if not normalized_map:
+            continue
+        dedupe_key = (column.lower(), target_id)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        out.append({
+            "column": column,
+            "targetReportId": target_id,
+            "variables": normalized_map,
+        })
+    return out
+
+
+def _normalize_drilldowns_from_input(
+    drilldowns: Any,
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    if not isinstance(drilldowns, list):
+        return []
+    return _normalize_drilldowns(
+        {"drilldowns": drilldowns},
+        report_by_id,
+        source_report_vars=source_report_vars or [],
+    )
 
 
 def assert_read_only_query(query_template: str) -> None:
@@ -202,11 +329,13 @@ def delete_group(group_id: str) -> None:
 
 # ── Reports ─────────────────────────────────────────────────────────────
 
-def get_reports(group_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_reports(group_id: Optional[str] = None, pinned_only: bool = False) -> List[Dict[str, Any]]:
     store = _read_store()
     filtered = store["reports"]
     if group_id:
         filtered = [r for r in filtered if r.get("groupId") == group_id]
+    if pinned_only:
+        filtered = [r for r in filtered if bool(r.get("pinned", False))]
     return sorted(filtered, key=lambda r: r.get("name", ""))
 
 
@@ -222,6 +351,8 @@ def create_report(
     group_id: str,
     name: str,
     query_template: str,
+    drilldowns: Optional[List[Dict[str, Any]]] = None,
+    pinned: bool = False,
 ) -> Dict[str, Any]:
     group_id = group_id.strip()
     name = name.strip()
@@ -245,12 +376,25 @@ def create_report(
             raise ValueError("A report with this name already exists in this group")
 
     now = _iso_now()
+    report_by_id = {
+        str(r.get("id")): r
+        for r in store["reports"]
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    report_vars = _extract_variables(query_template)
+    normalized_drilldowns = _normalize_drilldowns_from_input(
+        drilldowns or [],
+        report_by_id,
+        source_report_vars=report_vars,
+    )
     report = {
         "id": str(uuid.uuid4()),
         "groupId": group_id,
         "name": name,
         "queryTemplate": query_template,
-        "variables": _extract_variables(query_template),
+        "variables": report_vars,
+        "pinned": bool(pinned),
+        "drilldowns": normalized_drilldowns,
         "createdAt": now,
         "updatedAt": now,
     }
@@ -263,6 +407,8 @@ def update_report(
     report_id: str,
     name: str,
     query_template: str,
+    drilldowns: Optional[List[Dict[str, Any]]] = None,
+    pinned: Optional[bool] = None,
 ) -> Dict[str, Any]:
     name = name.strip()
     query_template = query_template.strip()
@@ -291,11 +437,25 @@ def update_report(
         ):
             raise ValueError("A report with this name already exists in this group")
 
+    report_by_id = {
+        str(r.get("id")): r
+        for r in store["reports"]
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    report_vars = _extract_variables(query_template)
+    normalized_drilldowns = _normalize_drilldowns_from_input(
+        drilldowns or [],
+        report_by_id,
+        source_report_vars=report_vars,
+    )
+
     updated = {
         **current,
         "name": name,
         "queryTemplate": query_template,
-        "variables": _extract_variables(query_template),
+        "variables": report_vars,
+        "pinned": bool(current.get("pinned", False)) if pinned is None else bool(pinned),
+        "drilldowns": normalized_drilldowns,
         "updatedAt": _iso_now(),
     }
     store["reports"][idx] = updated

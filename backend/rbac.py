@@ -179,10 +179,6 @@ def get_effective_permissions(
     plus_access = _normalize_keys(raw_plus)
     access = _normalize_keys(raw_access)
 
-    # REPT+ implies REPT (can manage ⇒ can run/view)
-    if "rept_plus" in plus_access and "rept" not in access:
-        access = _normalize_keys(access + ["rept"])
-
     return {"access": access, "plusAccess": plus_access}
 
 

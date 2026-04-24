@@ -18,7 +18,7 @@
   <div class="dash-table-wrap" id="lifeTableWrap" style="flex:1; min-height:0; display:none;">
     <table class="dash-table" id="lifeTable">
       <thead><tr>
-        <th>#</th><th>Tool No</th><th class="text-right">Tool Life</th><th class="text-right">Lifetime Strokes</th>
+        <th>Tool No</th><th class="text-right">Tool Life</th><th class="text-right">Lifetime Strokes</th>
         <th style="min-width:200px">Life Used</th><th class="text-right">%</th>
         <th style="min-width:180px">PM Progress</th><th class="text-right">PM %</th>
       </tr></thead>
@@ -74,7 +74,7 @@
       const tbody = document.getElementById('lifeTbody');
       tbody.innerHTML = '';
 
-      list.forEach((entry, idx) => {
+      list.forEach((entry) => {
         const pct = entry.toolLife > 0 ? Math.min(Math.round((entry.totalLifetimeStrokes / entry.toolLife) * 100), 100) : 0;
         const color = pct >= 80 ? '#d32f2f' : pct >= 50 ? '#ed6c02' : '#2e7d32';
         const pmRange = entry.nextStroke - entry.pmCurrentStroke;
@@ -83,7 +83,6 @@
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${idx + 1}</td>
           <td><strong>${entry.toolNo}</strong></td>
           <td class="text-right">${formatIndianCompact(entry.toolLife)}</td>
           <td class="text-right">${formatIndianCompact(entry.totalLifetimeStrokes)}</td>
@@ -96,7 +95,7 @@
       });
 
       if (!list.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No tools found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No tools found</td></tr>';
       }
 
       document.getElementById('lifeTableWrap').style.display = 'block';

@@ -336,8 +336,6 @@ const DataTable = (() => {
   function applyPinnedStyles(columns) {
     const table = elements.container?.querySelector("table.data-table");
     if (!table) return;
-    let leftOffset = 0;
-    let pinnedIndex = 0;
     columns.forEach((col) => {
       const colCells = table.querySelectorAll(`[data-col-name="${col.name}"]`);
       colCells.forEach((cell) => {
@@ -347,30 +345,11 @@ const DataTable = (() => {
         cell.style.zIndex = "";
       });
       if (col._pinned === "left") {
-        const width = (() => {
-          const th = table.querySelector(`thead th[data-col-name="${col.name}"]`);
-          return th ? th.offsetWidth : (col._width || 120);
-        })();
         colCells.forEach((cell) => {
           cell.classList.add("is-pinned-left");
-          cell.style.left = `${leftOffset}px`;
-          if (cell.tagName === "TH") {
-            cell.style.zIndex = String(80 - pinnedIndex);
-            cell.style.top = "0px";
-          } else {
-            cell.style.zIndex = String(20 - pinnedIndex);
-          }
         });
-        leftOffset += width;
-        pinnedIndex += 1;
       }
     });
-    const pinnedCols = columns.filter((col) => col._pinned === "left");
-    const lastPinned = pinnedCols[pinnedCols.length - 1];
-    if (lastPinned) {
-      const lastCells = table.querySelectorAll(`[data-col-name="${lastPinned.name}"]`);
-      lastCells.forEach((cell) => cell.classList.add("is-pinned-left-last"));
-    }
     // Re-sync after layout/paint to avoid drift with multiple pinned columns.
     requestAnimationFrame(() => {
       syncPinnedOffsetsFromDom();
@@ -383,14 +362,20 @@ const DataTable = (() => {
     const headerCells = Array.from(table.querySelectorAll("thead th.is-pinned-left[data-col-name]"));
     if (!headerCells.length) return;
 
-    let leftOffset = 0;
+    // Compute each pinned column's left offset as the cumulative width of all
+    // preceding pinned columns.  This avoids the fragile pattern of temporarily
+    // clearing left, forcing reflow, then reading offsetLeft on sticky elements.
+    let cumulativeLeft = 0;
     headerCells.forEach((th, idx) => {
       const colName = th.dataset.colName;
       if (!colName) return;
-      const width = th.getBoundingClientRect().width || th.offsetWidth || 120;
+
+      const cellWidth = th.getBoundingClientRect().width || th.offsetWidth || 120;
+      const roundedWidth = Math.max(0, Math.round(cellWidth));
+
       const cells = table.querySelectorAll(`[data-col-name="${colName}"]`);
       cells.forEach((cell) => {
-        cell.style.left = `${leftOffset}px`;
+        cell.style.left = `${cumulativeLeft}px`;
         if (cell.tagName === "TH") {
           cell.style.top = "0px";
           cell.style.zIndex = String(90 - idx);
@@ -398,7 +383,18 @@ const DataTable = (() => {
           cell.style.zIndex = String(25 - idx);
         }
       });
-      leftOffset += width;
+
+      cumulativeLeft += roundedWidth;
+    });
+
+    const lastPinnedColName = headerCells[headerCells.length - 1]?.dataset?.colName;
+    if (!lastPinnedColName) return;
+    table.querySelectorAll("[data-col-name]").forEach((cell) => {
+      if (cell.classList.contains("is-pinned-left") && cell.dataset.colName === lastPinnedColName) {
+        cell.classList.add("is-pinned-left-last");
+      } else {
+        cell.classList.remove("is-pinned-left-last");
+      }
     });
   }
 

@@ -10,9 +10,11 @@
         "rept"
       ],
       "plusAccess": [
-        "preventive_maintenance"
+        "preventive_maintenance",
+        "edit_buffer",
+        "rept_plus"
       ],
-      "updatedAt": "2026-04-20T07:02:27.108712+00:00"
+      "updatedAt": "2026-04-20T14:22:48.843097+00:00"
     },
     {
       "userId": 2,
@@ -30,7 +32,25 @@
       ],
       "plusAccess": [],
       "updatedAt": "2026-04-18T21:01:24.384846+00:00"
+    },
+    {
+      "userId": 268,
+      "login": "veeranna",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-04-20T12:36:14.408091+00:00"
+    },
+    {
+      "userId": 5,
+      "login": "BABU",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-04-20T12:36:37.767352+00:00"
     }
   ],
-  "updatedAt": "2026-04-20T07:02:27.108712+00:00"
+  "updatedAt": "2026-04-20T14:22:48.843097+00:00"
 }

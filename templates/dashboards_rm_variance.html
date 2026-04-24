@@ -69,12 +69,12 @@
       const entries = (data.entries || []).sort((a, b) => a.partno.localeCompare(b.partno));
       const totals = data.totals;
 
-      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr><th>#</th>';
+      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr>';
       columns.forEach(c => html += `<th class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${c.label}</th>`);
       html += '</tr></thead><tbody>';
 
-      entries.forEach((e, i) => {
-        html += `<tr><td style="color:var(--text-muted)">${i+1}</td>`;
+      entries.forEach((e) => {
+        html += '<tr>';
         columns.forEach(c => {
           const val = c.fmt ? c.fmt(e[c.key], e) : (e[c.key] ?? '—');
           html += `<td class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${val}</td>`;
@@ -83,7 +83,7 @@
       });
 
       if (totals) {
-        html += '<tr class="totals-row"><td></td><td colspan="3"><strong>TOTAL</strong></td>';
+        html += '<tr class="totals-row"><td colspan="3"><strong>TOTAL</strong></td>';
         html += `<td class="text-right">${formatIndianNumber(totals.custReqQty)}</td>`;
         html += `<td class="text-right">${formatIndianNumber(totals.schQty)}</td>`;
         html += `<td class="text-right">${totals.schKg.toFixed(2)}</td>`;

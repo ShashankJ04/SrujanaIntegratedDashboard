@@ -50,9 +50,23 @@
     <div class="ti-modal-body">
       <input type="text" class="ti-input" id="rptReportName" placeholder="Report name" style="width:100%">
       <textarea class="ti-textarea" id="rptReportQuery" placeholder="SELECT ... WHERE col >= {variable}" style="width:100%;min-height:150px;font-family:monospace"></textarea>
+      <label class="ti-flex ti-gap-8" style="align-items:center;font-size:12px;color:var(--ti-text);margin-top:8px">
+        <input type="checkbox" id="rptReportPinned">
+        <span>Pin this report (show in Reports section for users with report access)</span>
+      </label>
       <div class="ti-flex ti-gap-8" style="align-items:center">
         <span style="font-size:12px;color:var(--ti-text-dim)">Variables:</span>
         <span id="rptVarsDisplay" style="font-size:12px">None</span>
+      </div>
+      <div style="margin-top:8px;border:1px solid var(--ti-border);border-radius:10px;padding:10px">
+        <div class="ti-flex-between" style="align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px;color:var(--ti-text-bright)">Drilldown Rules</strong>
+          <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptAddDrilldownRuleBtn">+ Add Rule</button>
+        </div>
+        <div id="rptDrilldownRules" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="font-size:11px;color:var(--ti-text-dim);margin-top:6px">
+          Configure drilldown mapping: pick hyperlink column, child report/input, and source from row column or parent input.
+        </div>
       </div>
     </div>
     <div class="ti-modal-footer">
@@ -75,7 +89,8 @@
 
 <script>
 (function() {
-  let groups = [], reports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
+  let groups = [], reports = [], allReports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
+  let drilldownDraft = [];
 
   function openModal(id) { document.getElementById(id).classList.add('open'); }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -97,6 +112,7 @@
 
   async function loadGroups() {
     groups = await apiFetch('/api/reports/groups');
+    allReports = await apiFetch('/api/reports/reports');
     renderGroups();
     if (!selectedGroupId && groups.length) selectedGroupId = groups[0].id;
     if (selectedGroupId) await loadReports();
@@ -145,7 +161,8 @@
       const div = document.createElement('div');
       div.className = 'ti-card';
       div.style.marginBottom = '10px';
-      div.innerHTML = `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="ti-flex ti-gap-8" style="align-items:center;min-width:0;flex:1"><strong style="font-size:13px;color:var(--ti-text-bright)">📄 ${r.name}</strong><span class="ti-chip ti-chip-neutral">${r.variables.length > 0 ? r.variables.length + ' inputs' : 'No inputs'}</span></div><div class="ti-flex ti-gap-8" style="flex-shrink:0"><button class="ti-btn ti-btn-outline ti-btn-xs" data-edit="${r.id}">✏️ Edit</button><button class="ti-btn ti-btn-primary ti-btn-xs" data-open="${r.id}">▶ Run</button><button class="ti-btn ti-btn-danger ti-btn-xs" data-del="${r.id}">🗑️</button></div></div>`;
+      const ddCount = Array.isArray(r.drilldowns) ? r.drilldowns.length : 0;
+      div.innerHTML = `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="ti-flex ti-gap-8" style="align-items:center;min-width:0;flex:1"><strong style="font-size:13px;color:var(--ti-text-bright)">📄 ${r.name}</strong><span class="ti-chip ti-chip-neutral">${r.variables.length > 0 ? r.variables.length + ' inputs' : 'No inputs'}</span>${r.pinned ? '<span class="ti-chip ti-chip-primary">Pinned</span>' : ''}${ddCount > 0 ? `<span class="ti-chip ti-chip-neutral">${ddCount} drilldown${ddCount > 1 ? 's' : ''}</span>` : ''}</div><div class="ti-flex ti-gap-8" style="flex-shrink:0"><button class="ti-btn ti-btn-outline ti-btn-xs" data-edit="${r.id}">✏️ Edit</button><button class="ti-btn ti-btn-primary ti-btn-xs" data-open="${r.id}">▶ Run</button><button class="ti-btn ${r.pinned ? 'ti-btn-primary' : 'ti-btn-outline'} ti-btn-xs" data-pin="${r.id}" title="${r.pinned ? 'Unpin report' : 'Pin report'}">${r.pinned ? '📌' : '📍'}</button><button class="ti-btn ti-btn-danger ti-btn-xs" data-del="${r.id}">🗑️</button></div></div>`;
       el.appendChild(div);
 
       div.querySelector('[data-edit]').addEventListener('click', () => {
@@ -154,10 +171,42 @@
         document.getElementById('rptReportSubmit').textContent = 'Save';
         document.getElementById('rptReportName').value = r.name;
         document.getElementById('rptReportQuery').value = r.queryTemplate;
+        document.getElementById('rptReportPinned').checked = !!r.pinned;
         updateVarsDisplay();
+        drilldownDraft = [];
+        (r.drilldowns || []).forEach(d => {
+          const mapping = d.variables || {};
+          Object.entries(mapping).forEach(([childVariable, sourceSpec]) => {
+            let source = '';
+            if (sourceSpec && typeof sourceSpec === 'object') {
+              source = String(sourceSpec.value || '').trim();
+            } else {
+              source = String(sourceSpec || '').trim();
+            }
+            drilldownDraft.push({
+              column: d.column || '',
+              targetReportId: d.targetReportId || '',
+              childVariable,
+              source,
+            });
+          });
+        });
+        renderDrilldownRules();
         openModal('rptReportModal');
       });
       div.querySelector('[data-open]').addEventListener('click', () => { goToReportViewer(r.id); });
+      div.querySelector('[data-pin]').addEventListener('click', async () => {
+        try {
+          await apiPatch('/api/reports/reports/' + r.id, {
+            name: r.name,
+            queryTemplate: r.queryTemplate,
+            pinned: !r.pinned,
+            drilldowns: r.drilldowns || [],
+          });
+          await loadReports();
+          if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
+        } catch (e) { showSnackbar(e.message); }
+      });
       div.querySelector('[data-del]').addEventListener('click', () => {
         deleteAction = { type: 'report', id: r.id, name: r.name };
         document.getElementById('rptDeleteTitle').textContent = 'Delete Report';
@@ -172,7 +221,131 @@
     document.getElementById('rptVarsDisplay').innerHTML = vars.length ? vars.map(v => `<span class="ti-chip ti-chip-neutral">{${v}}</span>`).join(' ') : 'None';
   }
 
-  document.getElementById('rptReportQuery').addEventListener('input', updateVarsDisplay);
+  document.getElementById('rptReportQuery').addEventListener('input', () => {
+    updateVarsDisplay();
+    renderDrilldownRules();
+  });
+
+  function childReportById(reportId) {
+    return allReports.find(r => r.id === reportId) || null;
+  }
+
+  function childVarOptions(reportId, selectedVar) {
+    const report = childReportById(reportId);
+    const vars = (report && report.variables) ? report.variables : [];
+    if (!vars.length) return '<option value="">No variables in child report</option>';
+    return ['<option value="">Choose child variable</option>']
+      .concat(vars.map(v => `<option value="${v}" ${v === selectedVar ? 'selected' : ''}>${v}</option>`))
+      .join('');
+  }
+
+  function parentVarOptions(selectedVar) {
+    const vars = detectVars(document.getElementById('rptReportQuery').value || '');
+    if (!vars.length) return '<option value="">No parent inputs</option>';
+    return ['<option value="">Choose parent input</option>']
+      .concat(vars.map(v => `<option value="${v}" ${v === selectedVar ? 'selected' : ''}>${v}</option>`))
+      .join('');
+  }
+
+  function sourceInputControl(rule, idx) {
+    const vars = detectVars(document.getElementById('rptReportQuery').value || '');
+    const options = vars.map(v => `<option value="${v}"></option>`).join('');
+    const listId = `rptParentSourceVars_${idx}`;
+    return `
+      <input
+        type="text"
+        class="ti-input"
+        data-dd-source="${idx}"
+        list="${listId}"
+        placeholder="Parent input or row column"
+        value="${String(rule.source || '').replace(/"/g,'&quot;')}"
+        style="width:100%;min-width:0"
+      >
+      <datalist id="${listId}">${options}</datalist>
+    `;
+  }
+
+  function reportOptions(selectedId) {
+    const opts = ['<option value="">Choose child report</option>'];
+    allReports.forEach(r => {
+      opts.push(`<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`);
+    });
+    return opts.join('');
+  }
+
+  function renderDrilldownRules() {
+    const host = document.getElementById('rptDrilldownRules');
+    if (!drilldownDraft.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--ti-text-dim)">No drilldown rules configured.</div>';
+      return;
+    }
+    host.innerHTML = '';
+    drilldownDraft.forEach((rule, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1.2fr) minmax(120px,1fr) minmax(180px,1.5fr) auto;gap:6px;align-items:center;width:100%';
+      row.innerHTML = `
+        <input type="text" class="ti-input" data-dd-col="${idx}" placeholder="Hyperlink column" value="${String(rule.column || '').replace(/"/g,'&quot;')}" style="width:100%;min-width:0">
+        <select class="ti-select" data-dd-child="${idx}">${reportOptions(rule.targetReportId)}</select>
+        <select class="ti-select" data-dd-var="${idx}">${childVarOptions(rule.targetReportId, rule.childVariable)}</select>
+        ${sourceInputControl(rule, idx)}
+        <button type="button" class="ti-btn ti-btn-danger ti-btn-xs" data-dd-del="${idx}">✕</button>
+      `;
+      host.appendChild(row);
+    });
+
+    host.querySelectorAll('[data-dd-col]').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const i = Number(e.target.getAttribute('data-dd-col'));
+        drilldownDraft[i].column = e.target.value;
+      });
+    });
+    host.querySelectorAll('[data-dd-child]').forEach((el) => {
+      el.addEventListener('change', (e) => {
+        const i = Number(e.target.getAttribute('data-dd-child'));
+        drilldownDraft[i].targetReportId = e.target.value;
+        drilldownDraft[i].childVariable = '';
+        renderDrilldownRules();
+      });
+    });
+    host.querySelectorAll('[data-dd-var]').forEach((el) => {
+      el.addEventListener('change', (e) => {
+        const i = Number(e.target.getAttribute('data-dd-var'));
+        drilldownDraft[i].childVariable = e.target.value;
+      });
+    });
+    host.querySelectorAll('[data-dd-source]').forEach((el) => {
+      const handler = (e) => {
+        const i = Number(e.target.getAttribute('data-dd-source'));
+        drilldownDraft[i].source = e.target.value;
+      };
+      el.addEventListener('input', handler);
+      el.addEventListener('change', handler);
+    });
+    host.querySelectorAll('[data-dd-del]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const i = Number(e.target.getAttribute('data-dd-del'));
+        drilldownDraft.splice(i, 1);
+        renderDrilldownRules();
+      });
+    });
+  }
+
+  function buildDrilldownsPayload() {
+    const byKey = {};
+    const parentVars = new Set(detectVars(document.getElementById('rptReportQuery').value || ''));
+    drilldownDraft.forEach((rule) => {
+      const col = String(rule.column || '').trim();
+      const target = String(rule.targetReportId || '').trim();
+      const childVar = String(rule.childVariable || '').trim();
+      const sourceValue = String(rule.source || col || '').trim();
+      const sourceType = parentVars.has(sourceValue) ? 'parentVariable' : 'column';
+      if (!col || !target || !childVar || !sourceValue) return;
+      const k = `${col}::${target}`;
+      if (!byKey[k]) byKey[k] = { column: col, targetReportId: target, variables: {} };
+      byKey[k].variables[childVar] = { type: sourceType, value: sourceValue };
+    });
+    return Object.values(byKey);
+  }
 
   document.getElementById('rptAddGroupBtn').addEventListener('click', () => {
     document.getElementById('rptGroupName').value = '';
@@ -195,19 +368,34 @@
     document.getElementById('rptReportSubmit').textContent = 'Create';
     document.getElementById('rptReportName').value = '';
     document.getElementById('rptReportQuery').value = '';
+    document.getElementById('rptReportPinned').checked = false;
     document.getElementById('rptVarsDisplay').textContent = 'None';
+    drilldownDraft = [];
+    renderDrilldownRules();
     openModal('rptReportModal');
+  });
+
+  document.getElementById('rptAddDrilldownRuleBtn').addEventListener('click', () => {
+    drilldownDraft.push({
+      column: '',
+      targetReportId: '',
+      childVariable: '',
+      source: '',
+    });
+    renderDrilldownRules();
   });
 
   document.getElementById('rptReportSubmit').addEventListener('click', async () => {
     const name = document.getElementById('rptReportName').value.trim();
     const query = document.getElementById('rptReportQuery').value.trim();
+    const pinned = document.getElementById('rptReportPinned').checked;
+    const drilldowns = buildDrilldownsPayload();
     if (!name || !query) return;
     try {
       if (editingReportId) {
-        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query });
+        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, pinned, drilldowns });
       } else {
-        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query });
+        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, pinned, drilldowns });
         closeModal('rptReportModal');
         if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
         goToReportViewer(r.id);
@@ -235,6 +423,7 @@
     } catch (e) { showSnackbar(e.message); }
   });
 
+  renderDrilldownRules();
   loadGroups();
 })();
 </script>

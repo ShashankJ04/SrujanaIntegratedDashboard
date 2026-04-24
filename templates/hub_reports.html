@@ -14,6 +14,7 @@
     <div class="rr-toolbar__spacer"></div>
 
     <!-- Actions cluster -->
+    <button type="button" class="rr-btn rr-btn--clear" id="runBackBtn" style="display:none" title="Back to previous report">← Back</button>
     <button type="button" class="rr-btn rr-btn--run" id="runExecuteBtn" disabled title="Run report">▶ Run</button>
     <span id="reportsGridCount" class="rr-pill sg-count" style="display:none" aria-live="polite"></span>
     <input type="search" id="reportsGridSearch" class="rr-search sg-search" placeholder="Search columns…" style="display:none" autocomplete="off" />
@@ -45,6 +46,10 @@
 <script>
 (function() {
   let currentRunReport = null, lastRunResult = null;
+  let currentRunVariables = {};
+  let currentViewMode = 'root';
+  let runGrid = null;
+  const runViewStack = [];
   let pickerIgnoreChange = false;
   let _prevSidebarState = null; // remember sidebar state before auto-collapse
 
@@ -102,7 +107,8 @@
     try {
       const groups = await apiFetch('/api/reports/groups');
       for (const g of groups) {
-        const reports = await apiFetch('/api/reports/reports?groupId=' + encodeURIComponent(g.id));
+        const reports = await apiFetch('/api/reports/reports?groupId=' + encodeURIComponent(g.id) + '&pinnedOnly=1');
+        if (!reports.length) continue;
         const og = document.createElement('optgroup');
         og.label = g.name;
         reports.forEach(r => {
@@ -137,6 +143,10 @@
 
   function attrEscape(s) {
     return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function reportVarControlHtml(v) {
@@ -188,9 +198,118 @@
     return vars;
   }
 
+  function updateBackButtonState() {
+    const backBtn = document.getElementById('runBackBtn');
+    if (!backBtn) return;
+    backBtn.style.display = runViewStack.length ? '' : 'none';
+    document.getElementById('runExecuteBtn').disabled = !currentRunReport || runViewStack.length > 0;
+    document.getElementById('runClearBtn').style.display = (currentRunReport && (currentRunReport.variables || []).length && runViewStack.length === 0) ? '' : 'none';
+  }
+
+  function getDrilldownsForColumn(report, columnName) {
+    const list = Array.isArray(report && report.drilldowns) ? report.drilldowns : [];
+    const key = String(columnName || '').trim().toLowerCase();
+    return list.filter(d => d && String(d.column || '').trim().toLowerCase() === key);
+  }
+
+  function withDrilldownFormatters(report, resultRows, columns) {
+    return columns.map(c => {
+      const drilldowns = getDrilldownsForColumn(report, c);
+      if (!drilldowns.length) return { key: c, label: c, align: resultRows.some(r => r[c] != null && !isNaN(Number(r[c]))) ? 'right' : 'left', sortable: true };
+      const isNum = resultRows.some(r => r[c] != null && !isNaN(Number(r[c])));
+      return {
+        key: c,
+        label: c,
+        align: isNum ? 'right' : 'left',
+        sortable: true,
+        format: (value, row) => {
+          if (value === null || value === undefined || value === '') return '';
+          const payload = encodeURIComponent(JSON.stringify({ col: c, row }));
+          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(String(value))}</button>`;
+        },
+      };
+    });
+  }
+
+  function bindDrilldownClicks() {
+    const host = document.getElementById('runTable');
+    if (!host || host.dataset.drilldownBound === '1') return;
+    host.dataset.drilldownBound = '1';
+    host.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-drilldown]');
+      if (!btn || !currentRunReport || !lastRunResult) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(decodeURIComponent(btn.getAttribute('data-drilldown') || ''));
+      } catch (_) {
+        return;
+      }
+      const drilldowns = getDrilldownsForColumn(currentRunReport, parsed.col);
+      if (!drilldowns.length) return;
+      const drilldown = drilldowns[0];
+      const variables = {};
+      Object.entries(drilldown.variables || {}).forEach(([targetVar, sourceSpec]) => {
+        let raw = '';
+        if (sourceSpec && typeof sourceSpec === 'object') {
+          const sourceType = sourceSpec.type === 'parentVariable' ? 'parentVariable' : 'column';
+          const sourceValue = String(sourceSpec.value || '').trim();
+          if (sourceType === 'parentVariable') {
+            raw = (currentRunVariables || {})[sourceValue];
+          } else {
+            raw = parsed.row ? parsed.row[sourceValue] : '';
+          }
+        } else {
+          const sourceCol = String(sourceSpec || '').trim();
+          raw = parsed.row ? parsed.row[sourceCol] : '';
+        }
+        variables[targetVar] = raw === null || raw === undefined ? '' : String(raw);
+      });
+      const hasMissing = Object.values(variables).some(v => String(v).trim() === '');
+      if (hasMissing) {
+        showSnackbar('Cannot drill down: required source value is missing in selected row.');
+        return;
+      }
+      await runDrilldown(drilldown, variables);
+    });
+  }
+
+  function renderResultGrid(report, result, restoreSearchValue) {
+    const runTableEl = document.getElementById('runTable');
+    if (runGrid && runGrid.destroy) runGrid.destroy();
+    const cols = result.columns || (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
+    const dgCols = withDrilldownFormatters(report, result.rows || [], cols);
+    runTableEl.innerHTML = '';
+    runTableEl.style.display = 'flex';
+    setReportsGridToolsVisible(true);
+    runGrid = SuperGrid.create(runTableEl, {
+      columns: dgCols,
+      rows: result.rows || [],
+      options: {
+        search: true,
+        omitToolbar: true,
+        countElement: document.getElementById('reportsGridCount'),
+        searchInputElement: document.getElementById('reportsGridSearch'),
+        countLabel: 'rows',
+        exportBtn: false,
+        resizable: true,
+      },
+    });
+    bindDrilldownClicks();
+    if (typeof restoreSearchValue === 'string' && restoreSearchValue.length) {
+      const searchEl = document.getElementById('reportsGridSearch');
+      if (searchEl) {
+        searchEl.value = restoreSearchValue;
+        searchEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  }
+
   function showEmptyViewer() {
     currentRunReport = null;
     lastRunResult = null;
+    currentRunVariables = {};
+    currentViewMode = 'root';
+    runViewStack.length = 0;
     document.getElementById('runReportTitle').textContent = 'Reports';
     const sub = document.getElementById('runReportSub');
     sub.textContent = 'Select a report from the sidebar';
@@ -199,6 +318,8 @@
     document.getElementById('runExportBtn').disabled = true;
     document.getElementById('runTable').style.display = 'none';
     document.getElementById('runTable').innerHTML = '';
+    if (runGrid && runGrid.destroy) runGrid.destroy();
+    runGrid = null;
     document.getElementById('runError').style.display = 'none';
     setReportsGridToolsVisible(false);
     const varsPanel = document.getElementById('runVarsPanel');
@@ -206,11 +327,14 @@
     varsPanel.innerHTML = '';
     document.getElementById('runEmpty').style.display = 'flex';
     document.getElementById('runClearBtn').style.display = 'none';
+    document.getElementById('runBackBtn').style.display = 'none';
     syncReportsPicker(null);
   }
 
   function openRunReport(report) {
     currentRunReport = report;
+    currentViewMode = 'root';
+    runViewStack.length = 0;
     document.getElementById('runReportTitle').textContent = report.name;
     document.getElementById('runReportSub').style.display = 'none';
     document.getElementById('runExecuteBtn').disabled = false;
@@ -233,63 +357,86 @@
 
     document.getElementById('runEmpty').style.display = 'none';
     document.getElementById('runClearBtn').style.display = vars.length ? '' : 'none';
+    updateBackButtonState();
     syncReportsPicker(report.id);
   }
 
-  async function runReportExecute() {
-    if (!currentRunReport) return;
+  async function runReportExecute(customReport, providedVariables, opts) {
+    const report = customReport || currentRunReport;
+    const options = opts || {};
+    if (!report) return;
     document.getElementById('runLoading').style.display = 'block';
     document.getElementById('runTable').style.display = 'none';
     document.getElementById('runError').style.display = 'none';
     setReportsGridToolsVisible(false);
 
-    const vars = collectRunVariables();
-    const rid = currentRunReport.id;
+    const vars = providedVariables || collectRunVariables();
+    const rid = report.id;
     const loadEl = document.getElementById('runLoading');
 
     try {
       const result = await apiPost('/api/reports/reports/' + rid + '/run', { variables: vars });
-      if (!currentRunReport || currentRunReport.id !== rid) return;
+      if (!report || report.id !== rid) return;
       lastRunResult = result;
+      currentRunReport = report;
+      currentRunVariables = { ...vars };
 
       if (!result.rows || !result.rows.length) {
         document.getElementById('runTable').innerHTML = '<div class="rr-no-data">No rows returned</div>';
         document.getElementById('runTable').style.display = 'block';
         setReportsGridToolsVisible(false);
       } else {
-        const cols = result.columns || Object.keys(result.rows[0]);
-        const dgCols = cols.map(c => {
-          const isNum = result.rows.some(r => r[c] != null && !isNaN(Number(r[c])));
-          return { key: c, label: c, align: isNum ? 'right' : 'left', sortable: true };
-        });
-        const runTableEl = document.getElementById('runTable');
-        runTableEl.innerHTML = '';
-        runTableEl.style.display = 'flex';
-        setReportsGridToolsVisible(true);
-        SuperGrid.create(runTableEl, {
-          columns: dgCols,
-          rows: result.rows,
-          options: {
-            search: true,
-            omitToolbar: true,
-            countElement: document.getElementById('reportsGridCount'),
-            searchInputElement: document.getElementById('reportsGridSearch'),
-            rowNumbers: true,
-            countLabel: 'rows',
-            exportBtn: false,
-            resizable: true,
-          },
-        });
+        renderResultGrid(report, result, options.restoreSearchValue);
       }
+      if (options.title) document.getElementById('runReportTitle').textContent = options.title;
+      updateBackButtonState();
       document.getElementById('runExportBtn').disabled = false;
     } catch (err) {
-      if (currentRunReport && currentRunReport.id === rid) {
+      if (report && report.id === rid) {
         document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message}</div>`;
         document.getElementById('runError').style.display = 'block';
       }
     } finally {
       loadEl.style.display = 'none';
     }
+  }
+
+  async function runDrilldown(drilldown, variables) {
+    if (!currentRunReport || !lastRunResult) return;
+    document.getElementById('runError').style.display = 'none';
+    try {
+      const child = await apiFetch('/api/reports/reports/' + encodeURIComponent(drilldown.targetReportId));
+      runViewStack.push({
+        report: currentRunReport,
+        result: lastRunResult,
+        variables: { ...currentRunVariables },
+        title: document.getElementById('runReportTitle').textContent,
+        searchValue: (document.getElementById('reportsGridSearch') || {}).value || '',
+      });
+      currentViewMode = 'drilldown';
+      const varsPanel = document.getElementById('runVarsPanel');
+      varsPanel.style.display = 'none';
+      varsPanel.innerHTML = '';
+      updateBackButtonState();
+      await runReportExecute(child, variables, { title: `${child.name}` });
+    } catch (err) {
+      document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message}</div>`;
+      document.getElementById('runError').style.display = 'block';
+    }
+  }
+
+  function goBackFromDrilldown() {
+    const prev = runViewStack.pop();
+    if (!prev) return;
+    currentRunReport = prev.report;
+    lastRunResult = prev.result;
+    currentRunVariables = prev.variables || {};
+    currentViewMode = runViewStack.length ? 'drilldown' : 'root';
+    document.getElementById('runReportTitle').textContent = prev.title || prev.report.name;
+    document.getElementById('runReportSub').style.display = 'none';
+    renderResultGrid(prev.report, prev.result, prev.searchValue || '');
+    updateBackButtonState();
+    document.getElementById('runExportBtn').disabled = false;
   }
 
   window.__hubReportsOpenReport = async function(reportId) {
@@ -324,10 +471,11 @@
   });
 
   document.getElementById('runExecuteBtn').addEventListener('click', () => runReportExecute());
+  document.getElementById('runBackBtn').addEventListener('click', () => goBackFromDrilldown());
 
   document.getElementById('runExportBtn').addEventListener('click', async () => {
     if (!currentRunReport || !lastRunResult) return;
-    const vars = collectRunVariables();
+    const vars = (runViewStack.length > 0 || currentViewMode === 'drilldown') ? currentRunVariables : collectRunVariables();
     try {
       await apiDownload('/api/reports/reports/' + currentRunReport.id + '/export', { variables: vars }, currentRunReport.name + '.xlsx');
     } catch (err) { showSnackbar(err.message); }

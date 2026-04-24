@@ -63,7 +63,8 @@ def delete_group(group_id):
 @require_access("rept")
 def list_reports():
     group_id = request.args.get("groupId")
-    return jsonify(reports_store.get_reports(group_id))
+    pinned_only = request.args.get("pinnedOnly", "").strip().lower() in ("1", "true", "yes")
+    return jsonify(reports_store.get_reports(group_id, pinned_only=pinned_only))
 
 
 @reports_bp.route("/reports/<report_id>", methods=["GET"])
@@ -84,6 +85,8 @@ def create_report():
             group_id=data.get("groupId", ""),
             name=data.get("name", ""),
             query_template=data.get("queryTemplate", ""),
+            drilldowns=data.get("drilldowns", []),
+            pinned=bool(data.get("pinned", False)),
         )
         return jsonify(report), 201
     except ValueError as e:
@@ -99,6 +102,12 @@ def update_report(report_id):
             report_id=report_id,
             name=data.get("name", ""),
             query_template=data.get("queryTemplate", ""),
+            drilldowns=data.get("drilldowns", []),
+            pinned=(
+                bool(data.get("pinned"))
+                if isinstance(data, dict) and "pinned" in data
+                else None
+            ),
         )
         return jsonify(report)
     except ValueError as e:
@@ -147,6 +156,7 @@ def run_report(report_id):
         "rows": rows,
         "rowCount": len(rows),
         "executedAt": datetime.utcnow().isoformat(),
+        "drilldowns": report.get("drilldowns", []),
     })
 
 

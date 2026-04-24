@@ -14,7 +14,7 @@ const DataGrid = (() => {
    *     format?:(val,row)=>string|HTMLElement, className?:string, width?:string }
    * @param {Array<Object>} config.rows - Data rows
    * @param {Object} [config.options]
-   *   { search:boolean, export:boolean, exportFn:Function, rowNumbers:boolean,
+   *   { search:boolean, export:boolean, exportFn:Function,
    *     emptyText:string, countLabel:string, onRowClick?:(row,idx)=>void,
    *     extraToolbar?:string, statusText?:string|Function }
    */
@@ -24,7 +24,6 @@ const DataGrid = (() => {
       search = true,
       exportBtn = false,
       exportFn = null,
-      rowNumbers = true,
       emptyText = 'No data available',
       countLabel = 'rows',
       onRowClick = null,
@@ -81,7 +80,6 @@ const DataGrid = (() => {
     // ── Render header ───────────────────────────────────────
     function renderHead() {
       let html = '<tr>';
-      if (rowNumbers) html += '<th class="col-num">#</th>';
       columns.forEach(col => {
         const sortable = col.sortable !== false;
         const cls = [
@@ -112,7 +110,7 @@ const DataGrid = (() => {
     // ── Render body ─────────────────────────────────────────
     function renderBody() {
       if (!filteredRows.length) {
-        tbody.innerHTML = `<tr><td colspan="${columns.length + (rowNumbers ? 1 : 0)}" style="text-align:center;padding:40px;color:var(--ti-text-dim)">${emptyText}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align:center;padding:40px;color:var(--ti-text-dim)">${emptyText}</td></tr>`;
         updateCount();
         return;
       }
@@ -121,7 +119,6 @@ const DataGrid = (() => {
       filteredRows.forEach((row, i) => {
         const clickable = onRowClick ? ' style="cursor:pointer"' : '';
         html += `<tr data-idx="${i}"${clickable}>`;
-        if (rowNumbers) html += `<td class="col-num">${i + 1}</td>`;
         columns.forEach(col => {
           const raw = row[col.key];
           let display;

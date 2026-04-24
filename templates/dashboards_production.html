@@ -59,12 +59,12 @@
       const totals = data.totals;
       const stockTotals = entries.reduce((a, e) => ({ fg: a.fg + e.fgStock, wip: a.wip + e.wipStock, total: a.total + e.totalStock }), { fg:0, wip:0, total:0 });
 
-      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr><th>#</th>';
+      let html = '<div class="dash-table-wrap"><table class="dash-table"><thead><tr>';
       columns.forEach(c => html += `<th class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${c.label}</th>`);
       html += '</tr></thead><tbody>';
 
-      entries.forEach((e, i) => {
-        html += `<tr><td style="color:var(--text-muted)">${i+1}</td>`;
+      entries.forEach((e) => {
+        html += '<tr>';
         columns.forEach(c => {
           const val = c.fmt ? c.fmt(e[c.key], e) : (e[c.key] ?? '—');
           html += `<td class="${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}">${val}</td>`;
@@ -73,7 +73,7 @@
       });
 
       // Totals row
-      html += '<tr class="totals-row"><td></td><td colspan="5"><strong>TOTAL</strong></td>';
+      html += '<tr class="totals-row"><td colspan="5"><strong>TOTAL</strong></td>';
       html += `<td class="text-right">${formatIndianNumber(totals.scheduledQty)}</td>`;
       html += `<td class="text-right">${formatIndianNumber(totals.prodQty)}</td>`;
       html += `<td class="text-center">${createVarianceChip(totals.variance).outerHTML}</td>`;

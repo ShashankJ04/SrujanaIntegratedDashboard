@@ -20,7 +20,7 @@ const SuperGrid = (() => {
    * @param {Array<Object>} config.rows — Data row objects
    * @param {Object} [config.options]
    *   { search:boolean, exportBtn:boolean, exportFn:Function,
-   *     rowNumbers:boolean, emptyText:string, countLabel:string,
+   *     emptyText:string, countLabel:string,
    *     onRowClick?:(row,idx)=>void, extraToolbar?:string,
    *     statusText?:string|Function, pagination?:boolean, pageSize?:number,
    *     resizable?:boolean, pinnable?:boolean, reorderable?:boolean,
@@ -35,7 +35,6 @@ const SuperGrid = (() => {
       search = true,
       exportBtn = false,
       exportFn = null,
-      rowNumbers = false,
       emptyText = 'No data available',
       countLabel = 'rows',
       onRowClick = null,
@@ -212,7 +211,9 @@ const SuperGrid = (() => {
     document.addEventListener('mouseup', _onMouseUp);
 
     // ── Scroll sync for pinned ─────────────────────────────────
-    scroll.addEventListener('scroll', _syncPinnedOffsets);
+    function _onScrollOrResize() { requestAnimationFrame(_syncPinnedOffsets); }
+    scroll.addEventListener('scroll', _onScrollOrResize);
+    window.addEventListener('resize', _onScrollOrResize);
 
     // ── Column ordering ────────────────────────────────────────
     function _getOrderedCols() {
@@ -271,7 +272,6 @@ const SuperGrid = (() => {
     function _renderHead() {
       const cols = _getOrderedCols();
       let html = '<tr>';
-      if (rowNumbers) html += '<th class="sg-col-num">#</th>';
       cols.forEach(col => {
         const isPinned = pinnedKeys.has(col.key);
         const isSorted = sortKey === col.key;
@@ -413,7 +413,7 @@ const SuperGrid = (() => {
       const rows = pagination ? displayRows : filteredRows;
 
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="${cols.length + (rowNumbers ? 1 : 0)}" class="sg-empty">${emptyText}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${cols.length}" class="sg-empty">${emptyText}</td></tr>`;
         _updateMeta();
         return;
       }
@@ -423,7 +423,6 @@ const SuperGrid = (() => {
       rows.forEach((row, i) => {
         const clickCls = onRowClick ? ' sg-clickable' : '';
         html += `<tr data-idx="${i}" class="${clickCls}">`;
-        if (rowNumbers) html += `<td class="sg-col-num">${globalOffset + i + 1}</td>`;
         cols.forEach(col => {
           const raw = row[col.key];
           let display;
@@ -470,26 +469,53 @@ const SuperGrid = (() => {
 
     // ── Pinned offset sync ─────────────────────────────────────
     function _syncPinnedOffsets() {
-      const ths = Array.from(thead.querySelectorAll('th.sg-pinned'));
-      if (!ths.length) return;
-      let left = 0;
-      ths.forEach((th, idx) => {
-        const w = th.getBoundingClientRect().width || th.offsetWidth || 120;
-        const key = th.dataset.key;
-        // Only th/td — .sg-resize also uses data-key and must not get width/position styles
-        const cells = table.querySelectorAll(`th[data-key="${key}"], td[data-key="${key}"]`);
-        cells.forEach(cell => {
-          cell.style.left = `${left}px`;
-          cell.style.zIndex = cell.tagName === 'TH' ? String(90 - idx) : String(25 - idx);
-        });
-        left += w;
+      // Clean up unpinned cells that may have stale inline styles from a previous pin
+      table.querySelectorAll('th[data-key], td[data-key]').forEach(cell => {
+        if (!cell.classList.contains('sg-pinned')) {
+          cell.style.left = '';
+          cell.style.zIndex = '';
+          cell.classList.remove('sg-pinned-last');
+        }
       });
-      // Mark last pinned
-      table.querySelectorAll('.sg-pinned-last').forEach(el => el.classList.remove('sg-pinned-last'));
-      const lastPinKey = ths[ths.length - 1]?.dataset?.key;
-      if (lastPinKey) {
-        table.querySelectorAll(`[data-key="${lastPinKey}"].sg-pinned`).forEach(el => el.classList.add('sg-pinned-last'));
-      }
+
+      const cols = _getOrderedCols();
+      const pinnedCols = cols.filter(c => pinnedKeys.has(c.key));
+      if (!pinnedCols.length) return;
+
+      // Compute each pinned column's left offset as the cumulative width of
+      // all preceding pinned columns.  This avoids measuring offsetLeft on
+      // sticky elements (which is unreliable) and keeps headers + body cells
+      // perfectly aligned regardless of scroll position.
+      let cumulativeLeft = 0;
+      pinnedCols.forEach((col, idx) => {
+        const key = col.key;
+        const allCells = table.querySelectorAll(`th[data-key="${key}"], td[data-key="${key}"]`);
+        if (!allCells.length) return;
+
+        // Determine rendered width from the header cell
+        const th = thead.querySelector(`th[data-key="${key}"]`);
+        const cellWidth = th
+          ? (colWidths[key] || th.getBoundingClientRect().width || th.offsetWidth)
+          : (colWidths[key] || 120);
+        const roundedWidth = Math.max(0, Math.round(cellWidth));
+
+        allCells.forEach(cell => {
+          cell.style.left = `${cumulativeLeft}px`;
+          if (cell.tagName === 'TH') {
+            cell.style.zIndex = String(120 - idx);
+          } else {
+            cell.style.zIndex = String(60 - idx);
+          }
+        });
+
+        cumulativeLeft += roundedWidth;
+      });
+
+      // Mark the last pinned column for the right-edge shadow
+      const lastKey = pinnedCols[pinnedCols.length - 1].key;
+      table.querySelectorAll('.sg-pinned').forEach(cell => {
+        cell.classList.toggle('sg-pinned-last', cell.dataset?.key === lastKey);
+      });
     }
 
     // ── Apply column width ─────────────────────────────────────
@@ -552,14 +578,14 @@ const SuperGrid = (() => {
           pinned: [...pinnedKeys],
           widths: colWidths,
         };
-        localStorage.setItem(`sg_layout_v2_${layoutKey}`, JSON.stringify(data));
+        localStorage.setItem(`sg_layout_v3_${layoutKey}`, JSON.stringify(data));
       } catch (e) { /* no-op */ }
     }
 
     function _restoreLayout() {
       if (!layoutKey) return;
       try {
-        const raw = localStorage.getItem(`sg_layout_v2_${layoutKey}`);
+        const raw = localStorage.getItem(`sg_layout_v3_${layoutKey}`);
         if (!raw) return;
         const data = JSON.parse(raw);
         if (Array.isArray(data.order)) {
@@ -629,6 +655,7 @@ const SuperGrid = (() => {
       destroy() {
         document.removeEventListener('mousemove', _onMouseMove);
         document.removeEventListener('mouseup', _onMouseUp);
+        window.removeEventListener('resize', _onScrollOrResize);
         if (searchInput) searchInput.removeEventListener('input', _onSearchInput);
       },
     };
