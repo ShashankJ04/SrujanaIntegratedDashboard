@@ -18,6 +18,8 @@ window.DprPage = (() => {
   let deriveIdx = null;
   let snapshotSaveTimer = null;
   let dprPollTimer = null;
+  let dprFullscreenMode = false;
+  let dprFullscreenKeyHandlerBound = false;
   const DPR_POLL_MS = Number(
     window.DPR_POLL_INTERVAL_MS != null ? window.DPR_POLL_INTERVAL_MS : DPR_POLL_FALLBACK_MS
   );
@@ -386,6 +388,16 @@ window.DprPage = (() => {
     if (!el) return;
     el.textContent = msg || "";
     el.style.color = isError ? "var(--clr-danger, #ef4444)" : "";
+  }
+
+  function applyDprFullscreenState() {
+    document.body.classList.toggle("dpr-fullscreen-mode", dprFullscreenMode);
+    const btn = document.getElementById("dpr-fullscreen-toggle");
+    if (btn) {
+      btn.textContent = dprFullscreenMode ? "🡽 Exit full screen" : "⛶ Full screen";
+      btn.setAttribute("aria-pressed", dprFullscreenMode ? "true" : "false");
+      btn.title = dprFullscreenMode ? "Exit DPR fullscreen view" : "Toggle DPR fullscreen view";
+    }
   }
 
   function applyEditabilityForDate(dateVal) {
@@ -1361,6 +1373,26 @@ window.DprPage = (() => {
         const d = document.getElementById("dpr-date")?.value || "";
         const editable = applyEditabilityForDate(d);
         resetDprLayout(editable);
+      });
+    }
+
+    const fsBtn = document.getElementById("dpr-fullscreen-toggle");
+    if (fsBtn) {
+      dprFullscreenMode = document.body.classList.contains("dpr-fullscreen-mode");
+      applyDprFullscreenState();
+      fsBtn.addEventListener("click", () => {
+        dprFullscreenMode = !dprFullscreenMode;
+        applyDprFullscreenState();
+      });
+    }
+
+    if (!dprFullscreenKeyHandlerBound) {
+      dprFullscreenKeyHandlerBound = true;
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && dprFullscreenMode) {
+          dprFullscreenMode = false;
+          applyDprFullscreenState();
+        }
       });
     }
 

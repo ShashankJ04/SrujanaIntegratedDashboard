@@ -761,6 +761,20 @@ body {
   background: var(--ti-text-dim);
 }
 
+/* DPR fullscreen mode: maximize usable data area */
+body.dpr-fullscreen-mode .ti-sidebar,
+body.dpr-fullscreen-mode .ti-topbar {
+  display: none !important;
+}
+
+body.dpr-fullscreen-mode .ti-main {
+  height: 100vh;
+}
+
+body.dpr-fullscreen-mode .ti-content {
+  padding: 8px;
+}
+
 /* Section transition */
 .ti-section-enter {
   animation: sectionFadeIn var(--ti-speed-slow) var(--ti-ease);

@@ -12,7 +12,7 @@ import re
 from flask import Blueprint, jsonify, request
 
 from .auth import api_login_required
-from .rbac import require_access
+from .rbac import require_any_access
 from .db import fetch_all
 
 rm_correction_bp = Blueprint("rm_correction_bp", __name__, url_prefix="/api/rm-correction")
@@ -28,7 +28,7 @@ def _auth():
 # ── GET / — stock adjustment candidates ─────────────────────────────────
 
 @rm_correction_bp.route("/", methods=["GET"])
-@require_access("rm_correction")
+@require_any_access(["rm_correction", "rm_variance"])
 def list_entries():
     start_date_param = (request.args.get("startDate") or "").strip()
     is_valid = bool(re.match(r"^\d{4}-\d{2}-\d{2}$", start_date_param))
@@ -131,7 +131,7 @@ def list_entries():
 # ── GET /batch/<batch> — production details for a specific batch ────────
 
 @rm_correction_bp.route("/batch/<batch>", methods=["GET"])
-@require_access("rm_correction")
+@require_any_access(["rm_correction", "rm_variance"])
 def batch_details(batch):
     batch = (batch or "").strip()
     if not batch:

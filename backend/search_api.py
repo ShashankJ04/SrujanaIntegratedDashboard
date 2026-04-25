@@ -5,9 +5,11 @@ Executes cross-database queries to find Components, Tags, Orders, and Maintenanc
 
 from __future__ import annotations
 from typing import Any, List, Dict
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from .auth import api_login_required
 from .db import fetch_all, wh_fetch_all
+from . import rbac as rbac_store
+from . import reports_store
 
 search_bp = Blueprint("search", __name__, url_prefix="/api/search")
 
@@ -18,45 +20,134 @@ def _auth():
 @search_bp.route("/global", methods=["GET"])
 def global_search():
     q = request.args.get("q", "").strip()
-    if not q or len(q) < 2:
+    if not q:
         return jsonify([])
+    q_like = f"%{q}%"
+    q_lc = q.lower()
 
-    results = []
+    user = g.get("current_user") or {}
+    perms = rbac_store.get_effective_permissions(
+        user.get("userId", 0),
+        user.get("login", ""),
+        user.get("userId") == 43,
+    )
+    access = set(perms.get("access", []))
+
+    can_production = "production" in access
+    can_inventory = "rept" in access
+    can_reports = "rept" in access
+    can_dpr = "rept" in access
+
+    results: List[Dict[str, Any]] = []
+    seen = set()
+
+    def add_result(item: Dict[str, Any]) -> None:
+        key = (str(item.get("type", "")), str(item.get("id", "")))
+        if key in seen:
+            return
+        seen.add(key)
+        results.append(item)
     
     # 1. Search ERP Components
-    comps = fetch_all("""
-        SELECT CO_PARTNO as id, CO_PARTNAME as label, 'Part' as type, '/app?section=production' as link
-        FROM components 
-        WHERE CO_PARTNO LIKE %s OR CO_PARTNAME LIKE %s
-        LIMIT 10
-    """, (f"%{q}%", f"%{q}%"))
-    for r in comps: results.append(r)
+    if can_production:
+        comps = fetch_all("""
+            SELECT CO_PARTNO as id, CO_PARTNAME as label, 'Part' as type, '/app?section=production' as link
+            FROM components
+            WHERE CO_PARTNO LIKE %s OR CO_PARTNAME LIKE %s
+            LIMIT 10
+        """, (q_like, q_like))
+        for r in comps:
+            add_result(r)
 
     # 2. Search Warehouse Tags
-    tags = wh_fetch_all("""
-        SELECT tag_id as id, CONCAT(item_code, ' (', status, ')') as label, 'Tag' as type, '/app' as link
-        FROM inventory_grn_item_tag
-        WHERE tag_id LIKE %s OR item_code LIKE %s
-        LIMIT 10
-    """, (f"%{q}%", f"%{q}%"))
-    for r in tags: results.append(r)
+    if can_inventory:
+        tags = wh_fetch_all("""
+            SELECT tag_id as id, CONCAT(item_code, ' (', status, ')') as label, 'Tag' as type, '/app?section=inventory' as link
+            FROM inventory_grn_item_tag
+            WHERE tag_id LIKE %s OR item_code LIKE %s
+            LIMIT 10
+        """, (q_like, q_like))
+        for r in tags:
+            add_result(r)
 
-    # 3. Search Machines
-    machines = fetch_all("""
-        SELECT MCM_Id as id, MCM_Name as label, 'Machine' as type, CONCAT('/portal/machine/', MCM_Id) as link
-        FROM machinemaster
-        WHERE MCM_Name LIKE %s
-        LIMIT 10
-    """, (f"%{q}%",))
-    for r in machines: results.append(r)
+    # 3. Search Sales Orders
+    if can_production:
+        sos = fetch_all("""
+            SELECT SO_NO as id, CONCAT('SO: ', SO_NO, ' for ', PART_NO) as label, 'Order' as type, '/app?section=production' as link
+            FROM sales_order
+            WHERE SO_NO LIKE %s OR PART_NO LIKE %s
+            LIMIT 10
+        """, (q_like, q_like))
+        for r in sos:
+            add_result(r)
 
-    # 4. Search Sales Orders
-    sos = fetch_all("""
-        SELECT SO_NO as id, CONCAT('SO: ', SO_NO, ' for ', PART_NO) as label, 'Order' as type, '/app?section=production' as link
-        FROM sales_order
-        WHERE SO_NO LIKE %s OR PART_NO LIKE %s
-        LIMIT 10
-    """, (f"%{q}%", f"%{q}%"))
-    for r in sos: results.append(r)
+    # 4. Search report definitions (opens exact report in Reports section)
+    if can_reports:
+        reports = reports_store.get_reports()
+        for r in reports:
+            rid = str(r.get("id", "")).strip()
+            name = str(r.get("name", "")).strip()
+            if not rid or not name:
+                continue
+            if q_lc not in name.lower():
+                continue
+            add_result(
+                {
+                    "id": rid,
+                    "label": name,
+                    "type": "Report",
+                    "link": f"/app?section=reports&report={rid}",
+                }
+            )
+
+    # 5. Search DPR machine/part records
+    if can_dpr:
+        dpr_machines = fetch_all(
+            """
+            SELECT DISTINCT machine_id AS id, CONCAT('Machine: ', machine_id) AS label
+            FROM dpr_daily_review
+            WHERE machine_id LIKE %s
+            ORDER BY machine_id
+            LIMIT 10
+            """,
+            (q_like,),
+        )
+        for r in dpr_machines:
+            add_result(
+                {
+                    "id": r.get("id"),
+                    "label": r.get("label"),
+                    "type": "DPR Machine",
+                    "link": "/app?section=dpr",
+                }
+            )
+
+        dpr_parts = fetch_all(
+            """
+            SELECT DISTINCT part_no AS id, CONCAT('DPR Part: ', part_no) AS label
+            FROM dpr_daily_review
+            WHERE part_no LIKE %s
+            ORDER BY part_no
+            LIMIT 10
+            """,
+            (q_like,),
+        )
+        for r in dpr_parts:
+            add_result(
+                {
+                    "id": r.get("id"),
+                    "label": r.get("label"),
+                    "type": "DPR Part",
+                    "link": "/app?section=dpr",
+                }
+            )
+
+    # Relevance ordering: prefix matches first, then by label.
+    def _rank(item: Dict[str, Any]) -> Any:
+        label = str(item.get("label", "")).lower()
+        starts = 0 if label.startswith(q_lc) else 1
+        return (starts, label)
+
+    results.sort(key=_rank)
 
     return jsonify(results)

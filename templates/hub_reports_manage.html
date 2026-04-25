@@ -50,10 +50,6 @@
     <div class="ti-modal-body">
       <input type="text" class="ti-input" id="rptReportName" placeholder="Report name" style="width:100%">
       <textarea class="ti-textarea" id="rptReportQuery" placeholder="SELECT ... WHERE col >= {variable}" style="width:100%;min-height:150px;font-family:monospace"></textarea>
-      <label class="ti-flex ti-gap-8" style="align-items:center;font-size:12px;color:var(--ti-text);margin-top:8px">
-        <input type="checkbox" id="rptReportPinned">
-        <span>Pin this report (show in Reports section for users with report access)</span>
-      </label>
       <div class="ti-flex ti-gap-8" style="align-items:center">
         <span style="font-size:12px;color:var(--ti-text-dim)">Variables:</span>
         <span id="rptVarsDisplay" style="font-size:12px">None</span>
@@ -171,7 +167,6 @@
         document.getElementById('rptReportSubmit').textContent = 'Save';
         document.getElementById('rptReportName').value = r.name;
         document.getElementById('rptReportQuery').value = r.queryTemplate;
-        document.getElementById('rptReportPinned').checked = !!r.pinned;
         updateVarsDisplay();
         drilldownDraft = [];
         (r.drilldowns || []).forEach(d => {
@@ -368,7 +363,6 @@
     document.getElementById('rptReportSubmit').textContent = 'Create';
     document.getElementById('rptReportName').value = '';
     document.getElementById('rptReportQuery').value = '';
-    document.getElementById('rptReportPinned').checked = false;
     document.getElementById('rptVarsDisplay').textContent = 'None';
     drilldownDraft = [];
     renderDrilldownRules();
@@ -388,14 +382,13 @@
   document.getElementById('rptReportSubmit').addEventListener('click', async () => {
     const name = document.getElementById('rptReportName').value.trim();
     const query = document.getElementById('rptReportQuery').value.trim();
-    const pinned = document.getElementById('rptReportPinned').checked;
     const drilldowns = buildDrilldownsPayload();
     if (!name || !query) return;
     try {
       if (editingReportId) {
-        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, pinned, drilldowns });
+        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, drilldowns });
       } else {
-        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, pinned, drilldowns });
+        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, drilldowns });
         closeModal('rptReportModal');
         if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
         goToReportViewer(r.id);

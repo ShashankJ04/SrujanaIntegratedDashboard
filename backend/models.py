@@ -1292,8 +1292,34 @@ def get_dpr_machine_options() -> List[Dict[str, Any]]:
 
 
 def get_hub_pulse_feed() -> List[Dict[str, Any]]:
-    """Short ops ticker for the Hub top bar — ERP only (production + DPR), no warehouse DB."""
+    """Short ops ticker for the Hub top bar across core transactional tables."""
+
+    def _table_columns(table: str) -> set:
+        rows = fetch_all(
+            """
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+            """,
+            (table,),
+        )
+        return {str(r.get("COLUMN_NAME") or "").strip() for r in rows}
+
+    def _pick(cols: set, candidates: List[str]) -> Optional[str]:
+        low_map = {str(c).lower(): c for c in cols}
+        for c in candidates:
+            hit = low_map.get(str(c).lower())
+            if hit:
+                return hit
+        return None
+
+    def _qid(col: str) -> str:
+        return f"`{col}`"
+
     pulse: List[Dict[str, Any]] = []
+    enriched_done: set = set()
+
+    # 1) Production details (explicit, rich event)
     try:
         prods = fetch_all(
             """
@@ -1302,7 +1328,7 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
             INNER JOIN components_tool ct ON pd.PD_TOOLID = ct.CT_ID
             INNER JOIN components co ON ct.CT_COMPID = co.CO_ID
             ORDER BY pd.PD_DATE DESC
-            LIMIT 6
+            LIMIT 5
             """
         )
         for p in prods:
@@ -1314,13 +1340,194 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
             pn = str(p.get("part_no") or "").strip() or "—"
             pulse.append(
                 {
-                    "id": f"p-{pn}",
-                    "text": f"Produced {qn} of {pn}",
+                    "id": f"prod-{pn}-{p.get('date')}",
+                    "text": f"Production: {qn} nos of {pn}",
                     "time": p.get("date"),
                 }
             )
     except Exception:
         pass
+
+    # 2) Enriched table-specific feeds (as available)
+    try:
+        rows = fetch_all(
+            """
+            SELECT
+                ct.CT_DATE AS event_time,
+                ct.CT_ID AS event_ref,
+                ct.CT_QTY AS event_qty,
+                COALESCE(c.CO_PARTNO, '') AS part_no,
+                COALESCE(c.CO_PARTNAME, '') AS part_name,
+                COALESCE(os.OS_NAME, '') AS stage_name
+            FROM comp_transaction ct
+            LEFT JOIN components c ON c.CO_ID = ct.CT_COMPID
+            LEFT JOIN comp_opstages os ON os.OS_ID = ct.CT_OPSTAGE
+            ORDER BY ct.CT_DATE DESC, ct.CT_ID DESC
+            LIMIT 2
+            """
+        )
+        for idx, r in enumerate(rows):
+            stage = str(r.get("stage_name") or "").strip() or "Stage N/A"
+            part = str(r.get("part_no") or "").strip()
+            part_name = str(r.get("part_name") or "").strip()
+            part_txt = part if part else (part_name if part_name else "Unknown part")
+            pulse.append(
+                {
+                    "id": f"comp_transaction-{r.get('event_ref')}-{idx}",
+                    "text": f"Component movement | {stage} | {part_txt} | Qty {r.get('event_qty')}",
+                    "time": r.get("event_time"),
+                }
+            )
+        if rows:
+            enriched_done.add("comp_transaction")
+    except Exception:
+        pass
+
+    try:
+        rows = fetch_all(
+            """
+            SELECT
+                do.SO_NO AS event_ref,
+                do.STATUS_ID AS status_id,
+                COALESCE(ds.DS_NAME, '') AS status_name,
+                do.DISPATCHED_QTY AS event_qty,
+                do.DISPATCHED_DATE AS event_time
+            FROM dispatch_order do
+            LEFT JOIN dispatch_status ds ON ds.DS_ID = do.STATUS_ID
+            ORDER BY do.DISPATCHED_DATE DESC, do.DISPATCH_ORDER_ID DESC
+            LIMIT 2
+            """
+        )
+        for idx, r in enumerate(rows):
+            status = str(r.get("status_name") or "").strip()
+            if not status:
+                status = f"Status {r.get('status_id')}"
+            pulse.append(
+                {
+                    "id": f"dispatch_order-{r.get('event_ref')}-{idx}",
+                    "text": f"Dispatch order | {r.get('event_ref')} | {status} | Qty {r.get('event_qty')}",
+                    "time": r.get("event_time"),
+                }
+            )
+        if rows:
+            enriched_done.add("dispatch_order")
+    except Exception:
+        pass
+
+    try:
+        rows = fetch_all(
+            """
+            SELECT
+                it.TRANSACTION_DATE AS event_time,
+                it.QTY AS event_qty,
+                it.TRANSACTION_TYPE_ID AS ttype_id
+            FROM inventory_transaction it
+            ORDER BY it.TRANSACTION_DATE DESC
+            LIMIT 2
+            """
+        )
+        for idx, r in enumerate(rows):
+            ttype = str(r.get("ttype_id") or "").strip() or "N/A"
+            pulse.append(
+                {
+                    "id": f"inventory_transaction-{ttype}-{r.get('event_time')}-{idx}",
+                    "text": f"Inventory movement | Type {ttype} | Qty {r.get('event_qty')}",
+                    "time": r.get("event_time"),
+                }
+            )
+        if rows:
+            enriched_done.add("inventory_transaction")
+    except Exception:
+        pass
+
+    try:
+        rows = fetch_all(
+            """
+            SELECT
+                rt.RT_DATE AS event_time,
+                rt.RT_ID AS event_ref,
+                rt.RT_QTY AS event_qty,
+                rt.RT_MOVEMENT AS movement_code,
+                rt.RT_MOVEMENTTYPE AS movement_type_id,
+                COALESCE(rm.ML_DESCRIPTION, '') AS movement_type_name
+            FROM rm_transaction rt
+            LEFT JOIN rm_movements rm ON rm.ML_ID = rt.RT_MOVEMENTTYPE
+            ORDER BY rt.RT_DATE DESC, rt.RT_ID DESC
+            LIMIT 2
+            """
+        )
+        for idx, r in enumerate(rows):
+            mv = str(r.get("movement_code") or "").strip().upper()
+            mv_txt = "Inward" if mv == "I" else ("Outward" if mv == "O" else (mv or "N/A"))
+            mv_type = str(r.get("movement_type_name") or "").strip()
+            if not mv_type:
+                mv_type = f"Type {r.get('movement_type_id')}"
+            pulse.append(
+                {
+                    "id": f"rm_transaction-{r.get('event_ref')}-{idx}",
+                    "text": f"RM movement | {mv_txt} | {mv_type} | Qty {r.get('event_qty')}",
+                    "time": r.get("event_time"),
+                }
+            )
+        if rows:
+            enriched_done.add("rm_transaction")
+    except Exception:
+        pass
+
+    # 3) Generic feed builders for remaining tables
+    generic_specs = [
+        ("comp_transaction", "Component movement", ["CT_Date", "ct_date", "created_at"], ["CT_QTy", "ct_qty", "qty"], ["CT_ID", "ct_id", "CT_CompId", "ct_compid"]),
+        ("dispatch_order", "Dispatch order", ["DO_Date", "dispatch_date", "created_at", "updated_at"], ["DO_QTY", "qty", "order_qty"], ["DO_NO", "dispatch_no", "order_no", "SO_NO", "so_no"]),
+        ("inventory_transaction", "Inventory movement", ["IT_Date", "trans_date", "transaction_date", "created_at", "updated_at"], ["IT_Qty", "qty", "quantity"], ["IT_ID", "it_id", "tag_id", "TAG_ID"]),
+        ("rm_transaction", "RM movement", ["RT_Date", "trans_date", "created_at", "updated_at"], ["RT_Qty", "qty", "quantity"], ["RT_ID", "rt_id", "RT_BatchNo", "rt_batchno"]),
+        ("sales_order", "Sales order", ["SO_DATE", "DLV_DATE", "created_at", "updated_at"], ["QTY", "SO_QTY", "order_qty"], ["SO_NO", "PART_NO"]),
+        ("tool_life", "Tool update", ["updated_at", "TL_updated_at", "created_at"], ["TL_tool_life", "TL_preventive_maintenance_strokes"], ["TL_tool_number", "TL_tool_id"]),
+    ]
+
+    for table, title, date_candidates, qty_candidates, id_candidates in generic_specs:
+        try:
+            if table in enriched_done:
+                continue
+            cols = _table_columns(table)
+            if not cols:
+                continue
+            dcol = _pick(cols, date_candidates)
+            qcol = _pick(cols, qty_candidates)
+            icol = _pick(cols, id_candidates)
+            if not dcol and not icol:
+                continue
+
+            select_bits = [f"{_qid(dcol)} AS event_time"]
+            if dcol:
+                select_bits = [f"{_qid(dcol)} AS event_time"]
+            else:
+                select_bits = ["NULL AS event_time"]
+            if qcol:
+                select_bits.append(f"{_qid(qcol)} AS event_qty")
+            if icol:
+                select_bits.append(f"{_qid(icol)} AS event_ref")
+            order_col = dcol or icol
+            sql = f"SELECT {', '.join(select_bits)} FROM {_qid(table)} ORDER BY {_qid(order_col)} DESC LIMIT 2"
+            rows = fetch_all(sql)
+            for idx, r in enumerate(rows):
+                qty = r.get("event_qty")
+                ref = str(r.get("event_ref") or "").strip()
+                qty_txt = ""
+                if qty is not None and str(qty).strip() != "":
+                    qty_txt = f" | Qty {qty}"
+                ref_txt = f" | {ref}" if ref else ""
+                pulse.append(
+                    {
+                        "id": f"{table}-{ref or 'x'}-{r.get('event_time')}-{idx}",
+                        "text": f"{title}{ref_txt}{qty_txt}",
+                        "time": r.get("event_time"),
+                    }
+                )
+        except Exception:
+            # Keep pulse resilient even when one source schema differs.
+            continue
+
+    # 4) DPR daily snapshot for context
     try:
         today = datetime.now().date().isoformat()
         row = fetch_one(
@@ -1331,7 +1538,7 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
         pulse.append(
             {
                 "id": "dpr-today",
-                "text": f"DPR today: {c} production line(s) logged ({today})",
+                "text": f"DPR today: {c} line(s) updated",
                 "time": today,
             }
         )
@@ -1339,7 +1546,7 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
         pass
 
     pulse.sort(key=lambda x: str(x.get("time") or ""), reverse=True)
-    return pulse[:12]
+    return pulse[:18]
 
 
 def get_dpr_qr_storage_dir() -> Path:

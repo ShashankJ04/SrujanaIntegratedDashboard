@@ -381,8 +381,20 @@
         "partNo"
       ],
       "createdAt": "2026-04-20T08:46:32.513482+00:00",
-      "updatedAt": "2026-04-20T12:34:22.799119+00:00",
-      "pinned": false
+      "updatedAt": "2026-04-24T16:13:29.080207+00:00",
+      "pinned": false,
+      "drilldowns": [
+        {
+          "column": "Part No",
+          "targetReportId": "b2ca4bab-cc7c-4757-b01e-aea978aba232",
+          "variables": {
+            "plantid": {
+              "type": "parentVariable",
+              "value": "partNo"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "f20a0517-2347-4259-9cfa-5e625731bd46",

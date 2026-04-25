@@ -189,6 +189,116 @@ def _normalize_drilldowns_from_input(
     )
 
 
+def _validate_and_normalize_drilldowns_from_input(
+    drilldowns: Any,
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Strict validator for user-supplied drilldowns.
+
+    Rules:
+    1) A hyperlink column can link to only one child report.
+    2) If child report has multiple inputs, mapping must include ALL child inputs.
+    """
+    if drilldowns is None:
+        return []
+    if not isinstance(drilldowns, list):
+        raise ValueError("drilldowns must be a list")
+
+    src_vars = list(source_report_vars or [])
+    src_var_set = set(src_vars)
+    by_col_target: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    column_target: Dict[str, str] = {}
+
+    for idx, item in enumerate(drilldowns):
+        if not isinstance(item, dict):
+            raise ValueError(f"Invalid drilldown rule at index {idx}")
+
+        column = str(item.get("column", "")).strip()
+        target_id = str(item.get("targetReportId", "")).strip()
+        mapping = item.get("variables")
+
+        if not column:
+            raise ValueError(f"Drilldown rule {idx + 1}: column is required")
+        if not _is_safe_drilldown_column_name(column):
+            raise ValueError(f"Drilldown rule {idx + 1}: invalid column name")
+        if not target_id:
+            raise ValueError(f"Drilldown rule {idx + 1}: targetReportId is required")
+        if not isinstance(mapping, dict) or not mapping:
+            raise ValueError(f"Drilldown rule {idx + 1}: variables mapping is required")
+
+        # A hyperlink column can link to exactly one child report.
+        col_key = column.lower()
+        existing_target = column_target.get(col_key)
+        if existing_target and existing_target != target_id:
+            raise ValueError(
+                f'Drilldown column "{column}" cannot link to multiple child reports'
+            )
+        column_target[col_key] = target_id
+
+        target = report_by_id.get(target_id)
+        if not target:
+            raise ValueError(f"Drilldown rule {idx + 1}: target report not found")
+        target_vars = list(target.get("variables") or [])
+        target_var_set = set(target_vars)
+
+        normalized_map: Dict[str, Dict[str, str]] = {}
+        for child_var, source_spec in mapping.items():
+            t = str(child_var).strip()
+            if not t:
+                raise ValueError(f"Drilldown rule {idx + 1}: child variable is required")
+            if t not in target_var_set:
+                raise ValueError(
+                    f'Drilldown rule {idx + 1}: "{t}" is not an input of child report'
+                )
+            normalized_source = _normalize_source_spec(source_spec, src_vars)
+            if not normalized_source:
+                raise ValueError(
+                    f'Drilldown rule {idx + 1}: invalid source mapping for child input "{t}"'
+                )
+            normalized_map[t] = normalized_source
+
+        # If the child report has multiple inputs, all must be mapped.
+        if len(target_vars) > 1:
+            missing = [v for v in target_vars if v not in normalized_map]
+            if missing:
+                raise ValueError(
+                    f'Drilldown rule {idx + 1}: child report requires all inputs; missing {", ".join(missing)}'
+                )
+
+        # Consolidate duplicate rules for same column+target by merging variable mappings.
+        key = (col_key, target_id)
+        if key not in by_col_target:
+            by_col_target[key] = {
+                "column": column,
+                "targetReportId": target_id,
+                "variables": {},
+            }
+        existing_map = by_col_target[key]["variables"]
+        for k, v in normalized_map.items():
+            existing_map[k] = v
+
+    # Re-check merged mappings after consolidation.
+    out = list(by_col_target.values())
+    for item in out:
+        target = report_by_id.get(str(item.get("targetReportId", "")))
+        if not target:
+            continue
+        target_vars = list(target.get("variables") or [])
+        if len(target_vars) > 1:
+            missing = [v for v in target_vars if v not in item["variables"]]
+            if missing:
+                raise ValueError(
+                    f'Drilldown column "{item["column"]}" mapping is incomplete; missing {", ".join(missing)}'
+                )
+        # Ensure parentVariable mappings still refer to this report's variables.
+        for _, src in item["variables"].items():
+            if src.get("type") == "parentVariable" and src.get("value") not in src_var_set:
+                raise ValueError("Invalid parent variable mapping in drilldown")
+
+    return out
+
+
 def assert_read_only_query(query_template: str) -> None:
     cleaned = query_template.strip().lstrip("(").lower()
     if not cleaned.startswith("select"):
@@ -382,7 +492,7 @@ def create_report(
         if isinstance(r, dict) and isinstance(r.get("id"), str)
     }
     report_vars = _extract_variables(query_template)
-    normalized_drilldowns = _normalize_drilldowns_from_input(
+    normalized_drilldowns = _validate_and_normalize_drilldowns_from_input(
         drilldowns or [],
         report_by_id,
         source_report_vars=report_vars,
@@ -443,7 +553,7 @@ def update_report(
         if isinstance(r, dict) and isinstance(r.get("id"), str)
     }
     report_vars = _extract_variables(query_template)
-    normalized_drilldowns = _normalize_drilldowns_from_input(
+    normalized_drilldowns = _validate_and_normalize_drilldowns_from_input(
         drilldowns or [],
         report_by_id,
         source_report_vars=report_vars,

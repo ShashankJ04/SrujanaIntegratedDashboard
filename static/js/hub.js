@@ -166,7 +166,8 @@ const Hub = (() => {
     if (section === 'production') return ACCESS.has('production');
     if (section === 'dpr') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
-    if (section === 'rm-variance' || section === 'rm-correction') return ACCESS.has('rm_variance');
+    if (section === 'rm-variance') return ACCESS.has('rm_variance');
+    if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
     if (section === 'executive') return ACCESS.has('executive');
     if (section === 'reports') return ACCESS.has('rept');
     if (section === 'reports-manage') return PLUS_ACCESS.has('rept_plus');
@@ -402,6 +403,7 @@ const Hub = (() => {
   async function navigate(section, opts = {}) {
     if (!SECTIONS[section]) section = 'overview';
     if (!canAccessSection(section)) section = getDefaultSection();
+    if (section !== 'dpr') document.body.classList.remove('dpr-fullscreen-mode');
     const skipHistory = opts.skipHistory === true;
 
     let reportId = null;
@@ -637,7 +639,7 @@ const Hub = (() => {
   }
 
   async function filterCmdPal(query) { 
-    if (query.length < 2) {
+    if (query.length < 1) {
       renderCmdPalItems(query);
       return;
     }
@@ -653,9 +655,18 @@ const Hub = (() => {
         return;
       }
       
+      const iconByType = {
+        Part: '🏭',
+        Tag: '📦',
+        Order: '🧾',
+        Report: '📋',
+        'DPR Machine': '🛠️',
+        'DPR Part': '📝',
+      };
+
       container.innerHTML = results.map(i => `
         <div class="ti-cmdpal-item" data-type="${i.type}" data-link="${i.link}">
-          <span class="ti-cmdpal-item-icon">${i.type === 'Part' ? '🏭' : (i.type === 'Tag' ? '📦' : '⚙️')}</span>
+          <span class="ti-cmdpal-item-icon">${iconByType[i.type] || '⚙️'}</span>
           <span class="ti-cmdpal-item-label">${i.label}</span>
           <span class="ti-cmdpal-item-hint">${i.type}</span>
         </div>
@@ -665,7 +676,13 @@ const Hub = (() => {
         el.addEventListener('click', () => {
           if (el.dataset.link.startsWith('/app')) {
             const url = new URL(el.dataset.link, window.location.origin);
-            navigate(url.searchParams.get('section'));
+            const section = url.searchParams.get('section') || 'overview';
+            const reportId = url.searchParams.get('report');
+            if (section === 'reports' && reportId) {
+              navigate('reports', { reportId, forceReload: true });
+            } else {
+              navigate(section);
+            }
           } else {
             window.location.href = el.dataset.link;
           }

@@ -41,7 +41,6 @@ def create_app() -> Flask:
     from .schedule_api import schedule_bp
     from .reports_api import reports_bp
     from .admin_api import admin_bp
-    from .dashboards_auth_api import dash_auth_bp
     from .warehouse_api import warehouse_bp
 
     from .search_api import search_bp
@@ -54,7 +53,6 @@ def create_app() -> Flask:
     app.register_blueprint(schedule_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(admin_bp)
-    app.register_blueprint(dash_auth_bp)
     app.register_blueprint(warehouse_bp, url_prefix="/api/wh")
     app.register_blueprint(search_bp)
 
@@ -159,18 +157,6 @@ def create_app() -> Flask:
             effective_permissions=perms,
         )
 
-    @app.route("/portal/machine/<int:mid>")
-    @login_required
-    def machine_portal(mid: int) -> str:
-        # Context-aware standalone portal for high-fidelity machine status
-        return render_template("hub_portal_machine.html", machine_id=mid)
-
-    @app.route("/api/board_data/<date>")
-    @login_required
-    def legacy_board_data(date: str):
-        # Redirect legacy calls to the new warehouse blueprint
-        return redirect(url_for("warehouse.get_board_data", base_date=date))
-
     @app.route("/app/section/<name>")
     @login_required
     def hub_section(name: str) -> str:
@@ -189,8 +175,8 @@ def create_app() -> Flask:
             "inventory": "rept",
             # Maintenance page is visible when user has any maintenance subsection access
             "rm-variance": "rm_variance",
-            # RM Variance access governs both RM pages in current RBAC UI
-            "rm-correction": "rm_variance",
+            # Backward compatibility: RM Correction can be granted via either key.
+            "rm-correction": "rm_correction",
             "reports": "rept",
             "dpr": "rept",  # View access via reports
             "executive": "executive",
@@ -201,6 +187,9 @@ def create_app() -> Flask:
                 return "Access denied", 403
         elif name == "reports-manage":
             if "rept_plus" not in perms.get("plusAccess", []):
+                return "Access denied", 403
+        elif name == "rm-correction":
+            if not any(k in perms["access"] for k in ("rm_correction", "rm_variance")):
                 return "Access denied", 403
         elif name in key_map and key_map[name] not in perms["access"]:
             return "Access denied", 403
@@ -213,75 +202,6 @@ def create_app() -> Flask:
         if name == "dpr":
             extra["dpr_edit_allowed"] = is_dpr_editor(user)
         return render_template(template_name, **extra)
-
-    # ── Legacy route redirects (keep bookmarks working) ─────────
-
-    @app.route("/dashboard")
-    @login_required
-    def dashboard() -> str:
-        return redirect(url_for("hub"))
-
-    @app.route("/reports")
-    @login_required
-    def reports() -> str:
-        return redirect(url_for("hub") + "?section=inventory")
-
-    @app.route("/dashboards")
-    @login_required
-    def dashboards_landing():
-        return redirect(url_for("hub"))
-
-    @app.route("/dashboards/tools")
-    @login_required
-    def dashboards_tools():
-        return redirect(url_for("hub") + "?section=maintenance")
-
-    @app.route("/dashboards/preventive-maintenance")
-    @login_required
-    def dashboards_pm():
-        return redirect(url_for("hub") + "?section=maintenance")
-
-    @app.route("/dashboards/life-report")
-    @login_required
-    def dashboards_life_report():
-        return redirect(url_for("hub") + "?section=maintenance")
-
-    @app.route("/dashboards/production")
-    @login_required
-    def dashboards_production():
-        return redirect(url_for("hub") + "?section=production")
-
-    @app.route("/dashboards/rm-variance")
-    @login_required
-    def dashboards_rm_variance():
-        return redirect(url_for("hub") + "?section=rm-variance")
-
-    @app.route("/dashboards/reports")
-    @login_required
-    def dashboards_reports():
-        return redirect(url_for("hub") + "?section=reports")
-
-    @app.route("/dashboards/reports/run")
-    @login_required
-    def dashboards_run_report():
-        return redirect(url_for("hub") + "?section=reports")
-
-    @app.route("/dashboards/admin/rbac")
-    @login_required
-    def dashboards_rbac_admin():
-        return redirect(url_for("hub") + "?section=admin")
-
-    # ── Standalone operational pages (full-screen, no sidebar) ──
-
-    @app.route("/board")
-    @login_required
-    def board():
-        return render_template("board.html")
-
-    @app.route("/receiver")
-    @login_required
-    def receiver():
-        return render_template("receiver.html")
 
     @app.route("/machine/<path:token>")
     def machine_dpr_landing(token: str) -> Any:
@@ -317,11 +237,6 @@ def create_app() -> Flask:
         if not path.startswith(base) or not os.path.isfile(path):
             return "Not found", 404
         return send_from_directory(base, safe, mimetype="image/png")
-
-    @app.route("/generator")
-    @login_required
-    def generator():
-        return render_template("generator.html")
 
     return app
 
