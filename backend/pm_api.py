@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from io import BytesIO
 from datetime import datetime
+import threading
+import time
 
 from flask import Blueprint, jsonify, request, send_file, send_from_directory, g, current_app
 
@@ -16,6 +18,13 @@ from .rbac import require_access, require_plus_access, require_any_access
 from . import pm_store
 
 pm_bp = Blueprint("pm_bp", __name__, url_prefix="/api/pm")
+_PM_STATUS_CACHE_LOCK = threading.Lock()
+_PM_STATUS_CACHE = {}
+
+
+def _invalidate_pm_status_cache() -> None:
+    with _PM_STATUS_CACHE_LOCK:
+        _PM_STATUS_CACHE.clear()
 
 
 @pm_bp.before_request
@@ -43,6 +52,14 @@ def pm_status():
 
     threshold = request.args.get("threshold", type=int, default=80)
     mode = request.args.get("mode", "above")
+    cache_seconds = int(current_app.config.get("PM_STATUS_CACHE_SECONDS", 20) or 20)
+    cache_key = (int(threshold), str(mode))
+    now = time.monotonic()
+    if cache_seconds > 0:
+        with _PM_STATUS_CACHE_LOCK:
+            cached = _PM_STATUS_CACHE.get(cache_key)
+            if cached and (now - cached["ts"]) < cache_seconds:
+                return jsonify(cached["data"])
 
     rows = fetch_all(
         """
@@ -133,6 +150,9 @@ def pm_status():
         elif pm_pct >= threshold:
             results.append(entry)
 
+    if cache_seconds > 0:
+        with _PM_STATUS_CACHE_LOCK:
+            _PM_STATUS_CACHE[cache_key] = {"ts": now, "data": list(results)}
     return jsonify(results)
 
 
@@ -160,6 +180,7 @@ def add_entry():
             pm_strokes=data["pmStrokes"],
             next_stroke=data.get("nextStroke"),
         )
+        _invalidate_pm_status_cache()
         return jsonify(entry), 201
     except ValueError as e:
         return jsonify({"message": str(e)}), 400
@@ -173,6 +194,7 @@ def update_entry(tool_id):
     data = request.get_json(force=True)
     try:
         entry = pm_store.update_entry(tool_id, data)
+        _invalidate_pm_status_cache()
         return jsonify(entry)
     except ValueError as e:
         return jsonify({"message": str(e)}), 404
@@ -216,6 +238,7 @@ def confirm_maintenance(tool_id):
 
     try:
         entry = pm_store.confirm_maintenance(tool_id, next_stroke, attachment_name)
+        _invalidate_pm_status_cache()
         return jsonify(entry)
     except ValueError as e:
         return jsonify({"message": str(e)}), 404
@@ -228,6 +251,7 @@ def confirm_maintenance(tool_id):
 def delete_entry(tool_id):
     try:
         pm_store.delete_entry(tool_id)
+        _invalidate_pm_status_cache()
         return jsonify({"ok": True})
     except ValueError as e:
         return jsonify({"message": str(e)}), 404

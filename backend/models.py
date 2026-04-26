@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +26,17 @@ class ColumnMeta:
 
 _CACHED_COLUMNS: Optional[List[ColumnMeta]] = None
 _DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None}
+_PULSE_CACHE_LOCK = threading.Lock()
+_PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
+_PULSE_SCHEMA_CACHE: Dict[str, Tuple[float, set]] = {}
+_REPORT_SUMMARY_CACHE_LOCK = threading.Lock()
+_REPORT_SUMMARY_CACHE: Dict[str, Any] = {"ts": 0.0, "summary": None}
+
+
+def _clear_reports_summary_cache() -> None:
+    with _REPORT_SUMMARY_CACHE_LOCK:
+        _REPORT_SUMMARY_CACHE["ts"] = 0.0
+        _REPORT_SUMMARY_CACHE["summary"] = None
 
 
 def _get_table_name() -> str:
@@ -574,6 +587,8 @@ def refresh_dashboard_base_cache() -> Dict[str, Any]:
         "rows": rows,
         "last_refreshed": datetime.utcnow(),
     }
+    # Keep summary KPI consistent after explicit base cache refresh.
+    _clear_reports_summary_cache()
     return _DASHBOARD_BASE_CACHE
 
 
@@ -905,6 +920,7 @@ def upsert_buffer_config(part_no: str, buffer_qty: float, updated_by: Optional[s
             updated_by = VALUES(updated_by)
     """
     execute(sql, (part_no, buffer_qty, updated_by))
+    _clear_reports_summary_cache()
 
 
 def _get_enriched_rows_for_reports() -> List[Dict[str, Any]]:
@@ -946,6 +962,17 @@ def _get_enriched_rows_for_reports() -> List[Dict[str, Any]]:
 
 def get_report_summary() -> Dict[str, Any]:
     """High-level KPI metrics for the reports page using balance production qty."""
+    cache_seconds = int(
+        current_app.config.get("REPORTS_SUMMARY_CACHE_SECONDS", 30) or 30
+    )
+    now = time.monotonic()
+    if cache_seconds > 0:
+        with _REPORT_SUMMARY_CACHE_LOCK:
+            cached_ts = float(_REPORT_SUMMARY_CACHE.get("ts") or 0.0)
+            cached_summary = _REPORT_SUMMARY_CACHE.get("summary")
+            if cached_summary is not None and (now - cached_ts) < cache_seconds:
+                return dict(cached_summary)
+
     rows = _get_enriched_rows_for_reports()
 
     total_so = 0.0
@@ -975,7 +1002,7 @@ def get_report_summary() -> Dict[str, Any]:
             parts_completed += 1
         total_parts += 1
 
-    return {
+    summary = {
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
         "total_production_requirement": total_production_requirement,
@@ -985,6 +1012,11 @@ def get_report_summary() -> Dict[str, Any]:
         "parts_completed": parts_completed,
         "parts_pending": parts_pending,
     }
+    if cache_seconds > 0:
+        with _REPORT_SUMMARY_CACHE_LOCK:
+            _REPORT_SUMMARY_CACHE["ts"] = now
+            _REPORT_SUMMARY_CACHE["summary"] = dict(summary)
+    return summary
 
 
 def get_production_vs_requirement(limit: int = 15) -> Dict[str, Any]:
@@ -1294,7 +1326,22 @@ def get_dpr_machine_options() -> List[Dict[str, Any]]:
 def get_hub_pulse_feed() -> List[Dict[str, Any]]:
     """Short ops ticker for the Hub top bar across core transactional tables."""
 
+    cache_seconds = int(current_app.config.get("HUB_PULSE_CACHE_SECONDS", 20) or 20)
+    now = time.monotonic()
+    if cache_seconds > 0:
+        with _PULSE_CACHE_LOCK:
+            cached_ts = float(_PULSE_CACHE.get("ts") or 0.0)
+            if (now - cached_ts) < cache_seconds:
+                return list(_PULSE_CACHE.get("items") or [])
+
     def _table_columns(table: str) -> set:
+        schema_cache_seconds = int(
+            current_app.config.get("HUB_SCHEMA_CACHE_SECONDS", 600) or 600
+        )
+        if schema_cache_seconds > 0:
+            cached = _PULSE_SCHEMA_CACHE.get(table)
+            if cached and (now - cached[0]) < schema_cache_seconds:
+                return set(cached[1])
         rows = fetch_all(
             """
             SELECT COLUMN_NAME
@@ -1303,7 +1350,10 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
             """,
             (table,),
         )
-        return {str(r.get("COLUMN_NAME") or "").strip() for r in rows}
+        cols = {str(r.get("COLUMN_NAME") or "").strip() for r in rows}
+        if schema_cache_seconds > 0:
+            _PULSE_SCHEMA_CACHE[table] = (now, cols)
+        return cols
 
     def _pick(cols: set, candidates: List[str]) -> Optional[str]:
         low_map = {str(c).lower(): c for c in cols}
@@ -1546,7 +1596,12 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
         pass
 
     pulse.sort(key=lambda x: str(x.get("time") or ""), reverse=True)
-    return pulse[:18]
+    items = pulse[:18]
+    if cache_seconds > 0:
+        with _PULSE_CACHE_LOCK:
+            _PULSE_CACHE["ts"] = now
+            _PULSE_CACHE["items"] = list(items)
+    return items
 
 
 def get_dpr_qr_storage_dir() -> Path:

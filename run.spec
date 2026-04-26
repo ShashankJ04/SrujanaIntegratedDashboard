@@ -23,7 +23,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='BharatDashboard',
+    name='Operations',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

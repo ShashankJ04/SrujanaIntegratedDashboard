@@ -1,4 +1,22 @@
 import os
+from pathlib import Path
+import sys
+
+
+def _runtime_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
+    configured = str(raw_path or "").strip()
+    target = configured if configured else fallback_relative
+    expanded = os.path.expandvars(os.path.expanduser(target))
+    p = Path(expanded)
+    if p.is_absolute():
+        return str(p)
+    return str((_runtime_base_dir() / p).resolve())
 
 
 class Config:
@@ -21,6 +39,23 @@ class Config:
     # Pagination defaults
     DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25"))
     MAX_PAGE_SIZE = int(os.environ.get("MAX_PAGE_SIZE", "200"))
+    HUB_PULSE_CACHE_SECONDS = int(os.environ.get("HUB_PULSE_CACHE_SECONDS", "20"))
+    HUB_SCHEMA_CACHE_SECONDS = int(os.environ.get("HUB_SCHEMA_CACHE_SECONDS", "600"))
+    REPORTS_SUMMARY_CACHE_SECONDS = int(
+        os.environ.get("REPORTS_SUMMARY_CACHE_SECONDS", "30")
+    )
+    PM_STATUS_CACHE_SECONDS = int(os.environ.get("PM_STATUS_CACHE_SECONDS", "20"))
+
+    # Runtime paths for packaged deployments
+    APP_DATA_DIR = resolve_runtime_path(os.environ.get("APP_DATA_DIR", ""), "data")
+    RBAC_STORE_FILE = resolve_runtime_path(
+        os.environ.get("RBAC_STORE_FILE", ""),
+        os.path.join(APP_DATA_DIR, "rbac.json"),
+    )
+    REPORTS_STORE_FILE = resolve_runtime_path(
+        os.environ.get("REPORTS_STORE_FILE", ""),
+        os.path.join(APP_DATA_DIR, "reports.json"),
+    )
 
 
 def get_config():

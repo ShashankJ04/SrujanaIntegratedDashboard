@@ -15,6 +15,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from flask import g, jsonify
 
+from .config import Config
+
 # ── Dashboard keys ──────────────────────────────────────────────────────
 
 DASHBOARD_KEYS: List[str] = [
@@ -34,6 +36,9 @@ DASHBOARD_KEYS: List[str] = [
 # ── Store path ──────────────────────────────────────────────────────────
 
 def _store_path() -> str:
+    configured = str(getattr(Config, "RBAC_STORE_FILE", "") or "").strip()
+    if configured:
+        return configured
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "data", "rbac.json")
 

@@ -1,7 +1,27 @@
 import os
+import sys
+from pathlib import Path
 
 # DPR version polling (Hub `dpr.js` + shop-floor `machine_dpr.js`) — keep in sync with JS fallbacks.
 DPR_POLL_INTERVAL_MS_DEFAULT = 500_000
+
+
+def _runtime_base_dir() -> Path:
+    """Project root in dev, executable directory when packaged."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
+    """Resolve file/dir paths from env for both source and packaged runs."""
+    configured = str(raw_path or "").strip()
+    target = configured if configured else fallback_relative
+    expanded = os.path.expandvars(os.path.expanduser(target))
+    p = Path(expanded)
+    if p.is_absolute():
+        return str(p)
+    return str((_runtime_base_dir() / p).resolve())
 
 
 class Config:
@@ -58,13 +78,35 @@ class Config:
     DPR_POLL_INTERVAL_MS = int(
         os.environ.get("DPR_POLL_INTERVAL_MS", str(DPR_POLL_INTERVAL_MS_DEFAULT))
     )
+    HUB_PULSE_CACHE_SECONDS = int(os.environ.get("HUB_PULSE_CACHE_SECONDS", "20"))
+    HUB_SCHEMA_CACHE_SECONDS = int(os.environ.get("HUB_SCHEMA_CACHE_SECONDS", "600"))
+    REPORTS_SUMMARY_CACHE_SECONDS = int(
+        os.environ.get("REPORTS_SUMMARY_CACHE_SECONDS", "30")
+    )
+    PM_STATUS_CACHE_SECONDS = int(os.environ.get("PM_STATUS_CACHE_SECONDS", "20"))
 
     # Shop-floor DPR machine QR (encoded URL uses this host; if empty, LAN IP is detected)
     MACHINE_IP = os.environ.get("MACHINE_IP", "").strip()
     APP_PORT = int(os.environ.get("APP_PORT", os.environ.get("PORT", "5000")))
 
-    # PM attachments directory (relative to project root)
-    PM_ATTACHMENTS_DIR = os.environ.get("PM_ATTACHMENTS_DIR", "pm-attachments")
+    # Operational data and runtime directories (safe for exe packaging)
+    APP_DATA_DIR = resolve_runtime_path(os.environ.get("APP_DATA_DIR", ""), "data")
+    RBAC_STORE_FILE = resolve_runtime_path(
+        os.environ.get("RBAC_STORE_FILE", ""),
+        os.path.join(APP_DATA_DIR, "rbac.json"),
+    )
+    REPORTS_STORE_FILE = resolve_runtime_path(
+        os.environ.get("REPORTS_STORE_FILE", ""),
+        os.path.join(APP_DATA_DIR, "reports.json"),
+    )
+    DPR_QR_STORAGE_DIR = resolve_runtime_path(
+        os.environ.get("DPR_QR_STORAGE_DIR", ""),
+        "qr-codes",
+    )
+    PM_ATTACHMENTS_DIR = resolve_runtime_path(
+        os.environ.get("PM_ATTACHMENTS_DIR", ""),
+        "pm-attachments",
+    )
 
 
 

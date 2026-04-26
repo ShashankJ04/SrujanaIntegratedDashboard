@@ -39,7 +39,18 @@ def main() -> None:
     from waitress import serve
 
     threads = int(os.environ.get("WAITRESS_THREADS", "4"))
-    serve(app, host=host, port=port, threads=threads)
+    connection_limit = int(os.environ.get("WAITRESS_CONNECTION_LIMIT", "200"))
+    channel_timeout = int(os.environ.get("WAITRESS_CHANNEL_TIMEOUT", "120"))
+    cleanup_interval = int(os.environ.get("WAITRESS_CLEANUP_INTERVAL", "30"))
+    serve(
+        app,
+        host=host,
+        port=port,
+        threads=threads,
+        connection_limit=connection_limit,
+        channel_timeout=channel_timeout,
+        cleanup_interval=cleanup_interval,
+    )
 
 
 if __name__ == "__main__":

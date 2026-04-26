@@ -12,8 +12,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from .config import Config
+
 
 def _store_path() -> str:
+    configured = str(getattr(Config, "REPORTS_STORE_FILE", "") or "").strip()
+    if configured:
+        return configured
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "data", "reports.json")
 

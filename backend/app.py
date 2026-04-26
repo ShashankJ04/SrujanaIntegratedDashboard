@@ -229,7 +229,9 @@ def create_app() -> Flask:
     @app.route("/qr-codes/<path:filename>")
     def qr_codes_file(filename: str) -> Any:
         """Pre-generated DPR PNGs (`qr-codes/`). Public GET so hub modal and printed paths work without extra auth."""
-        base = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), "qr-codes"))
+        from .models import get_dpr_qr_storage_dir
+
+        base = str(get_dpr_qr_storage_dir())
         safe = secure_filename(os.path.basename(filename))
         if not safe:
             return "Not found", 404
