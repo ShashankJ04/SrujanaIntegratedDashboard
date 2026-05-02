@@ -6,7 +6,7 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -421,20 +421,10 @@ def _get_dashboard_base_sql() -> str:
             FROM (
                 SELECT CH_CompId AS csCompId, CH_Qty AS csQty
                 FROM comp_stockhistory
-                WHERE CH_PlantId = 2
-                  AND CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
+                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
                   AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
                   AND CH_StageId = 6
-                UNION ALL
-                SELECT CT_CompId, SUM(
-                    CASE WHEN CT_Movement = 'I' THEN CT_QTy ELSE -CT_QTy END
-                ) AS csQty
-                FROM comp_transaction
-                WHERE CT_PlantId = 2
-                  AND CT_Date between  date_sub(DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day), Interval 1 MONTH)
-        and last_day(date_add(current_date,Interval -1 Month))
-                  AND (CT_Nextstage = 6 OR CT_Opstage = 6)
-                GROUP BY CT_CompId
+                  AND CH_WEEK = 0
             ) a
             JOIN components c ON a.csCompId = c.CO_id
             WHERE c.CO_ACTIVEYN = 'Y'
@@ -445,20 +435,10 @@ def _get_dashboard_base_sql() -> str:
             FROM (
                 SELECT CH_CompId AS csCompId, CH_Qty AS csQty
                 FROM comp_stockhistory
-                WHERE CH_PlantId = 2
-                  AND CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
+                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
                   AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
                   AND CH_StageId != 6
-                UNION ALL
-                SELECT CT_CompId, SUM(
-                    CASE WHEN CT_Movement = 'I' THEN CT_QTy ELSE -CT_QTy END
-                ) AS csQty
-                FROM comp_transaction
-                WHERE CT_PlantId = 2
-                  AND CT_Date between  date_sub(DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day), Interval 1 MONTH)
-        and last_day(date_add(current_date,Interval -1 Month))
-                  AND (CT_Nextstage != 6 OR CT_Opstage != 6)
-                GROUP BY CT_CompId
+                  AND CH_WEEK = 0
             ) a
             JOIN components c ON a.csCompId = c.CO_id
             WHERE c.CO_ACTIVEYN = 'Y'
@@ -812,6 +792,7 @@ def get_dashboard_rows_with_buffer(
     global_search: Optional[str],
     sort_by: Optional[str],
     sort_dir: Optional[str],
+    row_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return dashboard rows enriched with buffer and RM derived columns.
 
@@ -846,6 +827,13 @@ def get_dashboard_rows_with_buffer(
         ]
     else:
         enriched_rows = list(enriched_all)
+
+    if (row_filter or "").strip().lower() == "pending":
+        enriched_rows = [
+            r
+            for r in enriched_rows
+            if float(r.get("balance_production_qty") or 0) > 0
+        ]
 
     # Apply sorting on enriched rows
     if sort_by:
@@ -1002,6 +990,40 @@ def get_report_summary() -> Dict[str, Any]:
             parts_completed += 1
         total_parts += 1
 
+    dispatch_qty_mtd = 0.0
+    dispatch_invoice_count_mtd = 0
+    try:
+        today = date.today()
+        month_start = today.replace(day=1)
+        if month_start.month == 12:
+            next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+        else:
+            next_month_start = month_start.replace(month=month_start.month + 1)
+        month_end = next_month_start - timedelta(days=1)
+        dispatch_row = fetch_one(
+            """
+            SELECT
+                COALESCE(SUM(SD_LOTSIZE), 0) AS dispatched_qty_mtd,
+                COUNT(DISTINCT COALESCE(NULLIF(TRIM(SD_INVOICE), ''), SD_ID)) AS dispatch_invoice_count_mtd
+            FROM scheduled_customerdispatch
+            INNER JOIN scheduled_customer ON SD_CSID = CS_Id
+            INNER JOIN customer ON CU_Id = CS_CUSTID
+            INNER JOIN schedule_details ON SC_Id = CS_SCID
+            INNER JOIN components ON CO_Id = SC_COMPID
+            INNER JOIN dispatch_status ON DS_Id = SD_Status
+            WHERE SD_Status = 7
+              AND CS_Date BETWEEN %s AND %s
+            """,
+            (month_start.isoformat(), month_end.isoformat()),
+        )
+        if dispatch_row:
+            dispatch_qty_mtd = float(dispatch_row.get("dispatched_qty_mtd") or 0.0)
+            dispatch_invoice_count_mtd = int(
+                dispatch_row.get("dispatch_invoice_count_mtd") or 0
+            )
+    except Exception:
+        pass
+
     summary = {
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
@@ -1011,6 +1033,8 @@ def get_report_summary() -> Dict[str, Any]:
         "parts_total": total_parts,
         "parts_completed": parts_completed,
         "parts_pending": parts_pending,
+        "dispatch_qty_mtd": dispatch_qty_mtd,
+        "dispatch_invoice_count_mtd": dispatch_invoice_count_mtd,
     }
     if cache_seconds > 0:
         with _REPORT_SUMMARY_CACHE_LOCK:

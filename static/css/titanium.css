@@ -653,6 +653,11 @@ body {
   gap: 16px;
 }
 
+/* Temporary: hide Hub top bar controls (Pulse/search/theme/user). */
+.ti-topbar {
+  display: none !important;
+}
+
 .ti-topbar-left {
   display: flex;
   align-items: center;
@@ -2534,6 +2539,34 @@ body.dpr-fullscreen-mode .ti-content {
   color: var(--ti-emerald);
 }
 
+a.ti-monitor-metric-stack-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--ti-radius-sm, 6px);
+  margin: -4px;
+  padding: 4px;
+  transition: background 0.15s ease;
+}
+
+a.ti-monitor-metric-stack-link:hover {
+  background: color-mix(in srgb, var(--ti-red) 12%, transparent);
+}
+
+a.ti-monitor-metric-stack-link:focus-visible {
+  outline: 2px solid var(--ti-blue);
+  outline-offset: 2px;
+}
+
+.ti-inventory-pending-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ti-amber, #d97706);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ti-amber, #d97706) 14%, transparent);
+}
+
 .ti-monitor-progress {
   height: 8px;
   background: var(--ti-surface-3);
@@ -4094,6 +4127,77 @@ body.dpr-col-resizing {
   flex-shrink: 0;
 }
 
+/* Report management: single scroll region (report list / groups), not the whole page */
+.ti-content:has(.ti-reports-manage) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Report management (REPT+): scroll long report lists inside the hub column */
+.ti-reports-manage.ti-hub-section-fill {
+  gap: 0;
+}
+
+.ti-reports-manage__intro {
+  flex-shrink: 0;
+}
+
+.ti-reports-manage__columns {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.ti-reports-manage__sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-reports-manage__groups-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-reports-manage__groups-card .ti-card-header {
+  flex-shrink: 0;
+}
+
+.ti-reports-manage__group-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ti-reports-manage__panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ti-reports-manage__panel-head {
+  flex-shrink: 0;
+}
+
+.ti-reports-manage__report-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* ══════════════════════════════════════════════════════════════
    REPORTS RUNNER — Compact toolbar, maximized grid
    ══════════════════════════════════════════════════════════════ */
@@ -4114,6 +4218,23 @@ body.dpr-col-resizing {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* Reports runner readability + requested left alignment for all cells. */
+.reports-runner .sg-table td,
+.reports-runner .sg-table th,
+.reports-runner .sg-table .sg-r,
+.reports-runner .sg-table .sg-c {
+  text-align: left !important;
+}
+
+.reports-runner .sg-table td {
+  color: var(--ti-text-bright);
+  font-weight: 500;
+}
+
+[data-theme="light"] .reports-runner .sg-table td {
+  color: #0f172a;
 }
 
 /* ── Toolbar: single compact strip ─────────────────────────── */

@@ -122,6 +122,7 @@ def dashboard_rows() -> Any:
     search = request.args.get("search") or None
     sort_by = request.args.get("sortBy") or None
     sort_dir = request.args.get("sortDir") or None
+    row_filter = request.args.get("rowFilter") or None
 
     result = get_dashboard_rows_with_buffer(
         page=page,
@@ -129,6 +130,7 @@ def dashboard_rows() -> Any:
         global_search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        row_filter=row_filter,
     )
     return jsonify(result)
 
@@ -186,10 +188,12 @@ def export() -> Any:
     search = request.args.get("search") or ""
     sort_by = request.args.get("sortBy") or ""
     sort_dir = request.args.get("sortDir") or ""
+    row_filter = request.args.get("rowFilter") or None
     return generate_excel_response(
         global_search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        row_filter=row_filter,
     )
 
 

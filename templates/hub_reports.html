@@ -149,6 +149,15 @@
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function formatIndianValue(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const n = Number(value);
+    if (!Number.isNaN(n) && String(value).trim() !== '') {
+      return n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+    return String(value);
+  }
+
   function reportVarControlHtml(v) {
     const id = 'runVar_' + v;
     const u = v.toUpperCase();
@@ -215,17 +224,24 @@
   function withDrilldownFormatters(report, resultRows, columns) {
     return columns.map(c => {
       const drilldowns = getDrilldownsForColumn(report, c);
-      if (!drilldowns.length) return { key: c, label: c, align: resultRows.some(r => r[c] != null && !isNaN(Number(r[c]))) ? 'right' : 'left', sortable: true };
-      const isNum = resultRows.some(r => r[c] != null && !isNaN(Number(r[c])));
+      if (!drilldowns.length) {
+        return {
+          key: c,
+          label: c,
+          align: 'left',
+          sortable: true,
+          format: (value) => escapeHtml(formatIndianValue(value)),
+        };
+      }
       return {
         key: c,
         label: c,
-        align: isNum ? 'right' : 'left',
+        align: 'left',
         sortable: true,
         format: (value, row) => {
           if (value === null || value === undefined || value === '') return '';
           const payload = encodeURIComponent(JSON.stringify({ col: c, row }));
-          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(String(value))}</button>`;
+          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(formatIndianValue(value))}</button>`;
         },
       };
     });

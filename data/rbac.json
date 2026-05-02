@@ -7,16 +7,16 @@
         "tools",
         "preventive_maintenance",
         "life_report",
-        "rm_variance",
         "executive",
         "rept"
       ],
       "plusAccess": [
         "preventive_maintenance",
+        "edit_dpr",
         "edit_buffer",
         "rept_plus"
       ],
-      "updatedAt": "2026-04-24T16:30:06.586077+00:00"
+      "updatedAt": "2026-04-26T15:03:56.642480+00:00"
     },
     {
       "userId": 2,
@@ -52,7 +52,16 @@
       ],
       "plusAccess": [],
       "updatedAt": "2026-04-20T12:36:37.767352+00:00"
+    },
+    {
+      "userId": 233,
+      "login": "Bharath",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-04-26T15:08:33.361740+00:00"
     }
   ],
-  "updatedAt": "2026-04-24T16:30:06.586077+00:00"
+  "updatedAt": "2026-04-26T15:08:33.361740+00:00"
 }

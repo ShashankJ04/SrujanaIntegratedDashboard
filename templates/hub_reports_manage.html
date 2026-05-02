@@ -1,7 +1,7 @@
 <!-- Report management (REPT+) — groups + definitions; Run opens viewer section -->
 
-<section class="ti-section ti-hub-section-fill" data-section="reports-manage" id="section-reports-manage">
-  <div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px">
+<section class="ti-section ti-hub-section-fill ti-reports-manage" data-section="reports-manage" id="section-reports-manage">
+  <div class="ti-reports-manage__intro ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px">
     <div>
       <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright)">Report management</h2>
       <p style="font-size:12px;color:var(--ti-text-dim)">Create groups and report definitions. Use <strong>Run</strong> to open the report in the Reports viewer.</p>
@@ -9,26 +9,26 @@
   </div>
   <div id="rptError" style="display:none"></div>
 
-  <div style="display:flex;gap:16px;min-height:400px">
-    <div style="width:240px;flex-shrink:0">
-      <div class="ti-card">
+  <div class="ti-reports-manage__columns">
+    <div class="ti-reports-manage__sidebar">
+      <div class="ti-card ti-reports-manage__groups-card">
         <div class="ti-card-header">
           <span class="ti-card-title">📁 Groups</span>
           <button class="ti-btn ti-btn-primary ti-btn-xs" id="rptAddGroupBtn">+ Add</button>
         </div>
-        <div class="ti-card-body ti-card-body--flush" id="rptGroupList" style="max-height:400px;overflow-y:auto;padding:4px"></div>
+        <div class="ti-card-body ti-card-body--flush ti-reports-manage__group-scroll" id="rptGroupList" style="padding:4px"></div>
       </div>
     </div>
 
-    <div style="flex:1;min-width:0">
-      <div class="ti-flex-between ti-mb-16">
+    <div class="ti-reports-manage__panel">
+      <div class="ti-reports-manage__panel-head ti-flex-between ti-mb-16">
         <div>
           <h3 style="font-size:15px;font-weight:700;color:var(--ti-text-bright)" id="rptGroupTitle">Select a group</h3>
           <p style="font-size:11px;color:var(--ti-text-dim)">Edit SQL templates and variables. Run sends you to the Reports viewer.</p>
         </div>
         <button class="ti-btn ti-btn-primary ti-btn-sm" id="rptAddReportBtn" disabled>+ New Report</button>
       </div>
-      <div id="rptReportList"></div>
+      <div id="rptReportList" class="ti-reports-manage__report-list"></div>
     </div>
   </div>
 </section>

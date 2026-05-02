@@ -7,7 +7,7 @@ const Hub = (() => {
   // ── State ──────────────────────────────────────────────────────────────
   let currentSection = 'overview';
   let sidebarCollapsed = localStorage.getItem('hub_sidebar') === 'collapsed';
-  let currentTheme = localStorage.getItem('hub_theme') || 'dark';
+  let currentTheme = localStorage.getItem('hub_theme') || 'light';
 
   // ── API Client ─────────────────────────────────────────────────────────
   const api = {
@@ -451,7 +451,10 @@ const Hub = (() => {
       if (section === 'reports' && reportId) {
         url += '&report=' + encodeURIComponent(reportId);
       }
-      const st = { section, reportId: section === 'reports' ? (reportId || undefined) : undefined };
+      if (section === 'inventory' && opts.rowFilter) {
+        url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
+      }
+      const st = { section, reportId: section === 'reports' ? (reportId || undefined) : undefined, rowFilter: section === 'inventory' ? (opts.rowFilter || undefined) : undefined };
       const cur = window.location.pathname + window.location.search;
       if (cur === url) {
         history.replaceState(st, '', url);
@@ -681,7 +684,8 @@ const Hub = (() => {
             if (section === 'reports' && reportId) {
               navigate('reports', { reportId, forceReload: true });
             } else {
-              navigate(section);
+              const rowFilter = url.searchParams.get('rowFilter');
+              navigate(section, { rowFilter: rowFilter || undefined });
             }
           } else {
             window.location.href = el.dataset.link;
@@ -736,12 +740,16 @@ const Hub = (() => {
     initCmdPal();
 
     window.addEventListener('popstate', () => {
-      navigate(getInitialSection(), { skipHistory: true });
+      const params = new URLSearchParams(window.location.search);
+      const rowFilter = params.get('rowFilter');
+      navigate(getInitialSection(), { skipHistory: true, rowFilter: rowFilter || undefined });
     });
 
     // Initial section
+    const initParams = new URLSearchParams(window.location.search);
+    const initRowFilter = initParams.get('rowFilter');
     const section = getInitialSection();
-    navigate(section);
+    navigate(section, { rowFilter: initRowFilter || undefined });
 
     // Pulse bar update
     updatePulse();

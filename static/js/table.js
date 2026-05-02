@@ -3,7 +3,7 @@ const DataTable = (() => {
     if (value === null || value === undefined) return "";
     const n = Number(value);
     if (Number.isNaN(n)) return String(value);
-    return n.toLocaleString(undefined, {
+    return n.toLocaleString("en-IN", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     });
@@ -468,7 +468,7 @@ const DataTable = (() => {
     }
     const start = (page - 1) * pageSize + 1;
     const end = Math.min(totalCount, page * pageSize);
-    elements.summary.textContent = `Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${totalCount.toLocaleString()} rows`;
+    elements.summary.textContent = `Showing ${start.toLocaleString("en-IN")}–${end.toLocaleString("en-IN")} of ${totalCount.toLocaleString("en-IN")} rows`;
   }
 
   return {

@@ -249,7 +249,7 @@ window.DprPage = (() => {
 
   function wireSnapshotEditors() {
     const root = document.getElementById("section-dpr");
-    const canEdit = !!window.DPR_EDIT_ALLOWED;
+    const canEdit = !!window.DPR_EDIT_ALLOWED && !dprFullscreenMode;
     const readOperators = document.getElementById("dpr-operators-read");
     const editOperators = document.getElementById("dpr-operators-edit");
     const bottleneckReadWrap = document.getElementById("dpr-board-bottleneck-read-wrap");
@@ -268,7 +268,7 @@ window.DprPage = (() => {
     if (root && !root.dataset.snapshotWired) {
       root.dataset.snapshotWired = "1";
       const scheduleSave = () => {
-        if (!window.DPR_EDIT_ALLOWED) return;
+        if (!window.DPR_EDIT_ALLOWED || dprFullscreenMode) return;
         if (snapshotSaveTimer) clearTimeout(snapshotSaveTimer);
         snapshotSaveTimer = setTimeout(saveSnapshot, 300);
       };
@@ -282,7 +282,7 @@ window.DprPage = (() => {
   }
 
   async function saveSnapshot() {
-    if (!window.DPR_EDIT_ALLOWED) return;
+    if (!window.DPR_EDIT_ALLOWED || dprFullscreenMode) return;
     const reviewDate = document.getElementById("dpr-date")?.value || "";
     if (!reviewDate) return;
     const opPlanned = document.getElementById("dpr-op-planned-input")?.value ?? "";
@@ -398,11 +398,13 @@ window.DprPage = (() => {
       btn.setAttribute("aria-pressed", dprFullscreenMode ? "true" : "false");
       btn.title = dprFullscreenMode ? "Exit DPR fullscreen view" : "Toggle DPR fullscreen view";
     }
+    wireSnapshotEditors();
   }
 
   function applyEditabilityForDate(dateVal) {
     const addBtn = document.getElementById("dpr-add-row");
-    const canEdit = !!window.DPR_EDIT_ALLOWED && !isBackdated(dateVal);
+    const canEdit =
+      !!window.DPR_EDIT_ALLOWED && !isBackdated(dateVal) && !dprFullscreenMode;
     if (addBtn) addBtn.style.display = canEdit ? "" : "none";
     const th = document.getElementById("dpr-th-actions");
     if (th) th.classList.toggle("dpr-layout-hidden", !canEdit);
@@ -1383,6 +1385,7 @@ window.DprPage = (() => {
       fsBtn.addEventListener("click", () => {
         dprFullscreenMode = !dprFullscreenMode;
         applyDprFullscreenState();
+        render();
       });
     }
 
@@ -1392,6 +1395,7 @@ window.DprPage = (() => {
         if (e.key === "Escape" && dprFullscreenMode) {
           dprFullscreenMode = false;
           applyDprFullscreenState();
+          render();
         }
       });
     }

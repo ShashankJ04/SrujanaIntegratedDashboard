@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from flask import Response
 from openpyxl import Workbook
@@ -64,6 +64,7 @@ def generate_excel_response(
     global_search: str,
     sort_by: str,
     sort_dir: str,
+    row_filter: Optional[str] = None,
 ) -> Response:
     result = get_dashboard_rows_with_buffer(
         page=1,
@@ -71,6 +72,7 @@ def generate_excel_response(
         global_search=global_search or None,
         sort_by=sort_by or None,
         sort_dir=sort_dir or None,
+        row_filter=row_filter,
     )
     rows = result["rows"]
     columns_meta = [ColumnMeta(**c) for c in result["columns"]]

@@ -14,12 +14,12 @@
         <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
       </div>
       <div>
-        <div class="ti-monitor-metric-label">Pending Qty</div>
-        <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+        <div class="ti-monitor-metric-label">In Stock Qty</div>
+        <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
       </div>
       <div>
-        <div class="ti-monitor-metric-label">Produced Qty</div>
-        <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
+        <div class="ti-monitor-metric-label">Balance Production Qty</div>
+        <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
       </div>
     </div>
     <div class="ti-monitor-progress">
@@ -44,14 +44,48 @@
         <div class="ti-monitor-metric-value success" id="mon-parts-completed">–</div>
       </div>
       <div>
-        <div class="ti-monitor-metric-label">Parts Pending</div>
-        <div class="ti-monitor-metric-value alert" id="mon-parts-pending">–</div>
+        <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-parts-pending-link" title="Inventory — pending parts only">
+          <div class="ti-monitor-metric-label">Parts Pending</div>
+          <div class="ti-monitor-metric-value alert" id="mon-parts-pending">–</div>
+        </a>
       </div>
     </div>
     <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-parts-bar" style="width:0%"></div>
     </div>
     <div class="ti-monitor-footnote">Completion is counted per part: balance production quantity ≤ zero</div>
+  </div>
+</div>
+
+<!-- ═══ TOOL KPI ROW ═══ -->
+<div class="ti-kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+  <div class="ti-kpi ti-kpi--amber">
+    <div class="ti-kpi-label">Tool Health</div>
+    <div class="ti-kpi-value" id="kpi-tool-health">–</div>
+    <div class="ti-kpi-sub" id="kpi-tool-sub">Critical tools</div>
+  </div>
+  <div class="ti-kpi ti-kpi--blue">
+    <div class="ti-kpi-label">PM Status</div>
+    <div class="ti-kpi-value" id="kpi-pm-status">–</div>
+    <div class="ti-kpi-sub" id="kpi-pm-sub">Safe / Warning / Critical</div>
+  </div>
+  <div class="ti-kpi ti-kpi--green">
+    <div class="ti-kpi-label">Dispatch (MTD)</div>
+    <div class="ti-monitor-metrics" style="margin-bottom:0;">
+      <div>
+        <div class="ti-monitor-metric-label">Total scheduled</div>
+        <div class="ti-monitor-metric-value" id="kpi-dispatch-total-so">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Dispatched qty</div>
+        <div class="ti-monitor-metric-value success" id="kpi-dispatch-qty">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">% Complete</div>
+        <div class="ti-monitor-metric-value" id="kpi-dispatch-pct">–</div>
+      </div>
+    </div>
+    <div class="ti-kpi-sub" id="kpi-dispatch-sub">Completed invoices</div>
   </div>
 </div>
 
@@ -76,20 +110,6 @@
     <div class="ti-card-body ti-card-body--chart">
       <div id="chart-rm-shortage-by-material"></div>
     </div>
-  </div>
-</div>
-
-<!-- ═══ TOOL KPI ROW ═══ -->
-<div class="ti-kpi-row" style="grid-template-columns: repeat(2, 1fr);">
-  <div class="ti-kpi ti-kpi--amber">
-    <div class="ti-kpi-label">Tool Health</div>
-    <div class="ti-kpi-value" id="kpi-tool-health">–</div>
-    <div class="ti-kpi-sub" id="kpi-tool-sub">Critical tools</div>
-  </div>
-  <div class="ti-kpi ti-kpi--blue">
-    <div class="ti-kpi-label">PM Status</div>
-    <div class="ti-kpi-value" id="kpi-pm-status">–</div>
-    <div class="ti-kpi-sub" id="kpi-pm-sub">Safe / Warning / Critical</div>
   </div>
 </div>
 
@@ -183,12 +203,14 @@
     const summary = await Hub.api.getReportSummary();
 
     const totalSo = Number(summary.total_so_qty) || 0;
-    const totalProduced = Number(summary.total_produced_qty) || 0;
     const pendingQty = Number(summary.total_pending_qty) || 0;
+    const totalProduced = Math.max(0, totalSo - pendingQty);
     const totalRequirement = Number(summary.total_production_requirement) || 0;
     const partsTotal = Number(summary.parts_total) || 0;
     const partsCompleted = Number(summary.parts_completed) || 0;
     const partsPending = Number(summary.parts_pending) || 0;
+    const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;
+    const dispatchInvoiceCountMtd = Number(summary.dispatch_invoice_count_mtd) || 0;
 
     // Quantity monitor
     document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(totalSo);
@@ -206,11 +228,26 @@
     document.getElementById('mon-parts-total').textContent = Hub.utils.formatIndian(partsTotal);
     document.getElementById('mon-parts-completed').textContent = Hub.utils.formatIndian(partsCompleted);
     document.getElementById('mon-parts-pending').textContent = Hub.utils.formatIndian(partsPending);
+
+    const partsPendingLink = document.getElementById('mon-parts-pending-link');
+    if (partsPendingLink && typeof Hub.navigate === 'function') {
+      partsPendingLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('inventory', { rowFilter: 'pending' });
+      });
+    }
     const partsPct = partsTotal > 0 ? Math.round((partsCompleted / partsTotal) * 100) : 0;
     document.getElementById('mon-parts-pct').textContent = partsPct + '%';
     const partsBar = document.getElementById('mon-parts-bar');
     partsBar.style.width = Math.min(100, Math.max(0, partsPct)) + '%';
     partsBar.style.setProperty('--monitor-hue', Math.round((partsPct / 100) * 120));
+
+    // Dispatch KPI: total scheduled = same as Total SO Qty; dispatched MTD; % = dispatched / total SO
+    document.getElementById('kpi-dispatch-total-so').textContent = Hub.utils.formatIndian(totalSo);
+    document.getElementById('kpi-dispatch-qty').textContent = Hub.utils.formatIndian(dispatchQtyMtd);
+    const dispatchPct = totalSo > 0 ? Math.round((dispatchQtyMtd / totalSo) * 100) : 0;
+    document.getElementById('kpi-dispatch-pct').textContent = dispatchPct + '%';
+    document.getElementById('kpi-dispatch-sub').textContent = `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`;
   } catch (e) { console.error('Monitor load error:', e); }
 
   // ── Tool health ──

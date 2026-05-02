@@ -554,7 +554,7 @@ const SuperGrid = (() => {
         if (summary) {
           const start = Math.min(filtered, (currentPage - 1) * (pageSize > 0 ? pageSize : filtered) + 1);
           const end = Math.min(filtered, pageSize > 0 ? currentPage * pageSize : filtered);
-          summary.textContent = `${start.toLocaleString()}–${end.toLocaleString()} of ${filtered.toLocaleString()}`;
+          summary.textContent = `${start.toLocaleString('en-IN')}–${end.toLocaleString('en-IN')} of ${filtered.toLocaleString('en-IN')}`;
         }
       }
 

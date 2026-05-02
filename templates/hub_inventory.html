@@ -4,6 +4,7 @@
     <div class="ti-flex ti-gap-12" style="align-items:center">
       <span style="font-size:24px">📦</span>
       <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">Inventory Report</h2>
+      <span id="inventory-pending-hint" class="ti-inventory-pending-hint" hidden>Pending parts only (balance production qty &gt; 0)</span>
       <button id="hard-refresh-btn" type="button" class="ti-btn-icon" title="Hard refresh data" style="font-size:18px">⟳</button>
     </div>
     <div class="ti-flex ti-gap-12" style="align-items:center">
@@ -32,6 +33,19 @@
   let layoutSaveTimer = null;
   const LAYOUT_STORAGE_PREFIX = 'reportLayout:';
 
+  function inventoryRowFilter() {
+    const v = new URLSearchParams(window.location.search).get('rowFilter');
+    return v && String(v).trim() ? String(v).trim() : undefined;
+  }
+
+  function updatePendingHint() {
+    const el = document.getElementById('inventory-pending-hint');
+    if (!el) return;
+    const on = inventoryRowFilter() === 'pending';
+    el.hidden = !on;
+    el.style.display = on ? '' : 'none';
+  }
+
   function init() {
     globalSearchInput = document.getElementById('global-search');
     exportBtn = document.getElementById('export-btn');
@@ -55,6 +69,7 @@
     DataTable.attachGlobalHandlers();
 
     wireControls();
+    updatePendingHint();
     loadInitial();
   }
 
@@ -70,7 +85,8 @@
 
     exportBtn.addEventListener('click', () => {
       const state = DataTable.getState();
-      const url = ApiClient.buildExportUrl({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir });
+      const rf = inventoryRowFilter();
+      const url = ApiClient.buildExportUrl({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, rowFilter: rf });
       const a = document.createElement('a'); a.href = url; a.download = 'table_export.xlsx';
       document.body.appendChild(a); a.click(); a.remove();
     });
@@ -102,7 +118,8 @@
     const c = document.getElementById('table-container');
     if (c) c.classList.add('loading');
     try {
-      const result = await ApiClient.getDashboardRows({ page: state.page, pageSize: state.pageSize, search: state.search, sortBy: state.sortBy, sortDir: state.sortDir });
+      const rf = inventoryRowFilter();
+      const result = await ApiClient.getDashboardRows({ page: state.page, pageSize: state.pageSize, search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, rowFilter: rf });
       DataTable.setExternalState({ columns: result.columns, rows: result.rows, page: result.page, pageSize: result.pageSize, totalCount: result.totalCount, totalPages: Math.max(1, Math.ceil(result.totalCount / result.pageSize || 1)) });
       DataTable.renderTable();
     } catch (err) { console.error(err); if (c) c.innerHTML = '<div class="ti-placeholder">Error loading data.</div>'; }

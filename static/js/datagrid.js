@@ -129,6 +129,8 @@ const DataGrid = (() => {
             } else {
               display = result ?? '—';
             }
+          } else if (raw != null && String(raw).trim() !== '' && !Number.isNaN(Number(raw))) {
+            display = Number(raw).toLocaleString('en-IN', { maximumFractionDigits: 2 });
           } else {
             display = raw != null ? String(raw) : '—';
           }

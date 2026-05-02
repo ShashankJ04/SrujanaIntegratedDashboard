@@ -25,7 +25,7 @@ const HubCharts = (() => {
     };
   }
 
-  function fmtQty(v) { return Number(v || 0).toLocaleString(); }
+  function fmtQty(v) { return Number(v || 0).toLocaleString('en-IN'); }
   function trunc(s, m = 26) { const t = String(s ?? ''); return t.length <= m ? t : t.slice(0, m - 1) + '\u2026'; }
   function el(id) { const e = document.getElementById(id); return e && window.Plotly ? e : null; }
 
