@@ -5853,15 +5853,6 @@ body.sg-resizing {
   color: var(--ti-emerald);
 }
 
-.ti-dc-kpi-inline-sub {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--ti-text-muted);
-  line-height: 1.3;
-  text-align: right;
-  min-width: 0;
-}
-
 /* Dispatch Calendar — KPI: strong weight + high-contrast (avoid pale --ti-text-dim on labels) */
 #section-dispatch-calendar .ti-dc-kpi-inline-title {
   font-size: 11px;
@@ -5880,12 +5871,6 @@ body.sg-resizing {
 #section-dispatch-calendar .ti-dc-kpi-inline-value,
 #section-dispatch-calendar .ti-dc-kpi-inline-value--success {
   font-weight: 800;
-}
-
-#section-dispatch-calendar .ti-dc-kpi-inline-sub {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ti-text);
 }
 
 .ti-dc-toolbar {

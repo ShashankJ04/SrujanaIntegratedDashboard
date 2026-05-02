@@ -660,20 +660,12 @@
       const summary = await window.Hub.api.getReportSummary();
       const totalSo = Number(summary.total_so_qty) || 0;
       const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;
-      const dispatchInvoiceCountMtd = Number(summary.dispatch_invoice_count_mtd) || 0;
       const dispatchPct = totalSo > 0 ? Math.round((dispatchQtyMtd / totalSo) * 100) : 0;
       elTotal.textContent = window.Hub.utils.formatIndian(totalSo);
       const qEl = document.getElementById('dc-kpi-dispatch-qty');
       const pEl = document.getElementById('dc-kpi-dispatch-pct');
-      const subEl = document.getElementById('dc-kpi-dispatch-sub');
       if (qEl) qEl.textContent = window.Hub.utils.formatIndian(dispatchQtyMtd);
       if (pEl) pEl.textContent = `${dispatchPct}%`;
-      if (subEl) {
-        subEl.textContent =
-          dispatchInvoiceCountMtd > 0
-            ? `${window.Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
-            : '';
-      }
     } catch (e) {
       console.error('Dispatch MTD KPI:', e);
     }
