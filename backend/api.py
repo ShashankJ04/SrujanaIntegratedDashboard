@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
-from datetime import date as date_type
+from datetime import date
 from typing import Any, Dict, List
 
 from flask import Blueprint, current_app, g, jsonify, request, url_for
 
 from .auth import api_login_required, is_dpr_editor
+from .dispatch_calendar import build_dispatch_calendar_payload
+from .rbac import require_access
 from .export import generate_excel_response
 from .db import execute, fetch_one
 from .models import (
@@ -69,7 +71,7 @@ def _parse_iso_date(name: str) -> str:
     raw = (request.args.get(name) or "").strip()
     if not raw:
         raise ValueError("missing date")
-    date_type.fromisoformat(raw)
+    date.fromisoformat(raw)
     return raw
 
 
@@ -321,7 +323,7 @@ def dpr_derived() -> Any:
     review_date = (request.args.get("date") or "").strip()
     if review_date:
         try:
-            date_type.fromisoformat(review_date)
+            date.fromisoformat(review_date)
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid date"}), 400
     data = get_dpr_derived_preview(part_no, planned, review_date or None)
@@ -359,7 +361,7 @@ def dpr_rows_save() -> Any:
     payload = request.get_json(silent=True) or {}
     review_date = str(payload.get("reviewDate") or "").strip()
     try:
-        date_type.fromisoformat(review_date)
+        date.fromisoformat(review_date)
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid reviewDate"}), 400
 
@@ -442,7 +444,7 @@ def dpr_snapshot_save() -> Any:
     payload = request.get_json(silent=True) or {}
     review_date = str(payload.get("reviewDate") or "").strip()
     try:
-        date_type.fromisoformat(review_date)
+        date.fromisoformat(review_date)
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid reviewDate"}), 400
 
@@ -501,7 +503,7 @@ def dpr_machine_produced(token: str) -> Any:
     payload = request.get_json(silent=True) or {}
     review_date = str(payload.get("reviewDate") or "").strip()
     try:
-        date_type.fromisoformat(review_date)
+        date.fromisoformat(review_date)
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid reviewDate"}), 400
 
@@ -564,4 +566,22 @@ def dpr_machine_produced(token: str) -> Any:
     rows = list_dpr_rows(review_date)
     saved = next((r for r in rows if r["id"] == row_id), None)
     return jsonify({"row": saved, "ok": True})
+
+
+@api_bp.get("/dispatch-calendar")
+@require_access("rept")
+def api_dispatch_calendar() -> Any:
+    """Monthly Order + stock merge for Dispatch Calendar Hub section."""
+    t = date.today()
+    month = _parse_int("month", t.month)
+    year = _parse_int("year", t.year)
+    if month < 1 or month > 12:
+        month = t.month
+    if year < 1900 or year > 2100:
+        year = t.year
+    try:
+        payload = build_dispatch_calendar_payload(month, year)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    return jsonify(payload)
 

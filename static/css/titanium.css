@@ -36,10 +36,10 @@
   --ti-emerald: #10b981;
   --ti-emerald-glow: rgba(16, 185, 129, 0.25);
   --ti-emerald-soft: rgba(16, 185, 129, 0.12);
-  --ti-amber: #f59e0b;
+  --ti-amber: #fd8700;
   --ti-amber-glow: rgba(245, 158, 11, 0.25);
   --ti-amber-soft: rgba(245, 158, 11, 0.12);
-  --ti-red: #ef4444;
+  --ti-red: #fe0000;
   --ti-red-glow: rgba(239, 68, 68, 0.25);
   --ti-red-soft: rgba(239, 68, 68, 0.12);
 
@@ -325,7 +325,7 @@ body {
   width: 0;
 }
 
-/* Collapsed sidebar: icon-only — hide Reports drill-down entirely (no squashed text) */
+/* Collapsed sidebar: icon-only — hide Reports drill-down (use hover flyout) */
 .ti-sidebar.collapsed #ti-nav-reports-tree {
   display: none !important;
   margin: 0 !important;
@@ -671,6 +671,40 @@ body {
   color: var(--ti-text-bright);
 }
 
+/* Shown only ≤768px — desktop top bar is hidden, so phones need a menu control */
+.ti-mobile-app-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px max(8px, env(safe-area-inset-left, 0px));
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+  padding-right: max(14px, env(safe-area-inset-right, 0px));
+  min-height: 52px;
+  border-bottom: 1px solid var(--ti-border);
+  background: var(--ti-glass);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.ti-mobile-app-bar .ti-section-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .ti-mobile-app-bar {
+    display: flex;
+    position: relative;
+    z-index: 101;
+  }
+}
+
 .ti-topbar-right {
   display: flex;
   align-items: center;
@@ -768,7 +802,8 @@ body {
 
 /* DPR fullscreen mode: maximize usable data area */
 body.dpr-fullscreen-mode .ti-sidebar,
-body.dpr-fullscreen-mode .ti-topbar {
+body.dpr-fullscreen-mode .ti-topbar,
+body.dpr-fullscreen-mode .ti-mobile-app-bar {
   display: none !important;
 }
 
@@ -870,6 +905,10 @@ body.dpr-fullscreen-mode .ti-content {
   margin-bottom: 24px;
 }
 
+.ti-kpi .ti-monitor-metrics {
+  margin-bottom: 0;
+}
+
 .ti-kpi {
   background: var(--ti-glass);
   backdrop-filter: blur(10px);
@@ -918,6 +957,11 @@ body.dpr-fullscreen-mode .ti-content {
 .ti-kpi--red::before {
   background: var(--ti-red);
   box-shadow: 0 0 12px var(--ti-red-glow);
+}
+
+.ti-kpi--green::before {
+  background: var(--ti-emerald);
+  box-shadow: 0 0 12px var(--ti-emerald-glow);
 }
 
 .ti-kpi-label {
@@ -1924,6 +1968,10 @@ body.dpr-fullscreen-mode .ti-content {
   display: none !important;
 }
 
+.ti-hub-section-fill > .ti-tabs--maint {
+  flex-shrink: 0;
+}
+
 .ti-tabs--maint .ti-filter-btn {
   padding: 5px 10px;
   font-size: 11px;
@@ -2110,6 +2158,17 @@ body.dpr-fullscreen-mode .ti-content {
 
 .ti-column-body.scrollable {
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Tools Today: three columns consume remaining tab height (see #panel-tools with PM/Life panels) */
+#toolsColumns.ti-three-col {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Tool cards */
@@ -2297,7 +2356,7 @@ body.dpr-fullscreen-mode .ti-content {
   }
 
   .ti-kpi-row {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .ti-grid-2,
@@ -2307,6 +2366,14 @@ body.dpr-fullscreen-mode .ti-content {
 
   .ti-three-col {
     flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Stacked tool columns: bounded height so Today / Tomorrow / Maint each scroll */
+  .ti-three-col .ti-column {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: min(46vh, 420px);
   }
 
   .ti-topbar {
@@ -2461,6 +2528,46 @@ body.dpr-fullscreen-mode .ti-content {
   .ti-monitor-row {
     grid-template-columns: 1fr;
   }
+
+  .ti-monitor {
+    padding: 16px 18px 14px;
+  }
+
+  .ti-monitor-top {
+    flex-wrap: wrap;
+    gap: 8px;
+    row-gap: 4px;
+  }
+
+  .ti-monitor-metrics {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .ti-monitor-metric-value {
+    font-size: clamp(16px, 4.75vw, 20px);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .ti-monitor-metric-label {
+    line-height: 1.25;
+  }
+
+  .ti-kpi-value {
+    font-size: clamp(20px, 6vw, 26px);
+    overflow-wrap: anywhere;
+  }
+
+  .ti-kpi {
+    padding: 16px 18px;
+  }
+
+  .ti-kpi-sub {
+    line-height: 1.35;
+  }
 }
 
 .ti-monitor {
@@ -2508,9 +2615,13 @@ body.dpr-fullscreen-mode .ti-content {
 
 .ti-monitor-metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.ti-monitor-metrics > div {
+  min-width: 0;
 }
 
 .ti-monitor-metric-label {
@@ -3719,12 +3830,47 @@ body.dpr-col-resizing {
     position: fixed;
     z-index: 1000;
     left: -260px;
+    transform: none;
     height: 100vh;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .ti-sidebar.mobile-open {
     left: 0;
+    transform: none;
+  }
+
+  /* Drawer open: always show labels & align rows (collapsed sidebar reused narrow styles off-screen) */
+  .ti-sidebar.mobile-open .ti-nav-label {
+    opacity: 1 !important;
+    width: auto !important;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .ti-sidebar.mobile-open .ti-nav-link {
+    justify-content: flex-start;
+  }
+
+  .ti-sidebar.mobile-open .ti-nav-expandable .ti-nav-row {
+    justify-content: flex-start;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ti-sidebar.mobile-open .ti-nav-expandable .ti-nav-link.ti-nav-link--grow {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .ti-sidebar.mobile-open .ti-nav-expandable .ti-nav-chevron {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
   }
 
   .ti-main {
@@ -3769,6 +3915,21 @@ body.dpr-col-resizing {
     flex-direction: column;
     gap: 4px;
   }
+
+  .ti-card-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .ti-card-header > div:first-child {
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+
+  .ti-card-controls {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 480px) {
@@ -3782,6 +3943,19 @@ body.dpr-col-resizing {
 
   .ti-wh-stats-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .ti-content {
+    padding: 12px;
+  }
+
+  .ti-card-body--chart {
+    min-height: 260px;
+  }
+
+  .ti-monitor-pct {
+    font-size: 13px;
+    padding: 4px 10px;
   }
 }
 
@@ -5153,13 +5327,18 @@ body.dpr-col-resizing {
   font-size: 12px;
 }
 
-/* Maintenance hub: PM / Life tab panels fill remaining height for SuperGrid */
+/* Maintenance hub: tab panels fill remaining height (Tools grid + PM/Life SuperGrid) */
+#panel-tools.ti-tab-panel.active,
 #panel-pm.ti-tab-panel.active,
 #panel-life.ti-tab-panel.active {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+#panel-tools.ti-tab-panel.active {
+  overflow: hidden;
 }
 
 .ti-maint-toolbar {
@@ -5577,4 +5756,668 @@ body.sg-resizing {
 [data-theme="light"] .sg-pagination {
   background: #fff;
   border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* ═══ Dispatch Calendar (section dispatch-calendar) ═══ */
+#section-dispatch-calendar.ti-hub-section-fill {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Inline Dispatch (MTD) KPI — stretches in flex middle slot (flex:1 on parent wrapper) */
+.ti-dc-toolbar-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 8px 16px;
+  border-left: 1px solid var(--ti-border);
+  border-right: 1px solid var(--ti-border);
+  box-sizing: border-box;
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: var(--ti-radius-sm);
+}
+
+[data-theme="light"] .ti-dc-toolbar-kpi {
+  background: rgba(59, 130, 246, 0.07);
+}
+
+.ti-dc-kpi-inline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  column-gap: 16px;
+}
+
+.ti-dc-kpi-inline-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ti-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ti-dc-kpi-inline-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px min(24px, 3vw);
+  align-items: start;
+  min-width: 0;
+  width: 100%;
+}
+
+.ti-dc-kpi-inline-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ti-dc-kpi-inline-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ti-text-dim);
+  line-height: 1.2;
+  hyphens: none;
+}
+
+.ti-dc-kpi-inline-value {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ti-text-bright);
+  line-height: 1.25;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ti-dc-kpi-inline-value--success {
+  color: var(--ti-emerald);
+}
+
+.ti-dc-kpi-inline-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ti-text-muted);
+  line-height: 1.3;
+  text-align: right;
+  min-width: 0;
+}
+
+/* Dispatch Calendar — KPI: strong weight + high-contrast (avoid pale --ti-text-dim on labels) */
+#section-dispatch-calendar .ti-dc-kpi-inline-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ti-text-bright);
+  letter-spacing: 0.05em;
+}
+
+#section-dispatch-calendar .ti-dc-kpi-inline-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--ti-text);
+  letter-spacing: 0.04em;
+}
+
+#section-dispatch-calendar .ti-dc-kpi-inline-value,
+#section-dispatch-calendar .ti-dc-kpi-inline-value--success {
+  font-weight: 800;
+}
+
+#section-dispatch-calendar .ti-dc-kpi-inline-sub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ti-text);
+}
+
+.ti-dc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-shrink: 0;
+}
+
+/* One control row: title + legend | KPI | Days + search — grid prevents column overlap */
+.ti-dc-toolbar--all-in-one {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+/*
+ * Toolbar: flex (not grid) so the KPI reliably grows — grid `1fr` can shrink-wrap and leave dead space.
+ * Left / right = intrinsic width; KPI = flex:1 fills everything between.
+ */
+#section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  gap: 10px 14px;
+}
+
+.ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
+  flex: 1 1 0%;
+  min-width: min(240px, 100%);
+  width: auto;
+  max-width: none;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.ti-dc-toolbar--all-in-one .ti-dc-title-block {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.ti-dc-toolbar--all-in-one .ti-dc-subtitle {
+  margin-top: 2px;
+}
+
+.ti-dc-legend--inline {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--ti-border);
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px 14px;
+  font-size: 12px;
+  color: var(--ti-text-muted);
+  flex-shrink: 0;
+}
+
+.ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+  align-items: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .ti-dc-toolbar--all-in-one {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+    border-left: none;
+    border-right: none;
+    padding: 10px 0;
+    margin: 0;
+    border-top: 1px solid var(--ti-border);
+    border-bottom: 1px solid var(--ti-border);
+    order: 2;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+    order: 1;
+    flex: 1 1 auto;
+  }
+
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+    order: 3;
+    flex: 0 0 auto;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.ti-dc-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ti-dc-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.ti-dc-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ti-text-bright);
+}
+
+.ti-dc-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--ti-text-muted);
+  max-width: 56ch;
+}
+
+.ti-dc-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+}
+
+/* Row count + search aligned with Refresh (same row, before button) */
+.ti-dc-toolbar-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ti-dc-toolbar-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ti-text-muted);
+  white-space: nowrap;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+.ti-dc-toolbar-search {
+  min-width: 220px;
+  max-width: 320px;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+.ti-dc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ti-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ti-input--sm {
+  width: 88px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.ti-dc-legend {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ti-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+  flex-shrink: 0;
+}
+
+.ti-dc-legend--row {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.ti-dc-legend-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+}
+
+.ti-dc-legend-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.ti-dc-week-filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ti-dc-toolbar--all-in-one .ti-dc-week-filter {
+  flex-wrap: nowrap;
+}
+
+.ti-dc-week-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ti-text-dim);
+  margin-right: 4px;
+}
+
+.ti-dc-week-select {
+  min-width: 9.5rem;
+  font-size: 13px;
+}
+
+.ti-dc-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ti-dc-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--ti-border-strong);
+}
+
+.ti-dc-swatch--ok {
+  background: var(--ti-emerald-soft);
+  border-color: var(--ti-emerald);
+}
+
+.ti-dc-swatch--short {
+  background: var(--ti-red-soft);
+  border-color: var(--ti-red);
+}
+/* Same hue as `td.ti-dc-cell--partial` text (dark: #fde047, light: #a16207) */
+.ti-dc-swatch--partial {
+  background: #fde047;
+  border-color: #ca8a04;
+  box-shadow: none;
+}
+
+.ti-dc-legend-hint {
+  color: var(--ti-text-dim);
+}
+
+.ti-dc-legend-hint strong {
+  color: var(--ti-text-muted);
+  font-weight: 600;
+}
+
+.ti-dc-scroll-wrap {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+  border-radius: var(--ti-radius);
+  border: 1px solid var(--ti-border);
+  background: var(--ti-surface);
+}
+
+/* Dispatch Calendar: SuperGrid — scroll only inside .sg-scroll */
+.ti-dc-scroll-wrap.ti-dc-excel-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ti-dc-scroll-wrap.ti-dc-excel-host .sg-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-dc-scroll-wrap.ti-dc-excel-host .sg-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+}
+
+.ti-dc-scroll-wrap.ti-dc-excel-host .sg-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table {
+  font-size: 14px;
+}
+
+/* Single-row SuperGrid headers (default sg-hdr layout); slightly comfortable body text */
+#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td,
+#section-dispatch-calendar .sg-table.ti-dc-sg-table thead th {
+  text-align: left;
+}
+
+#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td {
+  font-size: 14px;
+}
+
+/* Left-align even if a column still has .sg-r from an older build */
+#section-dispatch-calendar .sg-table.ti-dc-sg-table td.sg-r {
+  text-align: left;
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--ok {
+  color: var(--ti-emerald);
+  font-weight: 600;
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--short {
+  color: var(--ti-red);
+  font-weight: 600;
+}
+
+/* Partial — bright yellow (distinct from red "short") */
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--partial {
+  color: #fde047;
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--out {
+  opacity: 0.35;
+  color: var(--ti-text-dim);
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-total-cell {
+  cursor: help;
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table .ti-dc-total-pill {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.ti-dc-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px;
+  color: var(--ti-text-muted);
+  font-size: 14px;
+}
+
+.ti-dc-error {
+  padding: 24px;
+  color: var(--ti-red);
+  font-size: 14px;
+}
+
+.ti-dc-table {
+  font-size: 12px;
+}
+
+.ti-dc-table td.ti-dc-cell--ok {
+  color: var(--ti-emerald);
+  font-weight: 600;
+}
+
+.ti-dc-table td.ti-dc-cell--short {
+  color: var(--ti-red);
+  font-weight: 600;
+}
+
+.ti-dc-table td.ti-dc-cell--partial {
+  color: #fde047;
+  font-weight: 800;
+}
+
+.ti-dc-table td.ti-dc-cell--out,
+.ti-dc-table th.ti-dc-th--out {
+  opacity: 0.35;
+  color: var(--ti-text-dim);
+}
+
+.ti-dc-table td.ti-dc-total {
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+[data-theme="light"] .ti-dc-scroll-wrap {
+  background: #fff;
+}
+
+/* Floating stock tooltip (Total Qty hover) */
+.ti-dc-stock-tip {
+  position: fixed;
+  z-index: 10050;
+  min-width: 260px;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 0;
+  pointer-events: none;
+  border-radius: var(--ti-radius-sm);
+  border: 1px solid var(--ti-border-strong);
+  background: linear-gradient(
+    165deg,
+    var(--ti-surface-3) 0%,
+    var(--ti-surface) 50%,
+    var(--ti-bg-subtle) 100%
+  );
+  box-shadow:
+    var(--ti-shadow-lg),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 12px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  animation: ti-dc-tip-pop 160ms var(--ti-ease) both;
+}
+
+@keyframes ti-dc-tip-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ti-dc-stock-tip-inner {
+  padding: 16px 18px 18px;
+}
+
+.ti-dc-stock-tip-head {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ti-accent);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ti-border-strong);
+}
+
+.ti-dc-stock-tip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ti-dc-stock-tip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ti-dc-stock-tip-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  line-height: 1.3;
+}
+
+.ti-dc-stock-tip-val {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ti-text-bright);
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 12px rgba(59, 130, 246, 0.15);
+}
+
+.ti-dc-day-tip-status {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ti-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  line-height: 1.4;
+}
+
+[data-theme="light"] .ti-dc-stock-tip {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 16px 48px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.04) inset;
+}
+
+[data-theme="light"] .ti-dc-stock-tip-val {
+  color: #0f172a;
+  text-shadow: none;
 }

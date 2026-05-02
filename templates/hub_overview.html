@@ -58,7 +58,7 @@
 </div>
 
 <!-- ═══ TOOL KPI ROW ═══ -->
-<div class="ti-kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+<div class="ti-kpi-row">
   <div class="ti-kpi ti-kpi--amber">
     <div class="ti-kpi-label">Tool Health</div>
     <div class="ti-kpi-value" id="kpi-tool-health">–</div>
@@ -71,7 +71,7 @@
   </div>
   <div class="ti-kpi ti-kpi--green">
     <div class="ti-kpi-label">Dispatch (MTD)</div>
-    <div class="ti-monitor-metrics" style="margin-bottom:0;">
+    <div class="ti-monitor-metrics">
       <div>
         <div class="ti-monitor-metric-label">Total scheduled</div>
         <div class="ti-monitor-metric-value" id="kpi-dispatch-total-so">–</div>
@@ -85,7 +85,7 @@
         <div class="ti-monitor-metric-value" id="kpi-dispatch-pct">–</div>
       </div>
     </div>
-    <div class="ti-kpi-sub" id="kpi-dispatch-sub">Completed invoices</div>
+    <div class="ti-kpi-sub" id="kpi-dispatch-sub"></div>
   </div>
 </div>
 
@@ -247,7 +247,13 @@
     document.getElementById('kpi-dispatch-qty').textContent = Hub.utils.formatIndian(dispatchQtyMtd);
     const dispatchPct = totalSo > 0 ? Math.round((dispatchQtyMtd / totalSo) * 100) : 0;
     document.getElementById('kpi-dispatch-pct').textContent = dispatchPct + '%';
-    document.getElementById('kpi-dispatch-sub').textContent = `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`;
+    const kpiDispatchSub = document.getElementById('kpi-dispatch-sub');
+    if (kpiDispatchSub) {
+      kpiDispatchSub.textContent =
+        dispatchInvoiceCountMtd > 0
+          ? `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
+          : '';
+    }
   } catch (e) { console.error('Monitor load error:', e); }
 
   // ── Tool health ──

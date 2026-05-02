@@ -152,12 +152,16 @@ const Hub = (() => {
     'rm-variance':{ title: 'RM Variance',    icon: '📈' },
     'rm-correction':{ title: 'RM Correction', icon: '✏️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
+    'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
     executive:   { title: 'Executive View',  icon: '🎯' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
     admin:       { title: 'Administration',  icon: '⚙️' },
   };
-  const ACCESS = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
+  const _accessRaw = (window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || [];
+  const ACCESS = new Set(_accessRaw);
+  /* Legacy RBAC stored "reports" — server maps to rept; mirror here if cookie/session still has old shape */
+  if (ACCESS.has('reports')) ACCESS.add('rept');
   const PLUS_ACCESS = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.plusAccess) || []);
 
   function canAccessSection(section) {
@@ -165,6 +169,7 @@ const Hub = (() => {
     if (section === 'admin') return Number(window.CURRENT_USER?.userId || 0) === 43;
     if (section === 'production') return ACCESS.has('production');
     if (section === 'dpr') return ACCESS.has('rept');
+    if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-variance') return ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
@@ -199,7 +204,7 @@ const Hub = (() => {
   }
 
   function highlightReportInTree(reportId) {
-    document.querySelectorAll('.ti-nav-report').forEach(el => {
+    document.querySelectorAll('.ti-nav-report').forEach((el) => {
       el.classList.toggle('ti-nav-report--active', Boolean(reportId && el.dataset.reportId === String(reportId)));
     });
   }
@@ -369,6 +374,9 @@ const Hub = (() => {
     utils.$$('.ti-nav-link[data-section]').forEach(link => {
       link.classList.toggle('active', link.dataset.section === section);
     });
+    if (section !== 'reports') {
+      highlightReportInTree(null);
+    }
   }
 
   async function loadReportsSidebarTree() {
@@ -394,10 +402,16 @@ const Hub = (() => {
       const rid = getReportIdFromLocation();
       highlightReportInTree(rid);
       expandReportGroupForReportId(rid);
+      updateNavActive(currentSection);
       if (typeof window.__hubReportsRefreshPicker === 'function') window.__hubReportsRefreshPicker();
     } catch (err) {
       console.error('Reports nav tree:', err);
     }
+  }
+
+  function setSectionTitle(text) {
+    const t = String(text || '');
+    utils.$$('.ti-section-title').forEach((el) => { el.textContent = t; });
   }
 
   async function navigate(section, opts = {}) {
@@ -438,8 +452,7 @@ const Hub = (() => {
       highlightReportInTree(reportId);
       expandReportGroupForReportId(reportId);
       expandReportsNav(true);
-      const tEl = utils.$('.ti-section-title');
-      if (tEl) tEl.textContent = SECTIONS[section].title;
+      setSectionTitle(SECTIONS[section].title);
       if (window.innerWidth <= 768) closeMobileSidebar();
       return;
     }
@@ -464,8 +477,7 @@ const Hub = (() => {
     }
 
     updateNavActive(section);
-    const titleEl = utils.$('.ti-section-title');
-    if (titleEl) titleEl.textContent = SECTIONS[section].title;
+    setSectionTitle(SECTIONS[section].title);
 
     if (section === 'reports') expandReportsNav(true);
 
@@ -514,12 +526,22 @@ const Hub = (() => {
   }
 
   function closeMobileSidebar() {
-    utils.$('.ti-sidebar')?.classList.remove('mobile-open');
+    const sb = utils.$('.ti-sidebar');
+    if (sb) {
+      sb.classList.remove('mobile-open');
+      if (window.innerWidth > 768 && localStorage.getItem('hub_sidebar') === 'collapsed') {
+        sb.classList.add('collapsed');
+      }
+    }
     utils.$('.ti-mobile-overlay')?.classList.remove('open');
   }
 
   function openMobileSidebar() {
-    utils.$('.ti-sidebar')?.classList.add('mobile-open');
+    const sb = utils.$('.ti-sidebar');
+    if (sb) {
+      sb.classList.add('mobile-open');
+      sb.classList.remove('collapsed');
+    }
     utils.$('.ti-mobile-overlay')?.classList.add('open');
   }
 

@@ -68,6 +68,14 @@
               <span class="ti-nav-label">DPR</span>
             </a>
           </li>
+          {% if has_rept %}
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="dispatch-calendar" href="/app?section=dispatch-calendar">
+              <span class="ti-nav-icon">📅</span>
+              <span class="ti-nav-label">Dispatch Calendar</span>
+            </a>
+          </li>
+          {% endif %}
         </li>
 
         <li class="ti-nav-section">
@@ -135,6 +143,12 @@
 
     <!-- ═══ MAIN ═══ -->
     <div class="ti-main">
+      <!-- Mobile: menu control + section title (desktop top bar is hidden) -->
+      <header class="ti-mobile-app-bar">
+        <button type="button" class="ti-sidebar-mobile-toggle" title="Menu" aria-label="Open navigation menu">☰</button>
+        <h1 class="ti-section-title">Overview</h1>
+      </header>
+
       <!-- Top Bar (temporarily hidden)
       <header class="ti-topbar">
         <div class="ti-topbar-left">
@@ -200,6 +214,7 @@
   <script src="{{ url_for('static', filename='js/table.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dpr.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dispatch_calendar.js') }}"></script>
   <script src="{{ url_for('static', filename='js/executive.js') }}"></script>
 </body>
 </html>

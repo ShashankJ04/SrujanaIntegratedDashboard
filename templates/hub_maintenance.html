@@ -37,7 +37,7 @@
 
   <div id="toolsLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
 
-  <div class="ti-three-col" id="toolsColumns" style="display:none;min-height:500px">
+  <div class="ti-three-col" id="toolsColumns" style="display:none">
     <div class="ti-column">
       <div class="ti-column-header" style="background:var(--ti-blue)">
         <span style="display:flex;align-items:center;gap:8px">
@@ -66,27 +66,27 @@
           <span id="maintCount" style="background:rgba(255,255,255,.26);padding:4px 10px;border-radius:999px;font-size:14px;font-weight:800;line-height:1;min-width:28px;text-align:center">0</span>
         </span>
       </div>
-      <div class="ti-column-body scrollable" id="maintBody" style="max-height:500px;overflow-y:auto"></div>
+      <div class="ti-column-body scrollable" id="maintBody"></div>
     </div>
   </div>
 </div>
 <style>
-  /* Keep Maintenance scrollbar thin and subtle */
-  #maintBody {
+  /* Tool columns: thin scrollbars (all three list regions) */
+  #todayBody, #futureBody, #maintBody {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
   }
-  #maintBody::-webkit-scrollbar {
+  #todayBody::-webkit-scrollbar, #futureBody::-webkit-scrollbar, #maintBody::-webkit-scrollbar {
     width: 5px;
   }
-  #maintBody::-webkit-scrollbar-track {
+  #todayBody::-webkit-scrollbar-track, #futureBody::-webkit-scrollbar-track, #maintBody::-webkit-scrollbar-track {
     background: transparent;
   }
-  #maintBody::-webkit-scrollbar-thumb {
+  #todayBody::-webkit-scrollbar-thumb, #futureBody::-webkit-scrollbar-thumb, #maintBody::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.22);
     border-radius: 10px;
   }
-  #maintBody::-webkit-scrollbar-thumb:hover {
+  #todayBody::-webkit-scrollbar-thumb:hover, #futureBody::-webkit-scrollbar-thumb:hover, #maintBody::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.32);
   }
 </style>

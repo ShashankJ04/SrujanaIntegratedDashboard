@@ -149,8 +149,29 @@
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function formatIndianValue(value) {
+  /**
+   * Identifiers like part numbers are often numeric strings; they must not use Indian grouping.
+   * Matches common report column names (labels + SQL-style keys).
+   */
+  function isPartNumberColumnName(columnKey) {
+    const raw = String(columnKey || '').trim();
+    if (!raw) return false;
+    const key = raw.toLowerCase();
+    const compact = key.replace(/\s+/g, '');
+    const under = key.replace(/\s+/g, '_');
+    if (compact === 'partno' || under === 'part_no' || under === 'co_partno') return true;
+    if (/^(co_)?part_?no$/i.test(under)) return true;
+    if (/\bpart\s*#\b/i.test(key)) return true;
+    if (/\bpart\s+no\.?\b/i.test(key)) return true;
+    if (/\bpart\s+number\b/i.test(key)) return true;
+    return false;
+  }
+
+  function formatIndianValue(value, columnKey) {
     if (value === null || value === undefined || value === '') return '';
+    if (columnKey && isPartNumberColumnName(columnKey)) {
+      return String(value);
+    }
     const n = Number(value);
     if (!Number.isNaN(n) && String(value).trim() !== '') {
       return n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -230,7 +251,7 @@
           label: c,
           align: 'left',
           sortable: true,
-          format: (value) => escapeHtml(formatIndianValue(value)),
+          format: (value) => escapeHtml(formatIndianValue(value, c)),
         };
       }
       return {
@@ -241,7 +262,7 @@
         format: (value, row) => {
           if (value === null || value === undefined || value === '') return '';
           const payload = encodeURIComponent(JSON.stringify({ col: c, row }));
-          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(formatIndianValue(value))}</button>`;
+          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(formatIndianValue(value, c))}</button>`;
         },
       };
     });
