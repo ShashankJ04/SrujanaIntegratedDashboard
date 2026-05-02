@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import calendar
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -74,7 +75,7 @@ def _fg_wip_from_stock_row(stock_row: Dict[str, Any]) -> Tuple[float, float]:
 def _build_stock_index(stock_rows: List[Dict[str, Any]]) -> Dict[str, Tuple[float, float]]:
     out: Dict[str, Tuple[float, float]] = {}
     for sr in stock_rows:
-        key = _normalize_part_key(sr.get(PART_NO_COL))
+        key = _normalize_part_key(_mo_part_no_raw(sr))
         if not key:
             continue
         out[key] = _fg_wip_from_stock_row(sr)
@@ -82,7 +83,7 @@ def _build_stock_index(stock_rows: List[Dict[str, Any]]) -> Dict[str, Tuple[floa
 
 
 def _is_grand_total_row(row: Dict[str, Any]) -> bool:
-    return _normalize_part_key(row.get(PART_NO_COL)) == "grand total"
+    return _normalize_part_key(_mo_part_no_raw(row)) == "grand total"
 
 
 def _day_column_key(day: int) -> str:
@@ -93,11 +94,39 @@ REQUESTED_DATE_COL = "Requested Date"
 DISPATCHED_QTY_COL = "Dispatched Qty(Nos)"
 
 
-def _parse_calendar_day_from_dispatch_row(
-    row: Dict[str, Any], month: int, year: int, days_in_month: int
+def _first_matching_key(row: Dict[str, Any], candidates: Tuple[str, ...]) -> Any:
+    """Resolve a column value when drivers may vary casing/aliases (PyMySQL dict keys)."""
+    for name in candidates:
+        if name in row:
+            return row[name]
+    lower_index = {str(k).lower(): k for k in row.keys()}
+    for name in candidates:
+        lk = name.lower()
+        if lk in lower_index:
+            return row[lower_index[lk]]
+    return None
+
+
+def _mo_part_no_raw(row: Dict[str, Any]) -> Any:
+    """Resolve part number from Monthly Order / stock rows (driver-specific column names)."""
+    return _first_matching_key(
+        row,
+        (
+            PART_NO_COL,
+            "Part No",
+            "part no",
+            "CO_PARTNO",
+            "CO_partNo",
+            "partno",
+            "PARTNO",
+        ),
+    )
+
+
+def _parse_calendar_day_value(
+    raw: Any, month: int, year: int, days_in_month: int
 ) -> Optional[int]:
-    """Return calendar day-of-month (1..days_in_month) for CS_DATE–aligned dispatch row, or None."""
-    raw = row.get(REQUESTED_DATE_COL)
+    """Calendar day-of-month in `month`/`year`, or None (DD-MM-YYYY, ISO, date/datetime)."""
     if raw is None:
         return None
     if isinstance(raw, (date, datetime)):
@@ -108,18 +137,46 @@ def _parse_calendar_day_from_dispatch_row(
             return int(dt.day)
         return None
     text = str(raw).strip()
-    parts = text.replace(".", "-").split("-")
+    if not text:
+        return None
+    # ISO date or datetime prefix (e.g. JSON / str(datetime))
+    iso_m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", text)
+    if iso_m:
+        y, mo, d_d = int(iso_m.group(1)), int(iso_m.group(2)), int(iso_m.group(3))
+        if mo == month and y == year and 1 <= d_d <= days_in_month:
+            return d_d
+        return None
+    # DD-MM-YYYY (report SQL uses DATE_FORMAT … '%d-%m-%Y')
+    norm = text.replace(".", "-").replace("/", "-")
+    parts = norm.split("-")
     if len(parts) != 3:
         return None
     try:
         d_d, d_m, d_y = int(parts[0]), int(parts[1]), int(parts[2])
     except ValueError:
         return None
+    if d_y < 100:
+        d_y += 2000 if d_y < 70 else 1900
     if d_m != month or d_y != year:
         return None
     if 1 <= d_d <= days_in_month:
         return d_d
     return None
+
+
+def _parse_calendar_day_from_dispatch_row(
+    row: Dict[str, Any], month: int, year: int, days_in_month: int
+) -> Optional[int]:
+    """Return calendar day-of-month (1..days_in_month) for CS_DATE–aligned dispatch row, or None."""
+    raw = _first_matching_key(
+        row,
+        (
+            REQUESTED_DATE_COL,
+            "Requested Date",
+            "requested date",
+        ),
+    )
+    return _parse_calendar_day_value(raw, month, year, days_in_month)
 
 
 def _aggregate_dispatch_rows(
@@ -132,16 +189,37 @@ def _aggregate_dispatch_rows(
     part_day: Dict[str, Dict[int, float]] = {}
     day_totals: Dict[int, float] = {}
     for r in rows:
-        pk = _normalize_part_key(r.get(PART_NO_COL))
-        if not pk:
-            continue
         day_i = _parse_calendar_day_from_dispatch_row(r, month, year, days_in_month)
         if day_i is None:
             continue
-        dq = _to_float(r.get(DISPATCHED_QTY_COL))
+        dq = _to_float(
+            _first_matching_key(
+                r,
+                (
+                    DISPATCHED_QTY_COL,
+                    "Dispatched Qty(Nos)",
+                    "SD_LOTSIZE",
+                ),
+            )
+        )
+        # Always credit daily totals — part keys can differ by driver/casing; skipping rows
+        # previously dropped all dispatch qty from Grand Total dayDispatch.
+        day_totals[day_i] = day_totals.get(day_i, 0.0) + dq
+        pk = _normalize_part_key(
+            _first_matching_key(
+                r,
+                (
+                    PART_NO_COL,
+                    "CO_PARTNO",
+                    "CO_partNo",
+                    "co_partno",
+                ),
+            )
+        )
+        if not pk:
+            continue
         part_day.setdefault(pk, {})
         part_day[pk][day_i] = part_day[pk].get(day_i, 0.0) + dq
-        day_totals[day_i] = day_totals.get(day_i, 0.0) + dq
     return part_day, day_totals
 
 
@@ -205,7 +283,7 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
             for d in range(1, days_in_month + 1):
                 grand_scheduled_by_day[d] = _to_float(raw.get(_day_column_key(d)))
             continue
-        pk = _normalize_part_key(raw.get(PART_NO_COL))
+        pk = _normalize_part_key(_mo_part_no_raw(raw))
         if not pk:
             continue
         fg, wip = stock_index.get(pk, (0.0, 0.0))
@@ -235,7 +313,7 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     for raw in mo_rows:
         if _is_grand_total_row(raw):
             continue
-        pk = _normalize_part_key(raw.get(PART_NO_COL))
+        pk = _normalize_part_key(_mo_part_no_raw(raw))
         if not pk:
             continue
         by_day: Dict[str, Dict[str, float]] = {}
@@ -262,7 +340,7 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
             )
             continue
 
-        pk = _normalize_part_key(raw.get(PART_NO_COL))
+        pk = _normalize_part_key(_mo_part_no_raw(raw))
         fg, wip = stock_index.get(pk, (0.0, 0.0))
         remaining = fg + wip
         partial_used = False

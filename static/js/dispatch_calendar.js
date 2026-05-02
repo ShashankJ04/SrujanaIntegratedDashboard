@@ -22,6 +22,52 @@
       .toLowerCase();
   }
 
+  /** Same keys as backend `_mo_part_no_raw` — row dict keys vary by driver/API casing. */
+  function partNoFromRow(row) {
+    if (!row || typeof row !== 'object') return '';
+    const prefer = [
+      'Part No',
+      'part no',
+      'CO_PARTNO',
+      'CO_partNo',
+      'partno',
+      'PARTNO',
+    ];
+    for (let i = 0; i < prefer.length; i++) {
+      const k = prefer[i];
+      if (Object.prototype.hasOwnProperty.call(row, k)) {
+        const v = row[k];
+        if (v != null && v !== '') return normalizePartKey(v);
+      }
+    }
+    const keys = Object.keys(row);
+    for (let j = 0; j < keys.length; j++) {
+      const key = keys[j];
+      if (key === '_dcRowMeta') continue;
+      if (/^part\s*no$/i.test(String(key).trim())) {
+        return normalizePartKey(row[key]);
+      }
+    }
+    return '';
+  }
+
+  function partDayDispatchCell(payload, pk, dayStr) {
+    const mapRoot = payload && payload.partDayDispatch;
+    if (!mapRoot || pk == null || pk === '') return null;
+    let byPart = mapRoot[pk];
+    if (!byPart) {
+      const keys = Object.keys(mapRoot);
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i].toLowerCase() === String(pk).toLowerCase()) {
+          byPart = mapRoot[keys[i]];
+          break;
+        }
+      }
+    }
+    if (!byPart) return null;
+    return byPart[dayStr] || null;
+  }
+
   /** Grand Total row day cells: color by aggregate dispatched vs Grand Total scheduled for that day */
   function grandTotalDayDispatchClass(dayNum, payload) {
     const dd = payload.dayDispatch;
@@ -36,8 +82,7 @@
   }
 
   function buildDayDispatchTipHtml(pk, dayStr, payload) {
-    const map = payload.partDayDispatch && payload.partDayDispatch[pk];
-    const cell = map && map[dayStr];
+    const cell = partDayDispatchCell(payload, pk, dayStr);
     const scheduled = cell ? toNum(cell.scheduledQty) : 0;
     const dispatched = cell ? toNum(cell.dispatched) : 0;
     const eps = 1e-9;
@@ -291,7 +336,7 @@
               '</span>'
             );
           }
-          const pk = normalizePartKey(row['Part No']);
+          const pk = partNoFromRow(row);
           if (!pk) return text;
           return (
             '<span class="ti-dc-day-cell" data-dc-part="' +
@@ -326,7 +371,7 @@
             '</span>'
           );
         };
-      } else if (name === 'Part No') {
+      } else if (name && /^part\s*no$/i.test(String(name).trim())) {
         col.width = 220;
         col.format = (raw) => escapeHtml(String(raw ?? ''));
       } else {
