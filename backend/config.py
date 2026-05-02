@@ -99,6 +99,9 @@ class Config:
         os.environ.get("REPORTS_STORE_FILE", ""),
         os.path.join(APP_DATA_DIR, "reports.json"),
     )
+
+    # Bumped when static assets change so packaged apps avoid stale browser/embedded caches.
+    STATIC_ASSET_VERSION = str(os.environ.get("STATIC_ASSET_VERSION", "2")).strip() or "2"
     DPR_QR_STORAGE_DIR = resolve_runtime_path(
         os.environ.get("DPR_QR_STORAGE_DIR", ""),
         "qr-codes",

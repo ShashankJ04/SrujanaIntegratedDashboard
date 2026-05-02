@@ -28,6 +28,10 @@ def create_app() -> Flask:
     app.config.from_object(config_cls)
     app.secret_key = app.config.get("JWT_SECRET", "Shrujana")
 
+    from .reports_store import seed_reports_store_from_bundle_if_needed
+
+    seed_reports_store_from_bundle_if_needed()
+
     from .api import api_bp
 
     app.register_blueprint(api_bp, url_prefix="/api")

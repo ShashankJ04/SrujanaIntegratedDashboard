@@ -502,6 +502,10 @@ const Hub = (() => {
         oldScript.replaceWith(newScript);
       });
 
+      if (section === 'dispatch-calendar' && typeof window.DispatchCalendarPage?.init === 'function') {
+        window.DispatchCalendarPage.init();
+      }
+
       if (section === 'reports') {
         const rid = getReportIdFromLocation();
         highlightReportInTree(rid);

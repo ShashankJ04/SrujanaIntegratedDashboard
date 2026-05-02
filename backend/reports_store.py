@@ -6,13 +6,19 @@ Port of dashboards/backend/src/db/reportsStore.ts.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import shutil
+import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import Config
+
+logger = logging.getLogger(__name__)
 
 
 def _store_path() -> str:
@@ -21,6 +27,49 @@ def _store_path() -> str:
         return configured
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "data", "reports.json")
+
+
+def seed_reports_store_from_bundle_if_needed() -> None:
+    """PyInstaller: if runtime ``data/reports.json`` (next to exe) is missing or empty, copy from bundle.
+
+    Dispatch Calendar loads report definitions (Monthly Order, Dispatch between dates) by ID from
+    this file. A first-run empty store leaves dispatch tooltips with no aggregated data.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return
+    bundled = Path(meipass) / "data" / "reports.json"
+    if not bundled.is_file():
+        return
+    dest = Path(Config.REPORTS_STORE_FILE)
+    try:
+        need = False
+        if not dest.is_file():
+            need = True
+        else:
+            try:
+                with open(dest, encoding="utf-8") as f:
+                    raw = f.read().strip()
+                if not raw:
+                    need = True
+                else:
+                    data = json.loads(raw)
+                    if len(data.get("reports") or []) == 0:
+                        need = True
+            except (OSError, json.JSONDecodeError):
+                need = True
+        if not need:
+            return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundled, dest)
+        logger.info(
+            "Seeded reports store from bundle to %s (PyInstaller first run or empty store).",
+            dest,
+        )
+    except Exception as e:
+        logger.warning("Could not seed reports.json from bundle: %s", e)
 
 
 def _iso_now() -> str:

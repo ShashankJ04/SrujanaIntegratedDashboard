@@ -6,7 +6,7 @@ a = Analysis(
     ['run.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('templates', 'templates'), ('static', 'static')],
+    datas=[('templates', 'templates'), ('static', 'static'), ('data', 'data')],
     hiddenimports=['dotenv', 'waitress', 'pymysql'],
     hookspath=[],
     hooksconfig={},
