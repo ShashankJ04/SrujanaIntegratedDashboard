@@ -233,14 +233,15 @@
       "id": "a491c9dc-b8a5-4d9c-92f2-073926e837e0",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
       "name": "Dispatch between dates",
-      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  CS_PLANTID AS 'Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  SD_LOTSIZE AS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\nDS_NAME as 'Status'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n AND CS_DATE BETWEEN STR_TO_DATE({fromDate}, '%d-%m-%Y')\nAND STR_TO_DATE({toDate}, '%d-%m-%Y');",
+      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  CS_PLANTID AS 'Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  SD_LOTSIZE AS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\nDS_NAME as 'Status'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n AND CS_DATE BETWEEN {fromDate}\nAND {toDate};",
       "variables": [
         "fromDate",
         "toDate"
       ],
       "createdAt": "2026-03-30T13:26:07.878Z",
-      "updatedAt": "2026-05-02T07:35:48.981411+00:00",
-      "pinned": false
+      "updatedAt": "2026-05-05T12:11:53.647175+00:00",
+      "pinned": false,
+      "drilldowns": []
     },
     {
       "id": "2d02592d-9d51-485b-b006-74625eb2757f",

@@ -6127,6 +6127,25 @@ body.sg-resizing {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ti-dc-legend-item:hover {
+  border-color: var(--ti-border-strong);
+  color: var(--ti-text);
+}
+
+.ti-dc-legend-item.is-active {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--ti-text-bright);
 }
 
 .ti-dc-swatch {
@@ -6147,9 +6166,14 @@ body.sg-resizing {
 }
 /* Same hue as `td.ti-dc-cell--partial` text (dark: #fde047, light: #a16207) */
 .ti-dc-swatch--partial {
-  background: #fde047;
-  border-color: #ca8a04;
+  background: #fb923c;
+  border-color: #c2410c;
   box-shadow: none;
+}
+
+.ti-dc-swatch--dispatched {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: var(--ti-blue);
 }
 
 .ti-dc-legend-hint {
@@ -6226,6 +6250,11 @@ body.sg-resizing {
   font-weight: 600;
 }
 
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--dispatched {
+  color: var(--ti-blue);
+  font-weight: 700;
+}
+
 .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--short {
   color: var(--ti-red);
   font-weight: 600;
@@ -6233,9 +6262,9 @@ body.sg-resizing {
 
 /* Partial — bright yellow (distinct from red "short") */
 .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--partial {
-  color: #fde047;
-  font-weight: 800;
-  text-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
+  color: #fb923c;
+  font-weight: 700;
+  text-shadow: none;
 }
 
 .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--out {
@@ -6251,6 +6280,20 @@ body.sg-resizing {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 3px;
+}
+
+/* Keep Grand Total visible while scrolling and emphasize it */
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table tbody tr.ti-dc-grand-total-row td {
+  position: sticky;
+  top: var(--ti-dc-head-h, 42px);
+  z-index: 46;
+  font-weight: 800;
+  background: #111827 !important;
+}
+
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table tbody tr.ti-dc-grand-total-row td.sg-pinned {
+  z-index: 66;
+  background: #111827 !important;
 }
 
 .ti-dc-loading {
@@ -6394,6 +6437,22 @@ body.sg-resizing {
   line-height: 1.4;
 }
 
+.ti-dc-day-head-tip {
+  max-width: 320px;
+}
+
+.ti-dc-day-head-tip .ti-dc-stock-tip-head {
+  color: #93c5fd;
+}
+
+.ti-dc-day-head-tip-body {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ti-text-bright);
+  line-height: 1.45;
+  font-weight: 600;
+}
+
 [data-theme="light"] .ti-dc-stock-tip {
   background: #fff;
   border-color: rgba(0, 0, 0, 0.1);
@@ -6405,4 +6464,16 @@ body.sg-resizing {
 [data-theme="light"] .ti-dc-stock-tip-val {
   color: #0f172a;
   text-shadow: none;
+}
+
+[data-theme="light"] .ti-dc-day-head-tip .ti-dc-stock-tip-head {
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .ti-dc-day-head-tip-body {
+  color: #0f172a;
+}
+
+[data-theme="light"] .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table tbody tr.ti-dc-grand-total-row td {
+  background: #e5e7eb !important;
 }

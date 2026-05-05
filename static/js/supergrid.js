@@ -241,6 +241,11 @@ const SuperGrid = (() => {
     function _sort() {
       if (!sortKey) return;
       filteredRows.sort((a, b) => {
+        // Optional sticky-top rows (e.g., Grand Total) must remain first across sorting.
+        const aStickyTop = !!(a && a.__sgStickyTop);
+        const bStickyTop = !!(b && b.__sgStickyTop);
+        if (aStickyTop !== bStickyTop) return aStickyTop ? -1 : 1;
+
         let va = a[sortKey], vb = b[sortKey];
         const na = Number(va), nb = Number(vb);
         if (!isNaN(na) && !isNaN(nb) && va !== '' && vb !== '') {
@@ -422,7 +427,9 @@ const SuperGrid = (() => {
       let html = '';
       rows.forEach((row, i) => {
         const clickCls = onRowClick ? ' sg-clickable' : '';
-        html += `<tr data-idx="${i}" class="${clickCls}">`;
+        const stickyTopCls = row && row.__sgStickyTop ? ' sg-sticky-top-row' : '';
+        const stickyTopAttr = row && row.__sgStickyTop ? ' data-sg-sticky-top="1"' : '';
+        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}"${stickyTopAttr}>`;
         cols.forEach(col => {
           const raw = row[col.key];
           let display;
@@ -501,10 +508,11 @@ const SuperGrid = (() => {
 
         allCells.forEach(cell => {
           cell.style.left = `${cumulativeLeft}px`;
+          const stickyTopRow = !!(cell.closest && cell.closest('tr.sg-sticky-top-row'));
           if (cell.tagName === 'TH') {
             cell.style.zIndex = String(120 - idx);
           } else {
-            cell.style.zIndex = String(60 - idx);
+            cell.style.zIndex = String(stickyTopRow ? (180 - idx) : (60 - idx));
           }
         });
 

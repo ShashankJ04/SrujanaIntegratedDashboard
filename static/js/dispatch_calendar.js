@@ -5,8 +5,10 @@
 (function () {
   'use strict';
 
-  const TOTAL_QTY = 'Total Qty';
-  const SG_LAYOUT_KEY = 'dispatch_calendar_v3';
+  const TOTAL_QTY = 'Total Scheduled Qty';
+  const TOTAL_DISPATCHED_QTY = 'Total Dispatched Qty';
+  const DISPATCHED_PCT = 'Dispatched %';
+  const SG_LAYOUT_KEY = 'dispatch_calendar_v4';
 
   let _dcSg = null;
   let _dcTipEl = null;
@@ -15,6 +17,8 @@
   let _dcDayTipHideTimer = null;
   let _lastPayload = null;
   let _dcWeekFilter = 'full';
+  let _dcLegendFilter = '';
+  let _dcVisibleRows = [];
 
   function normalizePartKey(partNo) {
     return String(partNo || '')
@@ -263,6 +267,58 @@
     });
   }
 
+  function rowMatchesLegendFilter(row, meta, payload, legendFilter) {
+    if (!legendFilter) return true;
+    if (!meta) return false;
+    if (meta.isGrandTotal) return true;
+    const dayStatus = meta.dayStatus || {};
+    const targetStatus =
+      legendFilter === 'ok'
+        ? 'full'
+        : legendFilter === 'partial'
+          ? 'partial'
+          : legendFilter === 'short'
+            ? 'short'
+            : legendFilter === 'dispatched'
+              ? 'dispatched'
+              : '';
+    if (!targetStatus) return true;
+    const keys = Object.keys(dayStatus);
+    for (let i = 0; i < keys.length; i++) {
+      const st = dayStatus[keys[i]] && dayStatus[keys[i]].status;
+      if (st === targetStatus) return true;
+    }
+    return false;
+  }
+
+  function syncLegendFilterUi() {
+    const items = document.querySelectorAll('[data-dc-legend-filter]');
+    for (let i = 0; i < items.length; i++) {
+      const el = items[i];
+      const key = el.getAttribute('data-dc-legend-filter') || '';
+      const active = key === _dcLegendFilter;
+      el.classList.toggle('is-active', active);
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+
+  function bindLegendFilter(root) {
+    const items = document.querySelectorAll('[data-dc-legend-filter]');
+    if (!items.length) return;
+    for (let i = 0; i < items.length; i++) {
+      const el = items[i];
+      if (el.dataset.dcLegendBound === '1') continue;
+      el.dataset.dcLegendBound = '1';
+      el.addEventListener('click', () => {
+        const key = el.getAttribute('data-dc-legend-filter') || '';
+        _dcLegendFilter = _dcLegendFilter === key ? '' : key;
+        syncLegendFilterUi();
+        if (_lastPayload && root) renderSuperGrid(root, _lastPayload, _dcWeekFilter);
+      });
+    }
+    syncLegendFilterUi();
+  }
+
   function destroyGrid() {
     if (_dcSg && typeof _dcSg.destroy === 'function') {
       try {
@@ -272,6 +328,59 @@
       }
     }
     _dcSg = null;
+  }
+
+  function decorateGrandTotalRow(root) {
+    if (!root) return;
+    const table = root.querySelector('.sg-table.ti-dc-sg-table');
+    if (!table) return;
+    const headTh = table.querySelector('thead th');
+    if (headTh) {
+      root.style.setProperty('--ti-dc-head-h', `${Math.round(headTh.getBoundingClientRect().height)}px`);
+    }
+    table.querySelectorAll('tbody tr.ti-dc-grand-total-row, tbody tr.sg-sticky-top-row').forEach((tr) => {
+      tr.classList.remove('ti-dc-grand-total-row');
+      tr.classList.remove('sg-sticky-top-row');
+    });
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr[data-sg-sticky-top="1"]'));
+    for (let i = 0; i < bodyRows.length; i++) {
+      const tr = bodyRows[i];
+      tr.classList.add('ti-dc-grand-total-row');
+      tr.classList.add('sg-sticky-top-row');
+      const topPx = getComputedStyle(root).getPropertyValue('--ti-dc-head-h').trim() || '42px';
+      tr.querySelectorAll('td').forEach((td) => {
+        td.style.top = topPx;
+      });
+      break;
+    }
+  }
+
+  function buildDayNonZeroCounts(rows) {
+    const out = {};
+    const dataRows = Array.isArray(rows) ? rows : [];
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      if (!row || (row._dcRowMeta && row._dcRowMeta.isGrandTotal)) continue;
+      const keys = Object.keys(row);
+      for (let k = 0; k < keys.length; k++) {
+        const key = keys[k];
+        const dayNum = parseDayCol(key);
+        if (dayNum === null) continue;
+        if (toNum(row[key]) > 0) {
+          out[String(dayNum)] = (out[String(dayNum)] || 0) + 1;
+        }
+      }
+    }
+    return out;
+  }
+
+  function ensureGridEnhancements(root) {
+    if (!root || root.dataset.dcGridEnhanceBound === '1') return;
+    root.dataset.dcGridEnhanceBound = '1';
+    const observer = new MutationObserver(() => {
+      decorateGrandTotalRow(root);
+    });
+    observer.observe(root, { childList: true, subtree: true });
   }
 
   function setLoading(root, loading) {
@@ -291,6 +400,7 @@
   function buildColumns(payload, weekFilter) {
     const daysInMonth = payload.daysInMonth || 31;
     const names = filterColumnNames(payload.columns || [], payload, weekFilter);
+    const dayNonZeroCounts = buildDayNonZeroCounts(payload.rows || []);
     return names.map((name) => {
       const dayNum = parseDayCol(name);
       const col = {
@@ -315,11 +425,24 @@
             }
             return parts.filter(Boolean).join(' ');
           }
+          /* Part rows: fully dispatched days are blue and excluded from FG/WIP color grading. */
+          const pk = partNoFromRow(row);
+          const eps = 1e-9;
+          if (pk) {
+            const dcell = partDayDispatchCell(payload, pk, String(dayNum));
+            const sched = dcell ? toNum(dcell.scheduledQty) : 0;
+            const disp = dcell ? toNum(dcell.dispatched) : 0;
+            if (sched > eps && disp + eps >= sched) {
+              parts.push('ti-dc-cell--dispatched');
+              return parts.filter(Boolean).join(' ');
+            }
+          }
           const q = toNum(raw);
           if (q !== 0 && meta && meta.dayStatus && meta.dayStatus[String(dayNum)]) {
             const st = meta.dayStatus[String(dayNum)].status;
             if (st === 'full') parts.push('ti-dc-cell--ok');
             else if (st === 'partial') parts.push('ti-dc-cell--partial');
+            else if (st === 'dispatched') parts.push('ti-dc-cell--dispatched');
             else parts.push('ti-dc-cell--short');
           }
           return parts.join(' ');
@@ -328,11 +451,13 @@
           const text = raw != null && raw !== '' ? fmtNum(raw) : '';
           const meta = row._dcRowMeta;
           if (meta && meta.isGrandTotal) {
+            const dayCount = dayNonZeroCounts[String(dayNum)] || 0;
+            const gtLabel = `${text} (${fmtNum(dayCount)})`;
             return (
               '<span class="ti-dc-day-cell ti-dc-day-cell--grand-total" data-dc-grand-total="1" data-dc-day="' +
               String(dayNum) +
               '">' +
-              text +
+              gtLabel +
               '</span>'
             );
           }
@@ -371,6 +496,16 @@
             '</span>'
           );
         };
+      } else if (name === TOTAL_DISPATCHED_QTY) {
+        col.width = 168;
+        col.format = (raw) => (raw != null && raw !== '' ? fmtNum(raw) : '');
+      } else if (name === DISPATCHED_PCT) {
+        col.width = 132;
+        col.format = (raw) => {
+          const n = toNum(raw);
+          if (raw == null || raw === '' || !Number.isFinite(n)) return '';
+          return `${n.toFixed(2)}%`;
+        };
       } else if (name && /^part\s*no$/i.test(String(name).trim())) {
         col.width = 220;
         col.format = (raw) => escapeHtml(String(raw ?? ''));
@@ -401,10 +536,15 @@
     destroyGrid();
     root.innerHTML = '';
 
-    const rows = (payload.rows || []).map((r, i) => ({
+    const allRows = (payload.rows || []).map((r, i) => ({
       ...r,
       _dcRowMeta: (payload.rowMeta || [])[i] || null,
+      __sgStickyTop: Boolean((payload.rowMeta || [])[i] && (payload.rowMeta || [])[i].isGrandTotal),
     }));
+    const rows = allRows.filter((r) =>
+      rowMatchesLegendFilter(r, r._dcRowMeta, payload, _dcLegendFilter)
+    );
+    _dcVisibleRows = rows;
 
     const columns = buildColumns(payload, weekFilter);
 
@@ -431,6 +571,8 @@
       tbl.classList.add('ti-dc-sg-table', 'ti-excel-table', 'ti-excel-table--original');
     }
     root.classList.add('ti-dc-excel-host');
+    ensureGridEnhancements(root);
+    decorateGrandTotalRow(root);
 
     syncSearchAfterGridCreate();
     ensureDayTooltipDelegation(root);
@@ -677,6 +819,7 @@
       const subtitle = document.getElementById('dispatch-calendar-subtitle');
       const refreshBtn = document.getElementById('dispatch-calendar-refresh');
       if (!root) return;
+      bindLegendFilter(root);
 
       ensureStockTooltipDelegation(root);
       ensureDayTooltipDelegation(root);
@@ -701,6 +844,7 @@
         try {
           const [payload] = await Promise.all([fetchPayload(), loadDispatchMtdKpi()]);
           _lastPayload = payload;
+          syncLegendFilterUi();
           updateSubtitle(subtitle, payload);
           setLoading(root, false);
           renderSuperGrid(root, payload, _dcWeekFilter);

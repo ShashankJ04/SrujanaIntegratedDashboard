@@ -505,7 +505,7 @@ def _get_dashboard_base_sql() -> str:
                     ) c
                     JOIN (
                         SELECT ct_compid AS compId, MAX(ct_rmid) AS rmId
-                        FROM components_tool GROUP BY ct_compid
+                        FROM components_tool where CT_ACTIVEYN ='Y' GROUP BY ct_compid
                     ) ct ON c.co_id = ct.compId
                     JOIN materialmaster ON ct.rmId = mm_id
                 ) rmx

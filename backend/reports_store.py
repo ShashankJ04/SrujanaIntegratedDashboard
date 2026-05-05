@@ -30,46 +30,91 @@ def _store_path() -> str:
 
 
 def seed_reports_store_from_bundle_if_needed() -> None:
-    """PyInstaller: if runtime ``data/reports.json`` (next to exe) is missing or empty, copy from bundle.
+    """PyInstaller: sync ``data/reports.json`` next to the exe with bundled definitions.
 
-    Dispatch Calendar loads report definitions (Monthly Order, Dispatch between dates) by ID from
-    this file. A first-run empty store leaves dispatch tooltips with no aggregated data.
+    - Missing or corrupt file → copy full bundle.
+    - Existing file → **merge** any report/group IDs from the bundle that are missing at runtime.
+      A partial ``reports.json`` beside the exe used to skip seeding entirely, so UUID‑keyed
+      reports such as “Dispatch between dates” were absent while other endpoints still worked.
+
+    Dispatch Calendar resolves SQL by report ID from this store; missing definitions yield no
+    dispatch rows and empty ``dayDispatch`` tooltips (KPI MTD uses different queries).
     """
     if not getattr(sys, "frozen", False):
         return
     meipass = getattr(sys, "_MEIPASS", None)
     if not meipass:
         return
-    bundled = Path(meipass) / "data" / "reports.json"
-    if not bundled.is_file():
-        return
-    dest = Path(Config.REPORTS_STORE_FILE)
-    try:
-        need = False
-        if not dest.is_file():
-            need = True
-        else:
-            try:
-                with open(dest, encoding="utf-8") as f:
-                    raw = f.read().strip()
-                if not raw:
-                    need = True
-                else:
-                    data = json.loads(raw)
-                    if len(data.get("reports") or []) == 0:
-                        need = True
-            except (OSError, json.JSONDecodeError):
-                need = True
-        if not need:
-            return
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(bundled, dest)
-        logger.info(
-            "Seeded reports store from bundle to %s (PyInstaller first run or empty store).",
-            dest,
+    bundled_path = Path(meipass) / "data" / "reports.json"
+    if not bundled_path.is_file():
+        logger.warning(
+            "PyInstaller bundle has no data/reports.json — add ('data','data') to run.spec datas."
         )
+        return
+    dest_path = Path(Config.REPORTS_STORE_FILE)
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(bundled_path, encoding="utf-8") as f:
+            bundled = json.load(f)
+
+        if not dest_path.is_file():
+            shutil.copyfile(bundled_path, dest_path)
+            logger.info("Installed reports store from bundle to %s", dest_path)
+            return
+
+        try:
+            with open(dest_path, encoding="utf-8") as f:
+                raw = f.read().strip()
+            dest_data = json.loads(raw) if raw else {"groups": [], "reports": []}
+        except (json.JSONDecodeError, OSError):
+            shutil.copyfile(bundled_path, dest_path)
+            logger.warning("Runtime reports.json was invalid — replaced from bundle (%s).", dest_path)
+            return
+
+        bid_reports = {
+            str(r.get("id")): r
+            for r in (bundled.get("reports") or [])
+            if isinstance(r, dict) and r.get("id")
+        }
+        bid_groups = {
+            str(g.get("id")): g
+            for g in (bundled.get("groups") or [])
+            if isinstance(g, dict) and g.get("id")
+        }
+
+        dest_reports = [r for r in (dest_data.get("reports") or []) if isinstance(r, dict)]
+        dest_groups = [g for g in (dest_data.get("groups") or []) if isinstance(g, dict)]
+        have_r = {str(r.get("id")) for r in dest_reports if r.get("id")}
+        have_g = {str(g.get("id")) for g in dest_groups if g.get("id")}
+
+        added_r = 0
+        for rid, rep in bid_reports.items():
+            if rid not in have_r:
+                dest_reports.append(rep)
+                have_r.add(rid)
+                added_r += 1
+        added_g = 0
+        for gid, grp in bid_groups.items():
+            if gid not in have_g:
+                dest_groups.append(grp)
+                have_g.add(gid)
+                added_g += 1
+
+        if added_r or added_g:
+            out = {"groups": dest_groups, "reports": dest_reports}
+            tmp = dest_path.with_suffix(dest_path.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as wf:
+                json.dump(out, wf, indent=2)
+            os.replace(tmp, dest_path)
+            logger.info(
+                "Merged %d report(s) and %d group(s) from app bundle into %s",
+                added_r,
+                added_g,
+                dest_path,
+            )
     except Exception as e:
-        logger.warning("Could not seed reports.json from bundle: %s", e)
+        logger.warning("Could not sync reports.json from bundle: %s", e)
 
 
 def _iso_now() -> str:

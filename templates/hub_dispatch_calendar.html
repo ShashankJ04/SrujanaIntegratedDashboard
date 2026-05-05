@@ -8,9 +8,10 @@
         <p class="ti-dc-subtitle" id="dispatch-calendar-subtitle">Loading…</p>
       </div>
       <div class="ti-dc-legend ti-dc-legend--inline" aria-label="Coverage legend">
-        <span class="ti-dc-legend-item"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Covered</span>
-        <span class="ti-dc-legend-item"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Partially covered</span>
-        <span class="ti-dc-legend-item"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Shortage</span>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="ok" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Covered</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="partial" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Partially covered</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="short" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Shortage</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="dispatched" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--dispatched"></span> Dispatched</button>
       </div>
     </div>
     <div class="ti-dc-toolbar-kpi" aria-label="Dispatch month to date">
