@@ -32,13 +32,10 @@ def _store_path() -> str:
 def seed_reports_store_from_bundle_if_needed() -> None:
     """PyInstaller: sync ``data/reports.json`` next to the exe with bundled definitions.
 
-    - Missing or corrupt file → copy full bundle.
-    - Existing file → **merge** any report/group IDs from the bundle that are missing at runtime.
-      A partial ``reports.json`` beside the exe used to skip seeding entirely, so UUID‑keyed
-      reports such as “Dispatch between dates” were absent while other endpoints still worked.
-
-    Dispatch Calendar resolves SQL by report ID from this store; missing definitions yield no
-    dispatch rows and empty ``dayDispatch`` tooltips (KPI MTD uses different queries).
+    Behavior for packaged runs:
+    - Missing file -> copy full bundle once.
+    - Invalid/corrupt file -> replace with bundle.
+    - Existing valid file -> leave untouched (no merge rewrite).
     """
     if not getattr(sys, "frozen", False):
         return
@@ -55,9 +52,6 @@ def seed_reports_store_from_bundle_if_needed() -> None:
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(bundled_path, encoding="utf-8") as f:
-            bundled = json.load(f)
-
         if not dest_path.is_file():
             shutil.copyfile(bundled_path, dest_path)
             logger.info("Installed reports store from bundle to %s", dest_path)
@@ -66,53 +60,13 @@ def seed_reports_store_from_bundle_if_needed() -> None:
         try:
             with open(dest_path, encoding="utf-8") as f:
                 raw = f.read().strip()
-            dest_data = json.loads(raw) if raw else {"groups": [], "reports": []}
+            # Validate runtime JSON. If valid, do not rewrite on every start.
+            json.loads(raw) if raw else {"groups": [], "reports": []}
+            return
         except (json.JSONDecodeError, OSError):
             shutil.copyfile(bundled_path, dest_path)
             logger.warning("Runtime reports.json was invalid — replaced from bundle (%s).", dest_path)
             return
-
-        bid_reports = {
-            str(r.get("id")): r
-            for r in (bundled.get("reports") or [])
-            if isinstance(r, dict) and r.get("id")
-        }
-        bid_groups = {
-            str(g.get("id")): g
-            for g in (bundled.get("groups") or [])
-            if isinstance(g, dict) and g.get("id")
-        }
-
-        dest_reports = [r for r in (dest_data.get("reports") or []) if isinstance(r, dict)]
-        dest_groups = [g for g in (dest_data.get("groups") or []) if isinstance(g, dict)]
-        have_r = {str(r.get("id")) for r in dest_reports if r.get("id")}
-        have_g = {str(g.get("id")) for g in dest_groups if g.get("id")}
-
-        added_r = 0
-        for rid, rep in bid_reports.items():
-            if rid not in have_r:
-                dest_reports.append(rep)
-                have_r.add(rid)
-                added_r += 1
-        added_g = 0
-        for gid, grp in bid_groups.items():
-            if gid not in have_g:
-                dest_groups.append(grp)
-                have_g.add(gid)
-                added_g += 1
-
-        if added_r or added_g:
-            out = {"groups": dest_groups, "reports": dest_reports}
-            tmp = dest_path.with_suffix(dest_path.suffix + ".tmp")
-            with open(tmp, "w", encoding="utf-8") as wf:
-                json.dump(out, wf, indent=2)
-            os.replace(tmp, dest_path)
-            logger.info(
-                "Merged %d report(s) and %d group(s) from app bundle into %s",
-                added_r,
-                added_g,
-                dest_path,
-            )
     except Exception as e:
         logger.warning("Could not sync reports.json from bundle: %s", e)
 
@@ -439,6 +393,11 @@ def _coerce_variable_value(var_name: str, raw: Any) -> Any:
         if m < 1 or m > 12:
             raise ValueError(f"Month must be 1–12 for {{{var_name}}}")
         return m
+    if u == "WEEK" or u.endswith("_WEEK"):
+        w = _parse_int()
+        if w < 1 or w > 5:
+            raise ValueError(f"Week must be 1–5 for {{{var_name}}}")
+        return w
     if u in ("YEAR", "Y") or u.endswith("_YEAR"):
         y = _parse_int()
         if y < 1900 or y > 2100:

@@ -8,7 +8,7 @@
   const TOTAL_QTY = 'Total Scheduled Qty';
   const TOTAL_DISPATCHED_QTY = 'Total Dispatched Qty';
   const DISPATCHED_PCT = 'Dispatched %';
-  const SG_LAYOUT_KEY = 'dispatch_calendar_v4';
+  const SG_LAYOUT_KEY = 'dispatch_calendar_v5';
 
   let _dcSg = null;
   let _dcTipEl = null;
@@ -291,6 +291,46 @@
     return false;
   }
 
+  function dayStatusMatchesLegendFilter(status, legendFilter) {
+    if (!legendFilter) return true;
+    if (!status) return false;
+    if (legendFilter === 'ok') return status === 'ok' || status === 'full';
+    if (legendFilter === 'partial') return status === 'partial';
+    if (legendFilter === 'short') return status === 'short';
+    if (legendFilter === 'dispatched') return status === 'dispatched';
+    return true;
+  }
+
+  function grandTotalDayStatus(dayNum, payload) {
+    const dd = payload.dayDispatch;
+    if (!dd) return '';
+    const sch = toNum(dd.scheduled && dd.scheduled[String(dayNum)]);
+    const dis = toNum(dd.dispatched && dd.dispatched[String(dayNum)]);
+    const eps = 1e-9;
+    if (sch <= eps) return '';
+    if (dis + eps >= sch) return 'ok';
+    if (dis > eps) return 'partial';
+    return 'short';
+  }
+
+  function partRowDayStatus(row, dayNum, payload, daysInMonth, raw) {
+    const meta = row && row._dcRowMeta;
+    if (!meta || dayNum > daysInMonth) return '';
+    const pk = partNoFromRow(row);
+    const eps = 1e-9;
+    if (pk) {
+      const dcell = partDayDispatchCell(payload, pk, String(dayNum));
+      const sched = dcell ? toNum(dcell.scheduledQty) : 0;
+      const disp = dcell ? toNum(dcell.dispatched) : 0;
+      if (sched > eps && disp + eps >= sched) return 'dispatched';
+    }
+    const q = toNum(raw);
+    if (q !== 0 && meta.dayStatus && meta.dayStatus[String(dayNum)]) {
+      return meta.dayStatus[String(dayNum)].status || '';
+    }
+    return '';
+  }
+
   function syncLegendFilterUi() {
     const items = document.querySelectorAll('[data-dc-legend-filter]');
     for (let i = 0; i < items.length; i++) {
@@ -400,7 +440,11 @@
   function buildColumns(payload, weekFilter) {
     const daysInMonth = payload.daysInMonth || 31;
     const names = filterColumnNames(payload.columns || [], payload, weekFilter);
-    const dayNonZeroCounts = buildDayNonZeroCounts(payload.rows || []);
+    const rowsWithMeta = (payload.rows || []).map((r, i) => ({
+      ...r,
+      _dcRowMeta: (payload.rowMeta || [])[i] || null,
+    }));
+    const dayNonZeroCounts = buildDayNonZeroCounts(rowsWithMeta);
     return names.map((name) => {
       const dayNum = parseDayCol(name);
       const col = {
@@ -417,33 +461,21 @@
           const parts = [];
           if (dayNum > daysInMonth) parts.push('ti-dc-cell--out');
           if (meta && meta.isGrandTotal) {
-            const sch = payload.dayDispatch
-              ? toNum(payload.dayDispatch.scheduled[String(dayNum)])
-              : 0;
-            if (sch > 1e-9) {
-              parts.push(grandTotalDayDispatchClass(dayNum, payload));
+            const gtStatus = grandTotalDayStatus(dayNum, payload);
+            if (gtStatus) {
+              if (gtStatus === 'ok') parts.push('ti-dc-cell--ok');
+              else if (gtStatus === 'partial') parts.push('ti-dc-cell--partial');
+              else if (gtStatus === 'short') parts.push('ti-dc-cell--short');
             }
             return parts.filter(Boolean).join(' ');
           }
-          /* Part rows: fully dispatched days are blue and excluded from FG/WIP color grading. */
-          const pk = partNoFromRow(row);
-          const eps = 1e-9;
-          if (pk) {
-            const dcell = partDayDispatchCell(payload, pk, String(dayNum));
-            const sched = dcell ? toNum(dcell.scheduledQty) : 0;
-            const disp = dcell ? toNum(dcell.dispatched) : 0;
-            if (sched > eps && disp + eps >= sched) {
-              parts.push('ti-dc-cell--dispatched');
-              return parts.filter(Boolean).join(' ');
-            }
-          }
-          const q = toNum(raw);
-          if (q !== 0 && meta && meta.dayStatus && meta.dayStatus[String(dayNum)]) {
-            const st = meta.dayStatus[String(dayNum)].status;
-            if (st === 'full') parts.push('ti-dc-cell--ok');
-            else if (st === 'partial') parts.push('ti-dc-cell--partial');
-            else if (st === 'dispatched') parts.push('ti-dc-cell--dispatched');
-            else parts.push('ti-dc-cell--short');
+          const st = partRowDayStatus(row, dayNum, payload, daysInMonth, raw);
+          if (st === 'full') parts.push('ti-dc-cell--ok');
+          else if (st === 'partial') parts.push('ti-dc-cell--partial');
+          else if (st === 'dispatched') parts.push('ti-dc-cell--dispatched');
+          else if (st === 'short') parts.push('ti-dc-cell--short');
+          if (st && _dcLegendFilter && !dayStatusMatchesLegendFilter(st, _dcLegendFilter)) {
+            parts.push('ti-dc-cell--legend-hidden');
           }
           return parts.join(' ');
         };
@@ -463,6 +495,10 @@
           }
           const pk = partNoFromRow(row);
           if (!pk) return text;
+          const st = partRowDayStatus(row, dayNum, payload, daysInMonth, raw);
+          if (st && _dcLegendFilter && !dayStatusMatchesLegendFilter(st, _dcLegendFilter)) {
+            return '';
+          }
           return (
             '<span class="ti-dc-day-cell" data-dc-part="' +
             escapeHtml(pk) +

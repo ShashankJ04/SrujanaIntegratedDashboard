@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 FG_STOCK_COL = "FG (Stock)"
 PART_NO_COL = "Part No"
+NO_OF_OPERATIONS_COL = "No of Operations"
 TOTAL_QTY_COL = "Total Scheduled Qty"
 TOTAL_DISPATCHED_QTY_COL = "Total Dispatched Qty"
 DISPATCHED_PCT_COL = "Dispatched %"
@@ -27,6 +28,7 @@ _DISPATCH_CALENDAR_QUERY_CACHE: Optional[Dict[str, str]] = None
 
 MONTHLY_ORDER_QUERY_TEMPLATE = """SELECT
   t.partno    AS 'Part No',
+  t.no_of_operations AS 'No of Operations',
   t.total_qty AS 'Total Scheduled Qty',
   t.day_1     AS 'day 1',
   t.day_2     AS 'day 2',
@@ -63,6 +65,7 @@ FROM (
   SELECT
     0 AS sort_order,
     'Grand Total' AS partno,
+    NULL AS no_of_operations,
     SUM(sc.CS_QTY) AS total_qty,
     SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,
     SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,
@@ -108,6 +111,7 @@ FROM (
   SELECT
     1 AS sort_order,
     c.CO_PARTNO AS partno,
+    MAX(c.CO_NoOfOp) AS no_of_operations,
     SUM(sc.CS_QTY) AS total_qty,
     SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,
     SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,
@@ -655,7 +659,13 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     columns: List[str] = list(mo_rows[0].keys()) if mo_rows else []
     if columns and PART_NO_COL in columns and TOTAL_QTY_COL in columns:
         day_cols = [c for c in columns if str(c).lower().startswith("day ")]
-        columns = [PART_NO_COL, TOTAL_QTY_COL, TOTAL_DISPATCHED_QTY_COL, DISPATCHED_PCT_COL] + day_cols
+        columns = [
+            PART_NO_COL,
+            NO_OF_OPERATIONS_COL,
+            TOTAL_QTY_COL,
+            TOTAL_DISPATCHED_QTY_COL,
+            DISPATCHED_PCT_COL,
+        ] + day_cols
 
     grand_total_stock_fg = 0.0
     grand_total_stock_wip = 0.0

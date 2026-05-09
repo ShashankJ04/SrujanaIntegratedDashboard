@@ -201,6 +201,13 @@
       }
       return '<div class="rr-var"><select class="ti-select rr-var__ctl rr-var__ctl--narrow" id="' + id + '"' + tip + '>' + opts + '</select></div>';
     }
+    if (u === 'WEEK' || u.endsWith('_WEEK')) {
+      let opts = '';
+      for (let w = 1; w <= 5; w++) {
+        opts += '<option value="' + w + '">' + w + '</option>';
+      }
+      return '<div class="rr-var"><select class="ti-select rr-var__ctl rr-var__ctl--narrow" id="' + id + '"' + tip + '>' + opts + '</select></div>';
+    }
     if (u === 'DAY' || u === 'DOM' || u === 'D') {
       return '<div class="rr-var"><input type="number" class="ti-input rr-var__ctl rr-var__ctl--narrow" id="' + id + '" min="1" max="31" placeholder="' + ph + '"' + tip + '></div>';
     }

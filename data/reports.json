@@ -41,6 +41,24 @@
       "name": "Child Reports",
       "createdAt": "2026-04-20T08:45:26.669047+00:00",
       "updatedAt": "2026-04-20T08:45:26.669047+00:00"
+    },
+    {
+      "id": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Scrap",
+      "createdAt": "2026-05-04T05:13:16.767145+00:00",
+      "updatedAt": "2026-05-04T05:13:16.767145+00:00"
+    },
+    {
+      "id": "b2cb8372-2220-4751-bf3f-66a37d5a1ae3",
+      "name": "Quality",
+      "createdAt": "2026-05-08T04:33:23.276209+00:00",
+      "updatedAt": "2026-05-08T04:33:23.276209+00:00"
+    },
+    {
+      "id": "6d1302a9-67bb-4ce9-b7db-ca80234727b3",
+      "name": "Closing Stock",
+      "createdAt": "2026-05-09T10:19:10.066789+00:00",
+      "updatedAt": "2026-05-09T10:19:10.066789+00:00"
     }
   ],
   "reports": [
@@ -48,36 +66,36 @@
       "id": "7832c81c-80a6-45f8-b7ee-eb2e525cf68d",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
       "name": "Inwarded Raw Material after Inspection",
-      "queryTemplate": "select DATE_FORMAT(RI_DATE, '%d-%m-%Y') as GrnDate, RI_REPORTNO as GrnNumber, RD_BATCHNO as BatchNo, MM_RawMtPartNo as RawMaterial, MT_Name as MaterialType, RD_ACCEPTEDQTY as Quantity, ss_Name as Supplier\n from rm_inwarddetails left join rm_inwardmaster on RI_ID = RD_RIID\n left join materialmaster on RD_RMID = MM_Id\n left join supplier on RI_SUPPLIERID = ss_Id\n left join materialtypemaster on MM_mtId=mt_id\n where month(RI_DATE) = {month} and year(RI_DATE) = {year} and RI_REPORTNO like 'INV%' and RI_INSPECTIONYN = 'Y'  and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1;",
+      "queryTemplate": "select DATE_FORMAT(RI_DATE, '%d-%m-%Y') as GrnDate, RI_REPORTNO as GrnNumber, RD_BATCHNO as BatchNo, MM_RawMtPartNo as RawMaterial, MT_Name as MaterialType, RD_ACCEPTEDQTY as 'Qty(Kg)', ss_Name as Supplier\n from rm_inwarddetails left join rm_inwardmaster on RI_ID = RD_RIID\n left join materialmaster on RD_RMID = MM_Id\n left join supplier on RI_SUPPLIERID = ss_Id\n left join materialtypemaster on MM_mtId=mt_id\n where month(RI_DATE) = {month} and year(RI_DATE) = {year} and RI_REPORTNO like 'INV%' and RI_INSPECTIONYN = 'Y'  and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-22T07:19:31.112Z",
-      "updatedAt": "2026-05-02T07:36:15.488198+00:00",
+      "updatedAt": "2026-05-04T05:10:52.599527+00:00",
       "pinned": false
     },
     {
       "id": "7f5963a2-b6ee-404f-8116-f20a53969f18",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "Current Raw Material Stock",
-      "queryTemplate": "select * from (SELECT RD_BATCHNO as 'Batch No',\n\t\tMM_RawMtPartNo as 'Raw Material',\n        MT_Name as 'Material Type',\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\tFROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster\n    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id\n    group by RD_BATCHNO, RD_RMID order by Qty)t where Qty != 0;",
+      "name": "Current Raw Material Stock in Stores",
+      "queryTemplate": "select * from (SELECT RD_BATCHNO as 'Batch No',\n\t\tMM_RawMtPartNo as 'Raw Material',\n        MT_Name as 'Material Type',\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 ) AS 'Qty(Kg)'\n\tFROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster\n    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id\n    group by RD_BATCHNO, RD_RMID order by `Qty(Kg)`) t where `Qty(Kg)` != 0;",
       "variables": [],
       "createdAt": "2026-03-22T07:40:13.037Z",
-      "updatedAt": "2026-05-02T07:36:14.427219+00:00",
+      "updatedAt": "2026-05-04T05:10:26.016543+00:00",
       "pinned": false
     },
     {
       "id": "e513f8ab-f8f8-4c86-aee7-12e194f7815d",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
       "name": "Monthly Material Movement",
-      "queryTemplate": "SELECT DATE_FORMAT(RI_DATE, '%d-%m-%Y') as 'Date', US_FirstName as 'User', RD_BATCHNO as 'Batch No', MM_RawMtPartNo as 'Raw Material', CO_PARTNO as 'Part No', RD_QTY 'Qty', \nCASE when RI_MOVEMENT = 'I' then 'Inward' else 'Outward' end as Movement, ML_DESCRIPTION as 'Purpose', \nCASE when RI_SUPPLIERID = 0 then 'In House' else ss_Name end as Supplier FROM \nrm_inwardmaster \nleft join supplier on RI_SUPPLIERID = ss_Id, rm_inwarddetails \nleft join components on RD_COMPID = CO_ID\nleft join materialmaster on RD_RMID = MM_Id\n, rm_movements , users\nwhere RI_ID = RD_RIID and RI_MOVEMENTTYPE = ML_ID and RI_CREATEDBY = US_ID and\n month(RI_DATE) ={month} and year(RI_DATE) = {year}\norder by RI_DATE desc ,RD_RMID, RD_BATCHNO;",
+      "queryTemplate": "SELECT DATE_FORMAT(RI_DATE, '%d-%m-%Y') as 'Date', US_FirstName as 'User', RD_BATCHNO as 'Batch No', MM_RawMtPartNo as 'Raw Material', CO_PARTNO as 'Part No', rd_acceptedqty  `Qty(kg)`, \nCASE when RI_MOVEMENT = 'I' then 'Inward' else 'Outward' end as Movement, ML_DESCRIPTION as 'Purpose', \nCASE when RI_SUPPLIERID = 0 then 'In House' else ss_Name end as Supplier FROM \nrm_inwardmaster \nleft join supplier on RI_SUPPLIERID = ss_Id, rm_inwarddetails \nleft join components on RD_COMPID = CO_ID\nleft join materialmaster on RD_RMID = MM_Id\n, rm_movements , users\nwhere RI_ID = RD_RIID and RI_MOVEMENTTYPE = ML_ID and RI_CREATEDBY = US_ID and\n month(RI_DATE) ={month} and year(RI_DATE) = {year}  and rd_acceptedqty>0\norder by RI_DATE desc ,RD_RMID, RD_BATCHNO;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-22T08:17:37.834Z",
-      "updatedAt": "2026-05-02T07:36:16.178947+00:00",
+      "updatedAt": "2026-05-04T05:11:12.396059+00:00",
       "pinned": false
     },
     {
@@ -87,7 +105,7 @@
       "queryTemplate": "select MM_RawMtPartNo as RawMaterial ,MT_Name as Material ,MM_Thickness as Thickness ,MM_StripWidth as Width,hm_name as Hardness,GM_Name as Grade from materialmaster\n\tleft join grademaster on MM_gmId=gm_id\n\tleft join hardnessmaster on MM_hmId=HM_Id\n\tleft join materialtypemaster on MM_mtId=mt_id where mm_activeyn='Y';",
       "variables": [],
       "createdAt": "2026-03-22T08:34:23.927Z",
-      "updatedAt": "2026-05-02T07:35:55.563816+00:00",
+      "updatedAt": "2026-05-04T04:58:09.856484+00:00",
       "pinned": false
     },
     {
@@ -97,7 +115,7 @@
       "queryTemplate": "SELECT MCM_Name as Machine, MCM_Make as Make, MCM_Capacity as Capacity FROM machinemaster where MCM_ACTIVEYN = 'Y';",
       "variables": [],
       "createdAt": "2026-03-22T08:39:02.977Z",
-      "updatedAt": "2026-05-02T07:35:56.246668+00:00",
+      "updatedAt": "2026-05-04T04:59:03.214617+00:00",
       "pinned": false
     },
     {
@@ -107,7 +125,7 @@
       "queryTemplate": "select ss_name Supplier,st_name Type from supplier left join suppliertype on ss_SupplierType= st_id where ss_activeyn='Y';",
       "variables": [],
       "createdAt": "2026-03-22T08:41:06.273Z",
-      "updatedAt": "2026-05-02T07:35:57.028378+00:00",
+      "updatedAt": "2026-05-04T04:59:29.136360+00:00",
       "pinned": false
     },
     {
@@ -117,7 +135,7 @@
       "queryTemplate": "SELECT US_FirstName as 'First Name', US_LastName as 'Last Name', US_Login as Login, US_EmpID as 'Emp Id' FROM users where US_CurrentYn = 'Y';",
       "variables": [],
       "createdAt": "2026-03-22T08:44:12.143Z",
-      "updatedAt": "2026-05-02T07:41:31.315718+00:00",
+      "updatedAt": "2026-05-04T04:59:52.405027+00:00",
       "pinned": false
     },
     {
@@ -147,7 +165,7 @@
       "queryTemplate": "select CU_Name as Customer from customer where CU_Status = 'R';",
       "variables": [],
       "createdAt": "2026-03-22T09:01:43.882Z",
-      "updatedAt": "2026-05-02T07:35:53.426294+00:00",
+      "updatedAt": "2026-05-04T04:56:23.936789+00:00",
       "pinned": false
     },
     {
@@ -157,7 +175,7 @@
       "queryTemplate": "select cu_name as Customer ,co_partno as 'Part No', CO_PARTNAME as 'Part Name' , t.tool_list as 'Tool No'\nfrom  components\n left join customer on cu_status ='R' and CO_CUSTID= cu_id\nleft join ( select CT_COMPID, count(ct_toolno) tcount,GROUP_CONCAT(ct_toolno ORDER BY ct_toolno SEPARATOR '::') AS tool_list,\nGROUP_CONCAT(ct_id ORDER BY ct_id SEPARATOR '::') AS toolid_list\n from components_tool where ct_activeyn='Y' group by CT_COMPID order by CT_COMPID) t on  t.ct_compid = CO_PARENTID\nwhere CO_ACTIVEYN='Y'\n order by cu_name,cu_id;",
       "variables": [],
       "createdAt": "2026-03-22T09:05:12.215Z",
-      "updatedAt": "2026-05-02T07:35:52.363663+00:00",
+      "updatedAt": "2026-05-04T04:54:33.420979+00:00",
       "pinned": false
     },
     {
@@ -177,26 +195,26 @@
       "id": "c2bafa9d-9dfe-41df-8ac2-ebd37ddc1917",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
       "name": "Date-wise Monthly Production",
-      "queryTemplate": "select DATE_FORMAT(pd_date, '%d-%m-%Y') 'ProductionDate', CO_PARTNO 'Part No', PD_LotNo 'Lot No',MCM_Name Machine, CT_TOOLNO Tool, MM_RawMtPartNo 'Raw MAterial',\npd_batchno 'Batch No', pd_prodqty  'No Of Comp', PD_SFREJECT 'SF Rej(Nos)',PD_SWQTY 'SU Wastage(Nos)',PD_SCRAPQTY 'Scrap(Kg)',PD_QTYKG 'Part Wt(Kg)', round(pd_prodqty/conVal,4) 'Theo RM Kg'\nfrom production_details \nleft join machinemaster on MCM_Id= PD_MCID\nleft join materialmaster on mm_id = pd_rmid\nleft join components_tool on ct_id =pd_toolid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) = {year}\norder by pd_date desc",
+      "queryTemplate": "select DATE_FORMAT(pd_date, '%d-%m-%Y') 'ProductionDate', CO_PARTNO 'Part No', PD_LotNo 'Lot No',MCM_Name Machine, CT_TOOLNO Tool, MM_RawMtPartNo 'Raw Material',\npd_batchno 'Batch No', pd_prodqty  'No Of Comp', PD_SFREJECT 'SF Rej(Nos)',PD_SWQTY 'SU Wastage(Nos)',PD_SCRAPQTY 'Scrap(Kg)',PD_QTYKG 'Part Wt(Kg)', round(pd_prodqty/conVal,4) 'Theo RM(Kg)'\nfrom production_details \nleft join machinemaster on MCM_Id= PD_MCID\nleft join materialmaster on mm_id = pd_rmid\nleft join components_tool on ct_id =pd_toolid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) = {year}\norder by pd_date desc",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-23T11:09:55.340Z",
-      "updatedAt": "2026-05-02T07:36:08.585825+00:00",
+      "updatedAt": "2026-05-04T05:02:14.962144+00:00",
       "pinned": false
     },
     {
       "id": "b300ec06-7fda-4b71-bb9a-71c1383b9e2a",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
       "name": "Consolidated-Component Month-wise Production",
-      "queryTemplate": "select  CO_PARTNO 'Part No', MM_RawMtPartNo 'Raw Material',\n sum(pd_prodqty)  'No Of Comp', sum(PD_SFREJECT) 'SF Rej',sum(PD_SWQTY) 'SU Wastage',round(sum(PD_SCRAPQTY),2) 'Scrap',round(sum(PD_QTYKG),2) 'RawMaterial(Kg)', round(sum(pd_prodqty/conVal),2) 'Theo RM Kg'\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) = {year}\ngroup by CO_PARTNO,MM_RawMtPartNo\norder by  CO_PARTNO;",
+      "queryTemplate": "select  CO_PARTNO 'Part No', MM_RawMtPartNo 'Raw Material',\n sum(pd_prodqty)  'No Of Comp', sum(PD_SFREJECT) 'SF Rej(Nos)',sum(PD_SWQTY) 'SU Wastage(Nos)',round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)',round(sum(PD_QTYKG),2) 'Part Wt(Kg)', round(sum(pd_prodqty/conVal),2) 'Theo RM(Kg)'\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) = {year}\ngroup by CO_PARTNO,MM_RawMtPartNo\norder by  CO_PARTNO;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-23T11:28:49.238Z",
-      "updatedAt": "2026-05-02T07:36:07.557707+00:00",
+      "updatedAt": "2026-05-04T05:01:44.665406+00:00",
       "pinned": false,
       "drilldowns": [
         {
@@ -226,7 +244,7 @@
       "queryTemplate": "SELECT \n    ct_toolno AS Tool,group_concat( DISTINCT CT_PITCH ORDER BY CT_PITCH SEPARATOR ' ,') as 'Pitch',group_concat( distinct CT_NO_OF_CAVITY order by CT_NO_OF_CAVITY SEPARATOR  '  ,') as 'Cavity', \n    COUNT(*) AS 'Component Count',\n        COALESCE(MAX(CASE WHEN rn = 1 THEN CO_PARTNO END), '') AS Component1,\n\t\tCOALESCE(MAX(CASE WHEN rn = 2 THEN CO_PARTNO END), '') AS Component2,\n\t\tCOALESCE(MAX(CASE WHEN rn = 3 THEN CO_PARTNO END), '') AS Component3,\n        COALESCE(MAX(CASE WHEN rn = 4 THEN CO_PARTNO END), '') AS Component4\nFROM (\n    SELECT \n        ct_toolno,\n        CO_PARTNO,CT_PITCH,CT_NO_OF_CAVITY,\n        ROW_NUMBER() OVER (PARTITION BY ct_toolno ORDER BY CO_PARTNO) AS rn\n    FROM components_tool \n    LEFT JOIN components ON CT_COMPID = CO_ID\n    WHERE ct_activeyn = 'Y'\n) t\nGROUP BY ct_toolno\nORDER BY ct_toolno;",
       "variables": [],
       "createdAt": "2026-03-25T12:13:51.363Z",
-      "updatedAt": "2026-05-02T07:35:54.870406+00:00",
+      "updatedAt": "2026-05-04T04:57:44.172186+00:00",
       "pinned": false
     },
     {
@@ -239,9 +257,8 @@
         "toDate"
       ],
       "createdAt": "2026-03-30T13:26:07.878Z",
-      "updatedAt": "2026-05-05T12:11:53.647175+00:00",
-      "pinned": false,
-      "drilldowns": []
+      "updatedAt": "2026-05-05T12:07:37.481068+00:00",
+      "pinned": false
     },
     {
       "id": "2d02592d-9d51-485b-b006-74625eb2757f",
@@ -252,7 +269,7 @@
         "plantid"
       ],
       "createdAt": "2026-03-31T09:41:11.774Z",
-      "updatedAt": "2026-05-02T07:35:39.317478+00:00",
+      "updatedAt": "2026-05-04T04:50:56.699215+00:00",
       "pinned": false
     },
     {
@@ -264,7 +281,7 @@
         "plantid"
       ],
       "createdAt": "2026-03-31T09:42:23.730Z",
-      "updatedAt": "2026-05-02T07:35:40.434256+00:00",
+      "updatedAt": "2026-05-04T04:51:24.248765+00:00",
       "pinned": false
     },
     {
@@ -274,20 +291,7 @@
       "queryTemplate": "select co_partno 'Part No', \n\tMAX(CASE WHEN cd_opstage = 2 THEN compbalance END) AS '1st Forming',\n\tMAX(CASE WHEN cd_opstage = 3 THEN compbalance END) AS 'Electroplating',\n\tMAX(CASE WHEN cd_opstage = 4 THEN compbalance END) AS 'Soapwash',\n\tMAX(CASE WHEN cd_opstage = 5 THEN compbalance END) AS 'Tapping',\n\tMAX(CASE WHEN cd_opstage = 6 THEN compbalance END) AS 'FG',\n\tMAX(CASE WHEN cd_opstage = 7 THEN compbalance END) AS '2nd Forming',\n\tMAX(CASE WHEN cd_opstage = 8 THEN compbalance END) AS '3rd Forming',\n\tMAX(CASE WHEN cd_opstage = 9 THEN compbalance END) AS 'Etching',\n\tMAX(CASE WHEN cd_opstage = 10 THEN compbalance END) AS 'Deburring',\n\tMAX(CASE WHEN cd_opstage = 12 THEN compbalance END) AS 'Laser Welding',\n\tMAX(CASE WHEN cd_opstage = 13 THEN compbalance END) AS 'Ultrasonic Cleaning',\n\tMAX(CASE WHEN cd_opstage = 14 THEN compbalance END) AS 'Arcor Coating',\n\tMAX(CASE WHEN cd_opstage = 15 THEN compbalance END) AS 'Riveting',\n\tMAX(CASE WHEN cd_opstage = 16 THEN compbalance END) AS 'Brazing',\n\tMAX(CASE WHEN cd_opstage = 17 THEN compbalance END) AS 'Heat Sealing',\n\tMAX(CASE WHEN cd_opstage = 18 THEN compbalance END) AS 'Dimpling'\nfrom\n (\nselect co_id,CO_PARTNO,cd_opstage, COALESCE(\n        SUM(\n            CASE\n                WHEN cm_movement = 'O' THEN cd_qty\n                WHEN cm_movement = 'I' THEN -cd_qty\n                ELSE 0\n            END\n        ), 0\n    ) \n    - COALESCE(sum(sd_qty), 0) AS compbalance\n    from  comp_inwardmaster, comp_inwarddetails\n    left join comp_opstages on cd_opstage=os_id \n\tleft join components on CD_COMPID= co_id and CO_ACTIVEYN='Y'\n    left join comp_scrapdetails   on  sd_source='S' and sd_src=3 and sd_refno=CD_CMID and sd_compid = cd_compid and SD_OPSTAGE= cd_opstage\n    where cm_id = cd_cmid and co_id is not null and CD_SOURCE='C'\n\n    group by cd_compid,cd_opstage) t\n    where compbalance >0\n    group by co_partno\n    order by CO_PARTNO;",
       "variables": [],
       "createdAt": "2026-03-31T09:43:10.406Z",
-      "updatedAt": "2026-05-02T07:35:41.302638+00:00",
-      "pinned": false
-    },
-    {
-      "id": "8bf62f00-e306-453f-abe2-fa1908e207ae",
-      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Planned vs Produced Qty",
-      "queryTemplate": "select  co_partno 'Part No', CO_PARTNAME 'Part Name',plan.planqty 'Planned Qty' ,prod.prodqty 'Produced Qty'  from schedule_master, \n(select sp.PS_PARENTCOMPID comp,sp.PS_SMID smid,  sum(pd.PD_PRODQTY)  prodqty\nfrom production_details pd, scheduled_production sp  \nwhere ps_id= PD_PSID -- and sp.PS_PARENTCOMPID in (1668)\ngroup by sp.PS_PARENTCOMPID,sp.PS_SMID) prod,\n(select PS_PARENTCOMPID comp, ps_smid smid, sum(ps_qty) planqty from scheduled_production sp \ngroup by PS_PARENTCOMPID,PS_SMID) plan, components\nwhere  SM_MONTH= {month} and sm_year = {year}\nand prod.smid=plan.smid\nand prod.smid =  sm_id\nand prod.comp = plan.comp\nand prod.comp = co_id\norder by co_partno;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "createdAt": "2026-04-05T17:46:15.160Z",
-      "updatedAt": "2026-05-02T07:36:09.690911+00:00",
+      "updatedAt": "2026-05-04T04:51:48.728430+00:00",
       "pinned": false
     },
     {
@@ -300,20 +304,20 @@
         "year"
       ],
       "createdAt": "2026-04-06T12:08:39.377Z",
-      "updatedAt": "2026-05-02T07:36:10.594055+00:00",
+      "updatedAt": "2026-05-04T05:02:54.049188+00:00",
       "pinned": false
     },
     {
       "id": "e6c7ea68-9038-4fae-9762-314f8616a59e",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
       "name": "RM Consumption",
-      "queryTemplate": "select inQ.*, remq.RemQty ,partnos as 'Produced Parts', RMForProduction from \n(select  MM_RawMtPartNo RawMaterial,RD_BATCHNO batch,ri_date 'InwardDt', RD_ACCEPTEDQTY 'inwardQty' \nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id and month(ri_date)= {month} and year(RI_DATE)= {year} and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     -- left join supplier on RI_SUPPLIERID= ss_id\n     left join materialmaster on mm_id = rd_rmid\n     group by  MM_RawMtPartNo,RD_BATCHNO, RD_qty,ri_date,rd_id)inQ\n  left join\n     (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END) ,2)AS RemQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     group by RD_BATCHNO)remQ on  inQ.batch =remQ.batch\nleft join (  select pd_batchno batch,group_concat( distinct CO_PARTNO order by CO_PARTNO separator ' , ') partnos, round(sum(PD_PRODQTY/conVal),2)  RMForProduction from production_details\nleft join scheduled_production plan on pd_psid = plan.ps_id \nleft join components on  plan.PS_PARENTCOMPID= co_id\nleft join \n(SELECT CT_COMPID ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n inner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n and CT_NO_OF_CAVITY > 0)t on CT_COMPID= plan.PS_PARENTCOMPID\ngroup by  pd_batchno)prodQ on prodQ.batch=inQ.batch\n     order by inwarddt, inQ.batch;",
+      "queryTemplate": "select inQ.*, remq.RemQty as `RemQty(kg)` ,partnos as 'Produced Parts', RMForProduction from \n(select  MM_RawMtPartNo RawMaterial,RD_BATCHNO batch,date_format( ri_date, '%d-%m-%Y')  'InwardDt', RD_acceptedQTY 'inwardQty(kg)' \nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id and month(ri_date)= {month} and year(RI_DATE)= {year} and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     -- left join supplier on RI_SUPPLIERID= ss_id\n     left join materialmaster on mm_id = rd_rmid\nwhere RD_acceptedQTY>0\n     group by  MM_RawMtPartNo,RD_BATCHNO, RD_qty,ri_date,rd_id)inQ\n  left join\n     (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END) ,2) AS 'RemQty'\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     group by RD_BATCHNO)remQ on  inQ.batch =remQ.batch\nleft join (  select pd_batchno batch,group_concat( distinct CO_PARTNO order by CO_PARTNO separator ' , ') partnos, round(sum(PD_PRODQTY/conVal),2)  RMForProduction from production_details\nleft join scheduled_production plan on pd_psid = plan.ps_id \nleft join components on  plan.PS_PARENTCOMPID= co_id\nleft join \n(SELECT ct_id, CT_COMPID ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n inner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n and CT_NO_OF_CAVITY > 0)t on CT_COMPID= plan.PS_PARENTCOMPID and ct_id = PD_TOOLID\ngroup by  pd_batchno)prodQ on prodQ.batch=inQ.batch\n     order by inwarddt, inQ.batch;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-04-11T05:42:55.294157+00:00",
-      "updatedAt": "2026-05-02T07:36:17.193956+00:00",
+      "updatedAt": "2026-05-06T03:48:23.475978+00:00",
       "pinned": false
     },
     {
@@ -325,20 +329,7 @@
         "plantid"
       ],
       "createdAt": "2026-04-11T17:58:47.789153+00:00",
-      "updatedAt": "2026-04-20T12:34:28.418860+00:00",
-      "pinned": false
-    },
-    {
-      "id": "b0f73a9a-6ea7-44dd-ab35-5c20198b2209",
-      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
-      "name": "Dispatch Distinct",
-      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  sum(CS_QTY) AS 'Requested Qty',\n  sum(SD_LOTSIZE) AS 'Dispatched Qty',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n  AND CS_Date BETWEEN {fromDate} AND {toDate}\nGROUP BY CU_Name ,CO_partNo ,CO_partName,SD_INVOICE;",
-      "variables": [
-        "fromDate",
-        "toDate"
-      ],
-      "createdAt": "2026-04-11T18:45:00.598710+00:00",
-      "updatedAt": "2026-05-02T06:47:39.928600+00:00",
+      "updatedAt": "2026-05-02T13:16:53.945859+00:00",
       "pinned": false
     },
     {
@@ -354,11 +345,11 @@
     {
       "id": "5c7c5e6c-6f88-4f6e-9b69-bc0f63c8a663",
       "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
-      "name": "Current Consolidated Component Stock",
+      "name": "Consolidated Component Stock All Units",
       "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',AP.CO_PARTNAME,AP.CO_WEIGHT,AP.MT_Name,\n    \n    -- Stock Values (Q1)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Q3)\n    COALESCE(B.bal_1st_Forming, 0) AS '1st Forming (With Supplier)',\n    COALESCE(B.bal_Electroplating, 0) AS 'Electroplating (With Supplier)',\n    COALESCE(B.bal_Soapwash, 0) AS 'Soapwash (With Supplier)',\n    COALESCE(B.bal_Tapping, 0) AS 'Tapping (With Supplier)',\n    COALESCE(B.bal_FG, 0) AS 'FG (With Supplier)',\n    COALESCE(B.bal_2nd_Forming, 0) AS '2nd Forming (With Supplier)',\n    COALESCE(B.bal_3rd_Forming, 0) AS '3rd Forming (With Supplier)',\n    COALESCE(B.bal_Etching, 0) AS 'Etching (With Supplier)',\n    COALESCE(B.bal_Deburring, 0) AS 'Deburring (With Supplier)',\n    COALESCE(B.bal_Laser_Welding, 0) AS 'Laser Welding (With Supplier)',\n    COALESCE(B.bal_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (With Supplier)',\n    COALESCE(B.bal_Arcor_Coating, 0) AS 'Arcor Coating (With Supplier)',\n    COALESCE(B.bal_Riveting, 0) AS 'Riveting (With Supplier)',\n    COALESCE(B.bal_Brazing, 0) AS 'Brazing (With Supplier)',\n    COALESCE(B.bal_Heat_Sealing, 0) AS 'Heat Sealing (With Supplier)',\n    COALESCE(B.bal_Dimpling, 0) AS 'Dimpling (With Supplier)',\n\n    -- QA and Rework (Q2)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\n-- FIX 1: Drive the query off a purely distinct list of Part Numbers\nFROM (\n    SELECT DISTINCT co_partno ,CO_PARTNAME,CO_WEIGHT,MT_Name\n    FROM components inner join materialtypemaster on MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL and CO_ACTIVEYN ='Y' and co_id=CO_PARENTID\n) AP\n\n-- Stock Values logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n    co_partno AS 'PartNo',\n    CO_PARTNAME,\n    SUM(max_forming_1) AS stk_1st_Forming,\n    SUM(max_electro) AS stk_Electroplating,\n    SUM(max_soap) AS stk_Soapwash,\n    SUM(max_tapping) AS stk_Tapping,\n    SUM(max_fg) AS stk_FG,\n    SUM(max_forming_2) AS stk_2nd_Forming,\n    SUM(max_forming_3) AS stk_3rd_Forming,\n    SUM(max_etching) AS stk_Etching,\n    SUM(max_deburring) AS stk_Deburring,\n    SUM(max_laser) AS stk_Laser_Welding,\n    SUM(max_ultrasonic) AS stk_Ultrasonic_Cleaning,\n    SUM(max_arcor) AS stk_Arcor_Coating,\n    SUM(max_riveting) AS stk_Riveting,\n    SUM(max_brazing) AS stk_Brazing,\n    SUM(max_sealing) AS stk_Heat_Sealing,\n    SUM(max_dimpling) AS stk_Dimpling\nFROM (\n    -- Level 1: Get the MAX value for each stage, grouped by Plant and Part\n    SELECT \n        co_partno,\n        CO_PARTNAME,\n        cs_plantid,\n        MAX(CASE WHEN os_id = 2 THEN cs_qty ELSE 0 END) AS max_forming_1,\n        MAX(CASE WHEN os_id = 3 THEN cs_qty ELSE 0 END) AS max_electro,\n        MAX(CASE WHEN os_id = 4 THEN cs_qty ELSE 0 END) AS max_soap,\n        MAX(CASE WHEN os_id = 5 THEN cs_qty ELSE 0 END) AS max_tapping,\n        MAX(CASE WHEN os_id = 6 THEN cs_qty ELSE 0 END) AS max_fg,\n        MAX(CASE WHEN os_id = 7 THEN cs_qty ELSE 0 END) AS max_forming_2,\n        MAX(CASE WHEN os_id = 8 THEN cs_qty ELSE 0 END) AS max_forming_3,\n        MAX(CASE WHEN os_id = 9 THEN cs_qty ELSE 0 END) AS max_etching,\n        MAX(CASE WHEN os_id = 10 THEN cs_qty ELSE 0 END) AS max_deburring,\n        MAX(CASE WHEN os_id = 12 THEN cs_qty ELSE 0 END) AS max_laser,\n        MAX(CASE WHEN os_id = 13 THEN cs_qty ELSE 0 END) AS max_ultrasonic,\n        MAX(CASE WHEN os_id = 14 THEN cs_qty ELSE 0 END) AS max_arcor,\n        MAX(CASE WHEN os_id = 15 THEN cs_qty ELSE 0 END) AS max_riveting,\n        MAX(CASE WHEN os_id = 16 THEN cs_qty ELSE 0 END) AS max_brazing,\n        MAX(CASE WHEN os_id = 17 THEN cs_qty ELSE 0 END) AS max_sealing,\n        MAX(CASE WHEN os_id = 18 THEN cs_qty ELSE 0 END) AS max_dimpling\n    FROM comp_stock\n    LEFT JOIN comp_opstages ON CS_STAGEID = os_id\n    LEFT JOIN components ON CS_COMPID = co_id\n    WHERE cs_qty > 0\n    and cs_plantid in (1,2)\n    GROUP BY co_partno, CO_PARTNAME,cs_plantid\n) t\n-- Level 2: Sum those plant-specific maximums together\nGROUP BY co_partno,CO_PARTNAME\n) S ON AP.co_partno = S.PartNo and AP.CO_PARTNAME = S.CO_PARTNAME\n\n-- QA & Rework logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT\n        co_partno AS PartNo,CO_PARTNAME,\n        SUM(QAFromSup_pending) AS qa_supplier,\n        SUM(ProdQA_pending)    AS qa_production,\n        SUM(qa_disp_pending)   AS qa_disposition,\n        SUM(rw_pending)        AS rework_pending\n    FROM (\n        SELECT CD_COMPID AS comp_id, COALESCE(SUM(QD_OFFEREDQTY), 0) AS QAFromSup_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON CM_ID = CD_CMID\n        INNER JOIN qa_details ON QD_CMID = CM_ID\n        WHERE QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY CD_COMPID\n        UNION ALL\n        SELECT PS_PARENTCOMPID AS comp_id, 0 as QASup_pending, COALESCE(SUM(QD_OFFEREDQTY), 0) AS ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM scheduled_production\n        INNER JOIN production_details ON ps_id = pd_psid\n        INNER JOIN qa_details ON pd_id = qd_pdid\n        WHERE QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY PS_PARENTCOMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, COALESCE(SUM(CR_QTY), 0) AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_rejectdetails\n        WHERE CR_STATUS = 'P'\n        GROUP BY CR_COMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, COALESCE(SUM(CR_QTY) - COALESCE(sum(t2.rdQty), 0), 0) AS rw_pending\n        FROM comp_rejectdetails\n        LEFT JOIN (\n            SELECT RD_CRID AS crId, SUM(RD_QTY) AS rdQty\n            FROM comp_rejinvdetails\n            INNER JOIN comp_rejinvmaster ON RD_RJID = RJ_ID\n            INNER JOIN comp_rejectdetails ON CR_ID = RD_CRID\n            WHERE RJ_MOVEMENT = 'O' AND CR_STATUS = 'R'\n            GROUP BY RD_CRID\n        ) t2 ON t2.crId = CR_ID\n        WHERE CR_STATUS = 'R'\n        GROUP BY CR_COMPID    \n    ) combined \n    LEFT JOIN components ON co_id = comp_id\n    -- FIX 2: Group strictly by Part Number, omitting comp_id \n    GROUP BY co_partno ,CO_PARTNAME\n) Q ON AP.co_partno = Q.PartNo and AP.CO_PARTNAME=Q.CO_PARTNAME\n\n-- Balance Data logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME,\n        MAX(CASE WHEN cd_opstage = 2  THEN compbalance END) AS bal_1st_Forming,\n        MAX(CASE WHEN cd_opstage = 3  THEN compbalance END) AS bal_Electroplating,\n        MAX(CASE WHEN cd_opstage = 4  THEN compbalance END) AS bal_Soapwash,\n        MAX(CASE WHEN cd_opstage = 5  THEN compbalance END) AS bal_Tapping,\n        MAX(CASE WHEN cd_opstage = 6  THEN compbalance END) AS bal_FG,\n        MAX(CASE WHEN cd_opstage = 7  THEN compbalance END) AS bal_2nd_Forming,\n        MAX(CASE WHEN cd_opstage = 8  THEN compbalance END) AS bal_3rd_Forming,\n        MAX(CASE WHEN cd_opstage = 9  THEN compbalance END) AS bal_Etching,\n        MAX(CASE WHEN cd_opstage = 10 THEN compbalance END) AS bal_Deburring,\n        MAX(CASE WHEN cd_opstage = 12 THEN compbalance END) AS bal_Laser_Welding,\n        MAX(CASE WHEN cd_opstage = 13 THEN compbalance END) AS bal_Ultrasonic_Cleaning,\n        MAX(CASE WHEN cd_opstage = 14 THEN compbalance END) AS bal_Arcor_Coating,\n        MAX(CASE WHEN cd_opstage = 15 THEN compbalance END) AS bal_Riveting,\n        MAX(CASE WHEN cd_opstage = 16 THEN compbalance END) AS bal_Brazing,\n        MAX(CASE WHEN cd_opstage = 17 THEN compbalance END) AS bal_Heat_Sealing,\n        MAX(CASE WHEN cd_opstage = 18 THEN compbalance END) AS bal_Dimpling\n    FROM (\n        SELECT co_id, CO_PARTNO,CO_PARTNAME, cd_opstage, \n               COALESCE(SUM(CASE WHEN cm_movement = 'O' THEN cd_qty WHEN cm_movement = 'I' THEN -cd_qty ELSE 0 END), 0) - COALESCE(sum(sd_qty), 0) AS compbalance\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON cm_id = cd_cmid\n        LEFT JOIN comp_opstages ON cd_opstage = os_id \n        LEFT JOIN components ON CD_COMPID = co_id AND CO_ACTIVEYN = 'Y'\n        LEFT JOIN comp_scrapdetails ON sd_source='S' AND sd_src=3 AND sd_refno=CD_CMID AND sd_compid = cd_compid AND SD_OPSTAGE = cd_opstage\n        WHERE co_id IS NOT NULL\n        GROUP BY cd_compid, cd_opstage, co_id, CO_PARTNO,CO_PARTNAME\n    ) t3\n    WHERE compbalance > 0\n    GROUP BY co_partno,CO_PARTNAME\n) B ON AP.co_partno = B.PartNo and Ap.CO_PARTNAME = B.CO_PARTNAME\n\n-- Exclude blank rows \nWHERE S.PartNo IS NOT NULL \n   OR Q.PartNo IS NOT NULL \n   OR B.PartNo IS NOT NULL \n ORDER BY AP.co_partno;",
       "variables": [],
       "createdAt": "2026-04-18T13:29:22.922240+00:00",
-      "updatedAt": "2026-05-02T07:35:37.975706+00:00",
+      "updatedAt": "2026-05-05T09:22:44.859682+00:00",
       "drilldowns": [
         {
           "column": "Part No",
@@ -426,24 +417,24 @@
     {
       "id": "bb4eb8a4-95a3-4afe-9a1c-699ffcd96aae",
       "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
-      "name": "Consolidated Stock Report",
-      "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',AP.CO_PARTNAME,AP.CO_WEIGHT,AP.MT_Name,\n    \n    -- Stock Values (Q1)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Q3)\n\tcase when {plantid}=2 then COALESCE(B.bal_1st_Forming, 0) ELSE 0 END AS '1st Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Electroplating, 0) ELSE 0 END AS 'Electroplating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Soapwash, 0) ELSE 0 END  AS 'Soapwash (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Tapping, 0)  ELSE 0 END AS 'Tapping (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_FG, 0)  ELSE 0 END AS 'FG (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_2nd_Forming, 0)  ELSE 0 END AS '2nd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_3rd_Forming, 0)  ELSE 0 END AS '3rd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Etching, 0) ELSE 0 END  AS 'Etching (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Deburring, 0)  ELSE 0 END AS 'Deburring (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Laser_Welding, 0) ELSE 0 END  AS 'Laser Welding (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Ultrasonic_Cleaning, 0) ELSE 0 END  AS 'Ultrasonic Cleaning (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Arcor_Coating, 0)  ELSE 0 END AS 'Arcor Coating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Riveting, 0)  ELSE 0 END AS 'Riveting (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Brazing, 0)  ELSE 0 END AS 'Brazing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Heat_Sealing, 0)  ELSE 0 END AS 'Heat Sealing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Dimpling, 0) ELSE 0 END  AS 'Dimpling (With Supplier)',\n    -- QA and Rework (Q2)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\n-- FIX 1: Drive the query off a purely distinct list of Part Numbers\nFROM (\n    SELECT DISTINCT co_partno ,CO_PARTNAME,CO_WEIGHT,MT_Name\n    FROM components inner join materialtypemaster on MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL and CO_ACTIVEYN ='Y' and co_id=CO_PARENTID\n) AP\n\n-- Stock Values logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME as CO_PARTNAME,\n        MAX(CASE WHEN os_id = 2  THEN cs_qty END) AS stk_1st_Forming,\n        MAX(CASE WHEN os_id = 3  THEN cs_qty END) AS stk_Electroplating,\n        MAX(CASE WHEN os_id = 4  THEN cs_qty END) AS stk_Soapwash,\n        MAX(CASE WHEN os_id = 5  THEN cs_qty END) AS stk_Tapping,\n        MAX(CASE WHEN os_id = 6  THEN cs_qty END) AS stk_FG,\n        MAX(CASE WHEN os_id = 7  THEN cs_qty END) AS stk_2nd_Forming,\n        MAX(CASE WHEN os_id = 8  THEN cs_qty END) AS stk_3rd_Forming,\n        MAX(CASE WHEN os_id = 9  THEN cs_qty END) AS stk_Etching,\n        MAX(CASE WHEN os_id = 10 THEN cs_qty END) AS stk_Deburring,\n        MAX(CASE WHEN os_id = 12 THEN cs_qty END) AS stk_Laser_Welding,\n        MAX(CASE WHEN os_id = 13 THEN cs_qty END) AS stk_Ultrasonic_Cleaning,\n        MAX(CASE WHEN os_id = 14 THEN cs_qty END) AS stk_Arcor_Coating,\n        MAX(CASE WHEN os_id = 15 THEN cs_qty END) AS stk_Riveting,\n        MAX(CASE WHEN os_id = 16 THEN cs_qty END) AS stk_Brazing,\n        MAX(CASE WHEN os_id = 17 THEN cs_qty END) AS stk_Heat_Sealing,\n        MAX(CASE WHEN os_id = 18 THEN cs_qty END) AS stk_Dimpling\n    FROM (\n        SELECT co_partno,CO_PARTNAME, os_id, cs_qty \n        FROM comp_stock \n        LEFT JOIN comp_opstages ON CS_STAGEID = os_id \n        LEFT JOIN components ON CS_COMPID = co_id\n        WHERE cs_plantid = {plantid}\n    ) t1\n    GROUP BY co_partno,CO_PARTNAME\n) S ON AP.co_partno = S.PartNo and AP.CO_PARTNAME = S.CO_PARTNAME\n\n-- QA & Rework logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT\n        co_partno AS PartNo,CO_PARTNAME,\n        SUM(QAFromSup_pending) AS qa_supplier,\n        SUM(ProdQA_pending)    AS qa_production,\n        SUM(qa_disp_pending)   AS qa_disposition,\n        SUM(rw_pending)        AS rework_pending\n    FROM (\n        SELECT CD_COMPID AS comp_id, COALESCE(SUM(QD_OFFEREDQTY), 0) AS QAFromSup_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON CM_ID = CD_CMID\n        INNER JOIN qa_details ON QD_CMID = CM_ID\n        WHERE CM_PLANT = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY CD_COMPID\n        UNION ALL\n        SELECT PS_PARENTCOMPID AS comp_id, 0 as QASup_pending, COALESCE(SUM(QD_OFFEREDQTY), 0) AS ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM scheduled_production\n        INNER JOIN production_details ON ps_id = pd_psid\n        INNER JOIN qa_details ON pd_id = qd_pdid\n        WHERE pd_plantid = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY PS_PARENTCOMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, COALESCE(SUM(CR_QTY), 0) AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_rejectdetails\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'P'\n        GROUP BY CR_COMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, COALESCE(SUM(CR_QTY) - COALESCE(sum(t2.rdQty), 0), 0) AS rw_pending\n        FROM comp_rejectdetails\n        LEFT JOIN (\n            SELECT RD_CRID AS crId, SUM(RD_QTY) AS rdQty\n            FROM comp_rejinvdetails\n            INNER JOIN comp_rejinvmaster ON RD_RJID = RJ_ID\n            INNER JOIN comp_rejectdetails ON CR_ID = RD_CRID\n            WHERE RJ_MOVEMENT = 'O' AND CR_PLANT = {plantid} AND CR_STATUS = 'R'\n            GROUP BY RD_CRID\n        ) t2 ON t2.crId = CR_ID\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'R'\n        GROUP BY CR_COMPID    \n    ) combined \n    LEFT JOIN components ON co_id = comp_id\n    -- FIX 2: Group strictly by Part Number, omitting comp_id \n    GROUP BY co_partno ,CO_PARTNAME\n) Q ON AP.co_partno = Q.PartNo and AP.CO_PARTNAME=Q.CO_PARTNAME\n\n-- Balance Data logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME,\n        MAX(CASE WHEN cd_opstage = 2  THEN compbalance END) AS bal_1st_Forming,\n        MAX(CASE WHEN cd_opstage = 3  THEN compbalance END) AS bal_Electroplating,\n        MAX(CASE WHEN cd_opstage = 4  THEN compbalance END) AS bal_Soapwash,\n        MAX(CASE WHEN cd_opstage = 5  THEN compbalance END) AS bal_Tapping,\n        MAX(CASE WHEN cd_opstage = 6  THEN compbalance END) AS bal_FG,\n        MAX(CASE WHEN cd_opstage = 7  THEN compbalance END) AS bal_2nd_Forming,\n        MAX(CASE WHEN cd_opstage = 8  THEN compbalance END) AS bal_3rd_Forming,\n        MAX(CASE WHEN cd_opstage = 9  THEN compbalance END) AS bal_Etching,\n        MAX(CASE WHEN cd_opstage = 10 THEN compbalance END) AS bal_Deburring,\n        MAX(CASE WHEN cd_opstage = 12 THEN compbalance END) AS bal_Laser_Welding,\n        MAX(CASE WHEN cd_opstage = 13 THEN compbalance END) AS bal_Ultrasonic_Cleaning,\n        MAX(CASE WHEN cd_opstage = 14 THEN compbalance END) AS bal_Arcor_Coating,\n        MAX(CASE WHEN cd_opstage = 15 THEN compbalance END) AS bal_Riveting,\n        MAX(CASE WHEN cd_opstage = 16 THEN compbalance END) AS bal_Brazing,\n        MAX(CASE WHEN cd_opstage = 17 THEN compbalance END) AS bal_Heat_Sealing,\n        MAX(CASE WHEN cd_opstage = 18 THEN compbalance END) AS bal_Dimpling\n    FROM (\n        SELECT co_id, CO_PARTNO,CO_PARTNAME, cd_opstage, \n               COALESCE(SUM(CASE WHEN cm_movement = 'O' THEN cd_qty WHEN cm_movement = 'I' THEN -cd_qty ELSE 0 END), 0) - COALESCE(sum(sd_qty), 0) AS compbalance\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON cm_id = cd_cmid\n        LEFT JOIN comp_opstages ON cd_opstage = os_id \n        LEFT JOIN components ON CD_COMPID = co_id AND CO_ACTIVEYN = 'Y'\n        LEFT JOIN comp_scrapdetails ON sd_source='S' AND sd_src=3 AND sd_refno=CD_CMID AND sd_compid = cd_compid AND SD_OPSTAGE = cd_opstage\n        WHERE co_id IS NOT NULL\n        GROUP BY cd_compid, cd_opstage, co_id, CO_PARTNO,CO_PARTNAME\n    ) t3\n    WHERE compbalance > 0\n    GROUP BY co_partno,CO_PARTNAME\n) B ON AP.co_partno = B.PartNo and Ap.CO_PARTNAME = B.CO_PARTNAME\n\n-- Exclude blank rows \nWHERE S.PartNo IS NOT NULL \n   OR Q.PartNo IS NOT NULL \n   OR B.PartNo IS NOT NULL\n",
+      "name": "Consolidated Stock Report Unitwise",
+      "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',AP.CO_PARTNAME,AP.CO_WEIGHT,AP.MT_Name,\n    \n    -- Stock Values (Q1)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Q3)\n\tcase when {plantid}=2 then COALESCE(B.bal_1st_Forming, 0) ELSE 0 END AS '1st Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Electroplating, 0) ELSE 0 END AS 'Electroplating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Soapwash, 0) ELSE 0 END  AS 'Soapwash (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Tapping, 0)  ELSE 0 END AS 'Tapping (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_FG, 0)  ELSE 0 END AS 'FG (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_2nd_Forming, 0)  ELSE 0 END AS '2nd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_3rd_Forming, 0)  ELSE 0 END AS '3rd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Etching, 0) ELSE 0 END  AS 'Etching (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Deburring, 0)  ELSE 0 END AS 'Deburring (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Laser_Welding, 0) ELSE 0 END  AS 'Laser Welding (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Ultrasonic_Cleaning, 0) ELSE 0 END  AS 'Ultrasonic Cleaning (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Arcor_Coating, 0)  ELSE 0 END AS 'Arcor Coating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Riveting, 0)  ELSE 0 END AS 'Riveting (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Brazing, 0)  ELSE 0 END AS 'Brazing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Heat_Sealing, 0)  ELSE 0 END AS 'Heat Sealing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Dimpling, 0) ELSE 0 END  AS 'Dimpling (With Supplier)',\n    -- QA and Rework (Q2)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\n-- FIX 1: Drive the query off a purely distinct list of Part Numbers\nFROM (\n    SELECT DISTINCT co_partno ,CO_PARTNAME,CO_WEIGHT,MT_Name\n    FROM components inner join materialtypemaster on MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL and CO_ACTIVEYN ='Y' and co_id=CO_PARENTID\n) AP\n\n-- Stock Values logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME as CO_PARTNAME,\n        MAX(CASE WHEN os_id = 2  THEN cs_qty END) AS stk_1st_Forming,\n        MAX(CASE WHEN os_id = 3  THEN cs_qty END) AS stk_Electroplating,\n        MAX(CASE WHEN os_id = 4  THEN cs_qty END) AS stk_Soapwash,\n        MAX(CASE WHEN os_id = 5  THEN cs_qty END) AS stk_Tapping,\n        MAX(CASE WHEN os_id = 6  THEN cs_qty END) AS stk_FG,\n        MAX(CASE WHEN os_id = 7  THEN cs_qty END) AS stk_2nd_Forming,\n        MAX(CASE WHEN os_id = 8  THEN cs_qty END) AS stk_3rd_Forming,\n        MAX(CASE WHEN os_id = 9  THEN cs_qty END) AS stk_Etching,\n        MAX(CASE WHEN os_id = 10 THEN cs_qty END) AS stk_Deburring,\n        MAX(CASE WHEN os_id = 12 THEN cs_qty END) AS stk_Laser_Welding,\n        MAX(CASE WHEN os_id = 13 THEN cs_qty END) AS stk_Ultrasonic_Cleaning,\n        MAX(CASE WHEN os_id = 14 THEN cs_qty END) AS stk_Arcor_Coating,\n        MAX(CASE WHEN os_id = 15 THEN cs_qty END) AS stk_Riveting,\n        MAX(CASE WHEN os_id = 16 THEN cs_qty END) AS stk_Brazing,\n        MAX(CASE WHEN os_id = 17 THEN cs_qty END) AS stk_Heat_Sealing,\n        MAX(CASE WHEN os_id = 18 THEN cs_qty END) AS stk_Dimpling\n    FROM (\n        SELECT co_partno,CO_PARTNAME, os_id, cs_qty \n        FROM comp_stock \n        LEFT JOIN comp_opstages ON CS_STAGEID = os_id \n        LEFT JOIN components ON CS_COMPID = co_id\n        WHERE cs_plantid = {plantid}\n    ) t1\n    GROUP BY co_partno,CO_PARTNAME\n) S ON AP.co_partno = S.PartNo and AP.CO_PARTNAME = S.CO_PARTNAME\n\n-- QA & Rework logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT\n        co_partno AS PartNo,CO_PARTNAME,\n        SUM(QAFromSup_pending) AS qa_supplier,\n        SUM(ProdQA_pending)    AS qa_production,\n        SUM(qa_disp_pending)   AS qa_disposition,\n        SUM(rw_pending)        AS rework_pending\n    FROM (\n        SELECT CD_COMPID AS comp_id, COALESCE(SUM(QD_OFFEREDQTY), 0) AS QAFromSup_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON CM_ID = CD_CMID\n        INNER JOIN qa_details ON QD_CMID = CM_ID\n        WHERE CM_PLANT = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY CD_COMPID\n        UNION ALL\n        SELECT PS_PARENTCOMPID AS comp_id, 0 as QASup_pending, COALESCE(SUM(QD_OFFEREDQTY), 0) AS ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM scheduled_production\n        INNER JOIN production_details ON ps_id = pd_psid\n        INNER JOIN qa_details ON pd_id = qd_pdid\n        WHERE pd_plantid = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY PS_PARENTCOMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, COALESCE(SUM(CR_QTY), 0) AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_rejectdetails\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'P'\n        GROUP BY CR_COMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, COALESCE(SUM(CR_QTY) - COALESCE(sum(t2.rdQty), 0), 0) AS rw_pending\n        FROM comp_rejectdetails\n        LEFT JOIN (\n            SELECT RD_CRID AS crId, SUM(RD_QTY) AS rdQty\n            FROM comp_rejinvdetails\n            INNER JOIN comp_rejinvmaster ON RD_RJID = RJ_ID\n            INNER JOIN comp_rejectdetails ON CR_ID = RD_CRID\n            WHERE RJ_MOVEMENT = 'O' AND CR_PLANT = {plantid} AND CR_STATUS = 'R'\n            GROUP BY RD_CRID\n        ) t2 ON t2.crId = CR_ID\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'R'\n        GROUP BY CR_COMPID    \n    ) combined \n    LEFT JOIN components ON co_id = comp_id\n    -- FIX 2: Group strictly by Part Number, omitting comp_id \n    GROUP BY co_partno ,CO_PARTNAME\n) Q ON AP.co_partno = Q.PartNo and AP.CO_PARTNAME=Q.CO_PARTNAME\n\n-- Balance Data logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME,\n        MAX(CASE WHEN cd_opstage = 2  THEN compbalance END) AS bal_1st_Forming,\n        MAX(CASE WHEN cd_opstage = 3  THEN compbalance END) AS bal_Electroplating,\n        MAX(CASE WHEN cd_opstage = 4  THEN compbalance END) AS bal_Soapwash,\n        MAX(CASE WHEN cd_opstage = 5  THEN compbalance END) AS bal_Tapping,\n        MAX(CASE WHEN cd_opstage = 6  THEN compbalance END) AS bal_FG,\n        MAX(CASE WHEN cd_opstage = 7  THEN compbalance END) AS bal_2nd_Forming,\n        MAX(CASE WHEN cd_opstage = 8  THEN compbalance END) AS bal_3rd_Forming,\n        MAX(CASE WHEN cd_opstage = 9  THEN compbalance END) AS bal_Etching,\n        MAX(CASE WHEN cd_opstage = 10 THEN compbalance END) AS bal_Deburring,\n        MAX(CASE WHEN cd_opstage = 12 THEN compbalance END) AS bal_Laser_Welding,\n        MAX(CASE WHEN cd_opstage = 13 THEN compbalance END) AS bal_Ultrasonic_Cleaning,\n        MAX(CASE WHEN cd_opstage = 14 THEN compbalance END) AS bal_Arcor_Coating,\n        MAX(CASE WHEN cd_opstage = 15 THEN compbalance END) AS bal_Riveting,\n        MAX(CASE WHEN cd_opstage = 16 THEN compbalance END) AS bal_Brazing,\n        MAX(CASE WHEN cd_opstage = 17 THEN compbalance END) AS bal_Heat_Sealing,\n        MAX(CASE WHEN cd_opstage = 18 THEN compbalance END) AS bal_Dimpling\n    FROM (\n        SELECT co_id, CO_PARTNO,CO_PARTNAME, cd_opstage, \n               COALESCE(SUM(CASE WHEN cm_movement = 'O' THEN cd_qty WHEN cm_movement = 'I' THEN -cd_qty ELSE 0 END), 0) - COALESCE(sum(sd_qty), 0) AS compbalance\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON cm_id = cd_cmid\n        LEFT JOIN comp_opstages ON cd_opstage = os_id \n        LEFT JOIN components ON CD_COMPID = co_id AND CO_ACTIVEYN = 'Y'\n        LEFT JOIN comp_scrapdetails ON sd_source='S' AND sd_src=3 AND sd_refno=CD_CMID AND sd_compid = cd_compid AND SD_OPSTAGE = cd_opstage\n        WHERE co_id IS NOT NULL\n        GROUP BY cd_compid, cd_opstage, co_id, CO_PARTNO,CO_PARTNAME\n    ) t3\n    WHERE compbalance > 0\n    GROUP BY co_partno,CO_PARTNAME\n) B ON AP.co_partno = B.PartNo and Ap.CO_PARTNAME = B.CO_PARTNAME\n\n-- Exclude blank rows \nWHERE S.PartNo IS NOT NULL \n   OR Q.PartNo IS NOT NULL \n   OR B.PartNo IS NOT NULL\n\nORDER BY AP.co_partno;",
       "variables": [
         "plantid"
       ],
       "pinned": false,
       "createdAt": "2026-05-02T06:41:25.157667+00:00",
-      "updatedAt": "2026-05-02T06:41:25.157667+00:00"
+      "updatedAt": "2026-05-05T09:18:48.673521+00:00"
     },
     {
       "id": "1827eb08-3b24-4fcd-9d22-c01ea891dcb8",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Distinct Component Details",
-      "queryTemplate": "select cu_name as 'Parent Customer', CO_PARTNO as 'Part No', CO_PARTNAME as 'Part Name', mt_name as 'Material', CO_WEIGHT as 'Component Weight', CO_WIDTH as Width, CO_LENGTH as Thickness, CO_REVISION as Revision, gm_name as Grade ,pl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron from components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' );",
+      "queryTemplate": "select cu_name as 'Parent Customer', CO_PARTNO as 'Part No', CO_PARTNAME as 'Part Name', mt_name as 'Material',CO_NoOfOp as 'No of Operations', CO_WEIGHT as 'Component Weight', CO_WIDTH as Width, CO_LENGTH as Thickness, CO_REVISION as Revision, gm_name as Grade ,pl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron from components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' );",
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-02T06:48:34.958033+00:00",
-      "updatedAt": "2026-05-02T06:48:34.958033+00:00"
+      "updatedAt": "2026-05-05T05:10:41.730872+00:00"
     },
     {
       "id": "b7b03e78-c351-4cd1-a3aa-e323cf54148d",
@@ -453,7 +444,7 @@
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-02T06:48:58.562404+00:00",
-      "updatedAt": "2026-05-02T06:48:58.562404+00:00"
+      "updatedAt": "2026-05-04T04:55:49.986589+00:00"
     },
     {
       "id": "511a6c85-6b79-4b32-8ffb-4b64809c464c",
@@ -463,7 +454,413 @@
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-02T07:38:47.967840+00:00",
-      "updatedAt": "2026-05-02T07:38:47.967840+00:00"
+      "updatedAt": "2026-05-04T04:55:00.160597+00:00"
+    },
+    {
+      "id": "e55b426d-2d1a-4dba-84eb-54ab01158ef2",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Monthly Customer Schedule(Not SO)",
+      "queryTemplate": "SELECT\n  t.partno    AS 'Part No',\n  t.total_qty AS 'Total Qty',\n  t.day_1     AS 'day 1',\n  t.day_2     AS 'day 2',\n  t.day_3     AS 'day 3',\n  t.day_4     AS 'day 4',\n  t.day_5     AS 'day 5',\n  t.day_6     AS 'day 6',\n  t.day_7     AS 'day 7',\n  t.day_8     AS 'day 8',\n  t.day_9     AS 'day 9',\n  t.day_10    AS 'day 10',\n  t.day_11    AS 'day 11',\n  t.day_12    AS 'day 12',\n  t.day_13    AS 'day 13',\n  t.day_14    AS 'day 14',\n  t.day_15    AS 'day 15',\n  t.day_16    AS 'day 16',\n  t.day_17    AS 'day 17',\n  t.day_18    AS 'day 18',\n  t.day_19    AS 'day 19',\n  t.day_20    AS 'day 20',\n  t.day_21    AS 'day 21',\n  t.day_22    AS 'day 22',\n  t.day_23    AS 'day 23',\n  t.day_24    AS 'day 24',\n  t.day_25    AS 'day 25',\n  t.day_26    AS 'day 26',\n  t.day_27    AS 'day 27',\n  t.day_28    AS 'day 28',\n  t.day_29    AS 'day 29',\n  t.day_30    AS 'day 30',\n  t.day_31    AS 'day 31'\nFROM (\n  SELECT\n    0 AS sort_order,\n    'Grand Total' AS partno,\n    SUM(sc.CS_QTY) AS total_qty,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 3 THEN sc.CS_QTY ELSE 0 END) AS day_3,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 4 THEN sc.CS_QTY ELSE 0 END) AS day_4,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 5 THEN sc.CS_QTY ELSE 0 END) AS day_5,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 6 THEN sc.CS_QTY ELSE 0 END) AS day_6,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 7 THEN sc.CS_QTY ELSE 0 END) AS day_7,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 8 THEN sc.CS_QTY ELSE 0 END) AS day_8,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 9 THEN sc.CS_QTY ELSE 0 END) AS day_9,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 10 THEN sc.CS_QTY ELSE 0 END) AS day_10,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 11 THEN sc.CS_QTY ELSE 0 END) AS day_11,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 12 THEN sc.CS_QTY ELSE 0 END) AS day_12,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 13 THEN sc.CS_QTY ELSE 0 END) AS day_13,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 14 THEN sc.CS_QTY ELSE 0 END) AS day_14,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 15 THEN sc.CS_QTY ELSE 0 END) AS day_15,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 16 THEN sc.CS_QTY ELSE 0 END) AS day_16,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 17 THEN sc.CS_QTY ELSE 0 END) AS day_17,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 18 THEN sc.CS_QTY ELSE 0 END) AS day_18,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 19 THEN sc.CS_QTY ELSE 0 END) AS day_19,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 20 THEN sc.CS_QTY ELSE 0 END) AS day_20,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 21 THEN sc.CS_QTY ELSE 0 END) AS day_21,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 22 THEN sc.CS_QTY ELSE 0 END) AS day_22,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 23 THEN sc.CS_QTY ELSE 0 END) AS day_23,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 24 THEN sc.CS_QTY ELSE 0 END) AS day_24,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 25 THEN sc.CS_QTY ELSE 0 END) AS day_25,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 26 THEN sc.CS_QTY ELSE 0 END) AS day_26,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 27 THEN sc.CS_QTY ELSE 0 END) AS day_27,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 28 THEN sc.CS_QTY ELSE 0 END) AS day_28,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 29 THEN sc.CS_QTY ELSE 0 END) AS day_29,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 30 THEN sc.CS_QTY ELSE 0 END) AS day_30,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 31 THEN sc.CS_QTY ELSE 0 END) AS day_31\n  FROM schedule_master sm\n  JOIN schedule_details sd ON sm.SM_ID = sd.SC_SMID\n  JOIN scheduled_customer sc ON sd.SC_ID = sc.CS_SCID\n  JOIN components c ON sd.SC_COMPID = c.CO_ID\n  WHERE sm.SM_MONTH = {month}\n    AND sm.SM_YEAR = {year}\n    AND sc.CS_SCHEDULESTATE IN (1, 2)\n\n  UNION ALL\n\n  SELECT\n    1 AS sort_order,\n    c.CO_PARTNO AS partno,\n    SUM(sc.CS_QTY) AS total_qty,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 3 THEN sc.CS_QTY ELSE 0 END) AS day_3,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 4 THEN sc.CS_QTY ELSE 0 END) AS day_4,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 5 THEN sc.CS_QTY ELSE 0 END) AS day_5,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 6 THEN sc.CS_QTY ELSE 0 END) AS day_6,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 7 THEN sc.CS_QTY ELSE 0 END) AS day_7,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 8 THEN sc.CS_QTY ELSE 0 END) AS day_8,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 9 THEN sc.CS_QTY ELSE 0 END) AS day_9,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 10 THEN sc.CS_QTY ELSE 0 END) AS day_10,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 11 THEN sc.CS_QTY ELSE 0 END) AS day_11,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 12 THEN sc.CS_QTY ELSE 0 END) AS day_12,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 13 THEN sc.CS_QTY ELSE 0 END) AS day_13,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 14 THEN sc.CS_QTY ELSE 0 END) AS day_14,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 15 THEN sc.CS_QTY ELSE 0 END) AS day_15,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 16 THEN sc.CS_QTY ELSE 0 END) AS day_16,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 17 THEN sc.CS_QTY ELSE 0 END) AS day_17,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 18 THEN sc.CS_QTY ELSE 0 END) AS day_18,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 19 THEN sc.CS_QTY ELSE 0 END) AS day_19,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 20 THEN sc.CS_QTY ELSE 0 END) AS day_20,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 21 THEN sc.CS_QTY ELSE 0 END) AS day_21,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 22 THEN sc.CS_QTY ELSE 0 END) AS day_22,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 23 THEN sc.CS_QTY ELSE 0 END) AS day_23,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 24 THEN sc.CS_QTY ELSE 0 END) AS day_24,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 25 THEN sc.CS_QTY ELSE 0 END) AS day_25,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 26 THEN sc.CS_QTY ELSE 0 END) AS day_26,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 27 THEN sc.CS_QTY ELSE 0 END) AS day_27,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 28 THEN sc.CS_QTY ELSE 0 END) AS day_28,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 29 THEN sc.CS_QTY ELSE 0 END) AS day_29,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 30 THEN sc.CS_QTY ELSE 0 END) AS day_30,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 31 THEN sc.CS_QTY ELSE 0 END) AS day_31\n  FROM schedule_master sm\n  JOIN schedule_details sd ON sm.SM_ID = sd.SC_SMID\n  JOIN scheduled_customer sc ON sd.SC_ID = sc.CS_SCID\n  JOIN components c ON sd.SC_COMPID = c.CO_ID\n  WHERE sm.SM_MONTH = {month}\n    AND sm.SM_YEAR = {year}\n    AND sc.CS_SCHEDULESTATE IN (1, 2)\n  GROUP BY c.CO_PARTNO\n) t\nORDER BY t.sort_order, t.partno;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:07:11.194765+00:00",
+      "updatedAt": "2026-05-04T05:07:11.194765+00:00"
+    },
+    {
+      "id": "cfdc9588-72e8-4732-a5ff-cb181b93cdd8",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Correction Report",
+      "queryTemplate": "select DATE_FORMAT(dt, '%d-%m-%Y %H:%i:%s') AS   'EnteredDate',MM_RawMtPartNo RawMaterial,\n rc_batchno Batch, QtyBefore, QtyAfter, CorrectionType,rc_remarks 'Remarks',  us_login 'CorrectedBy'\n from (\nSELECT rc_createddt dt,MM_RawMtPartNo , rc_batchno ,rc_theo QtyBefore, round((rc_theo-rc_correction),2) as 'QtyAfter', \n'Production RM' as CorrectionType,rc_remarks ,  us_login \n FROM rm_prodcorrection\nleft join materialmaster on rc_rmid = mm_id\nleft join users on us_id = rc_userid\nunion\nSELECT rc_createddt dt,MM_RawMtPartNo,   rc_batchno,rc_QtyBefore, round((rc_QtyBefore-rc_correction),2) as 'QtyAfter', \n'Scrap from Production' as CorrectionType, rc_remarks, us_login \n FROM rm_scrapcorrection\nleft join materialmaster on rc_rmid = mm_id\nleft join users on us_id = rc_userid) t\nwhere month(dt)= {month} and year(dt)= {year}\norder by dt,CorrectionType ;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:08:09.827802+00:00",
+      "updatedAt": "2026-05-04T05:08:09.827802+00:00"
+    },
+    {
+      "id": "69ab879f-39aa-439f-9fd9-0046376d2a4f",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Correction Report -JobWork",
+      "queryTemplate": "select  MM_RawMtPartNo RM, co_partno PartNo,ss_Name Supplier,\nround(COALESCE(GREATEST(rmGiven,0),0),2) 'RMGiven' ,\n round(COALESCE(GREATEST(prodQty,0),0),2) 'CompProduced' ,\n round(COALESCE(GREATEST(compkg,0),0),2) 'ActkgConsumed' ,\n round(COALESCE(GREATEST(partwt,0),0),2) 'CalcPartWt'  ,\n round(COALESCE(GREATEST(TheoRM,0),0),2) 'TheoRM'  , \n round(COALESCE(GREATEST(retqty,0),0),2) 'ActRetQty'  ,\n round(COALESCE(GREATEST(scrap,0),0),2) 'ActualScrap' ,\n case when TheoRM>0 then  round(COALESCE(GREATEST(rmGiven -TheoRM,0),0),2)  else 0 end 'TheoRMRet' ,\n round(COALESCE(GREATEST(TheoRM-partwt,0),0),2) 'TheoScrap'  \nfrom (\nselect   MM_RawMtPartNo , co_partno ,ss_Name ,co_weight *sum(compkg) partwt,   sum( rd_qty) rmGiven, sum(prodQty) prodQty,sum(compkg) compKg,\nsum(scrapqty) scrap,sum(retqty) retqty,sum(prodQty)/conVal TheoRM\n\tfrom  rm_inwardmaster\n\tleft join rm_inwarddetails rd on rd_riid= ri_id\n\tleft join components on co_id = rd_compid \n\tleft join materialmaster on rd_rmid= mm_id\n\tleft join supplier on ss_id = RI_SUPPLIERID\n    left join (\n\t\tselect RD_OUTWARDID outwardid, sum(compKGQty) compkg,sum(prodQty) prodQty , sum(RD_ACCEPTEDQTY) retqty,sum(scrapqty) scrapqty, conVal\n\tfrom  rm_inwardmaster\n\tleft join rm_inwarddetails rd1 on rd_riid= ri_id \n    left join (select sum(cd_kgqty) compKGQty , cd_outwardid, sum(cd_qty) prodQty,CD_COMPID\n\t\tfrom comp_inwarddetails where cd_src= 4 group by cd_outwardid,CD_COMPID)inv on cd_outwardid=rd_id\n\tleft join (SELECT sum(rs_qty) scrapqty,RS_OUTWARDID FROM rm_scrapdetails group by RS_OUTWARDID) scrap on scrap.RS_OUTWARDID=  rd_id \n    left join (SELECT CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\tand CT_NO_OF_CAVITY > 0)t1 on  CT_COMPID= CD_COMPID \n    where RI_MOVEMENTTYPE= 4 and ri_movement ='I'\n     group by RD_OUTWARDID,conVal)comp on outwardid = rd.rd_id    \n where  RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 \n group by MM_RawMtPartNo , co_partno ,ss_Name, rd_id,conVal)temp",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:08:43.425280+00:00",
+      "updatedAt": "2026-05-04T05:08:43.425280+00:00"
+    },
+    {
+      "id": "42e45ad0-3935-4a18-9b78-cd41ad27774b",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM Stock Batch-Wise",
+      "queryTemplate": "select  inQ.batch,date_format(inQ.ri_date, '%d-%m-%Y')  'InwardDt', \ninQ.RD_ACCEPTEDQTY 'InwardQty', rmStore.Qty as 'RM In Store',\nround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\nround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\nround(COALESCE(GREATEST((ProdQty-ThRMForProduction),0),0),2) as 'RM with Prod(Theo)' ,\nround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\nround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Splitting' ,\nround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\nround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \nround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\nround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\nround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor'\nFROM \n(select  RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     left join materialmaster on mm_id = rd_rmid\n     where RD_ACCEPTEDQTY>0\n     group by RD_BATCHNO,ri_date)inQ\n     left join (SELECT RD_BATCHNO batch,\t\t\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\tFROM rm_inwarddetails , rm_inwardmaster\n    where rd_riid=ri_id \n    group by RD_BATCHNO) rmStore on rmStore.batch= inQ.batch\n     left join (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     where RI_MOVEMENTTYPE = 3\n     group by RD_BATCHNO\n     ) prod on prod.batch = inQ.batch\n     left join (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END) ,2)AS SplitQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     where RI_MOVEMENTTYPE = 2\n     group by RD_BATCHNO\n     ) Splitting on Splitting.batch = inQ.batch\nleft join (  select pd_batchno batch, round(sum(PD_PRODQTY/conVal),2)  ThRMForProduction , sum(PD_SCRAPQTY) pdscrap from production_details\n\tleft join scheduled_production on pd_psid = ps_id \n\t-- left join components on  plan.PS_PARENTCOMPID= co_id\n\tleft join \n\t(SELECT CT_COMPID ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID\n\t\t\tgroup by  pd_batchno)prodQ on prodQ.batch=inQ.batch \n\tleft join(select RD_BATCHNO batch, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp,\n        round((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))+sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (\n\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty\n\t\tfrom rm_inwarddetails rd\n\t\tjoin\n\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\tleft join  (select rd_id,RD_OUTWARDID, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails group by RD_OUTWARDID, rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid from comp_inwarddetails where cd_src=4  group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id ) t\n\t\tgroup by rd_batchno) jwQty on jwQty.batch = inQ.batch         \n        where rmStore.Qty >0 or ProdQty-ThRMForProduction>0 or jwRemQty>0 or splitQty>0      ;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:12:03.676726+00:00",
+      "updatedAt": "2026-05-04T05:12:03.676726+00:00"
+    },
+    {
+      "id": "2e891054-0e91-46a4-bd35-53158b52386c",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM Stock RawMaterial-wise",
+      "queryTemplate": "select  MM_RawMtPartNo 'RawMaterial',mt_name 'Material',\nBatch ,date_format(ri_date, '%d-%m-%Y')  'InwardDt', \nRD_ACCEPTEDQTY 'inwardQty', storeQty as 'RM In Store',\nround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\nround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\nround(COALESCE(GREATEST((rmwithprod),0),0),2) as 'RM with Prod(Theo)' ,\nround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\nround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Slitting' ,\nround(COALESCE(GREATEST(SlitingScrap,0),0),2) 'SlitingScrap' ,\nround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\nround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \nround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\nround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\nround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor' from \n(select inQ.rd_rmid rm, inQ.batch Batch,inQ.ri_date ri_date, \ninQ.RD_ACCEPTEDQTY , rmStore.Qty storeQty,\nProdQty,coalesce(ThRMForProduction,0)ThRMForProduction ,ProdQty-coalesce(ThRMForProduction,0)- coalesce(ProdQtyCorrection,0) rmwithprod ,\npdscrap -coalesce(PScrapCorrection,0) pdscrap,SplitQty,SlitingScrap-coalesce(SScrapCorrection,0) SlitingScrap,JWRMGiven,JWretqty, JWcompkg,JWscarp -coalesce(JWScrapCorrection,0) JWscarp ,jwRemQty\nFROM \n(select rd_rmid , RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     left join materialmaster on mm_id = rd_rmid\n     where RD_ACCEPTEDQTY>0\n     group by RD_BATCHNO,ri_date,rd_rmid\n       union\n    select rmin.rd_rmid , rmin.RD_BATCHNO batch ,rmin.ri_date, rmin.RD_ACCEPTEDQTY   RD_ACCEPTEDQTY from \n    (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and rd_outwardid <>0 and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=2) rmin,\n     (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=2) rmout\n     where rmin.rd_rmid <>rmout.rd_rmid and rmin.RD_BATCHNO = rmout.RD_BATCHNO     \n     )inQ\n     left join (SELECT RD_BATCHNO batch, RD_RMID\t,\t\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\tFROM rm_inwarddetails , rm_inwardmaster\n    where rd_riid=ri_id \n    group by RD_BATCHNO,rd_rmid) rmStore on rmStore.batch= inQ.batch and rmStore.rd_rmid = inQ.rd_rmid\n     left join (select RD_BATCHNO batch,rd_rmid,\nround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     where RI_MOVEMENTTYPE = 3\n     group by RD_BATCHNO,rd_rmid\n     ) prod on prod.batch = inQ.batch and prod.rd_rmid = inQ.rd_rmid\n     left join (select RD_BATCHNO batch, rd_rmid,coalesce(rd_qty,0) - coalesce(retqty,0) -coalesce(SlitingScrap,0) SplitQty, coalesce(SlitingScrap,0) SlitingScrap\n     from rm_inwarddetails rd\n\t join rm_inwardmaster on rd_riid= ri_id \n     left join ( select RD_OUTWARDID, sum(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) retqty\n\t\tfrom rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id \n        and RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'I' group by RD_OUTWARDID\n     )SplitRet on SplitRet.RD_OUTWARDID = rd.rd_id\n     left join ( select RS_OUTWARDID,sum(rs_qty) SlitingScrap from rm_scrapdetails group by RS_OUTWARDID     \n     )scrap on scrap.RS_OUTWARDID = rd.rd_id \n     where RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'O'\n     ) Splitting on Splitting.batch = inQ.batch and Splitting.rd_rmid = inQ.rd_rmid\nleft join (  select pd_batchno batch, mm_id,round(coalesce(sum((PD_PRODQTY)/conVal),0),2)  ThRMForProduction ,  coalesce(sum(PD_SCRAPQTY),0) pdscrap from production_details\n\tleft join scheduled_production on pd_psid = ps_id \n    left join comp_scrapdetails on sd_refno =pd_id and sd_src=1\n\tleft join \n\t(SELECT ct_id,CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID  and ct_id = PD_TOOLID\n\t\t\tgroup by  pd_batchno,mm_id)prodQ on prodQ.batch=inQ.batch and prodQ.mm_id = inQ.rd_rmid\n\tleft join(select RD_BATCHNO batch,rd_rmid, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0))+ sum(COALESCE(sfRej,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp, -- + sum(COALESCE(setupW,0))\n        round((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))  +sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (   -- + sum(COALESCE(sfRej,0)) + sum(COALESCE(setupW,0))\n\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty,sfRej,setupW\n\t\tfrom rm_inwarddetails rd\n\t\tjoin\n\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\tleft join  (select rd_id,RD_OUTWARDid, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='I' and ri_movementtype=4 group by RD_OUTWARDID, rd_batchno,rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid, sum(cr_qtykg) sfRej, sum(SD_QTYKG) setupW from comp_inwarddetails\n\t\t\tleft join comp_rejectdetails on cr_cmid= cd_cmid\n\t\t\tleft join comp_scrapdetails on sd_refno =cd_cmid and sd_src=4\n\t\t\t where cd_src=4   group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id \n        ) t\n\t\tgroup by rd_batchno,rd_rmid) jwQty on jwQty.batch = inQ.batch   and jwQty.rd_rmid = inQ.rd_rmid    \n\tLEFT JOIN (\n        SELECT\n          TRIM(rc_batchno) AS rc_batchno,   rc_rmid,\n          case when  rc_movementtype='P' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS PScrapCorrection,\n          case when  rc_movementtype='S' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS SScrapCorrection,\n          case when  rc_movementtype='J' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS JWScrapCorrection\n        FROM rm_scrapcorrection       \n        GROUP BY rc_batchno, rc_rmid,rc_movementtype\n       ) scrapCorrections ON scrapCorrections.rc_batchno = inQ.batch  AND scrapCorrections.rc_rmid = inQ.rd_rmid\n\tLEFT JOIN (\n        SELECT\n          TRIM(rc_batchno) AS rc_batchno,   rc_rmid,\n           ROUND(SUM(COALESCE(rc_correction, 0)), 2) ProdQtyCorrection\n        FROM rm_prodcorrection       \n        GROUP BY rc_batchno, rc_rmid\n       ) prodCorrections ON prodCorrections.rc_batchno = inQ.batch  AND prodCorrections.rc_rmid = inQ.rd_rmid\n\n        )t1 left join materialmaster on mm_id = t1.rm\n        left join materialtypemaster on MM_MTID = MT_Id\n        where storeQty >0 or rmwithprod >0 or jwRemQty>0 or splitQty>0 \n        ;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:12:45.505127+00:00",
+      "updatedAt": "2026-05-06T03:48:00.996297+00:00"
+    },
+    {
+      "id": "32175985-fe7d-4b17-8bcf-8d2035f0c20e",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "In Store Scrap",
+      "queryTemplate": "SELECT RI_ReportNo `Report No`,DATE_FORMAT(RI_DATE,'%d-%m-%Y') `Date`,RD_BATCHNO `Batch No`,MM_RawMtpartNo `Raw Material`,MT_NAME `Material Name`,RD_Qty `Scrap Qty(kg)`,RD_Remarks `Remarks`\nFROM rm_inwardmaster inner join rm_inwarddetails on RD_RIID = RI_ID inner join materialmaster on MM_Id = RD_RMID inner join materialtypemaster on mm_mtid = mt_id\nwhere RI_Movement='O' and RI_MovementType=8 and  MONTH(RI_DATE)={Month} and YEAR(RI_DATE)={Year}",
+      "variables": [
+        "Month",
+        "Year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:13:41.759319+00:00",
+      "updatedAt": "2026-05-04T05:13:41.759319+00:00"
+    },
+    {
+      "id": "45ff7456-94db-451b-b8ae-bee5bcc33b38",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Operation Scrap",
+      "queryTemplate": "SELECT CO_PARTNO 'PART NO',SD_LOTNO 'LOT NO',date_format(SD_DATE,'%d-%m-%Y') 'DATE',CM_REPORTNO 'REPORT NO',SS_NAME 'SUPPLIER',OS_NAME 'STAGE',SD_QTY 'SCRAP QTY',SD_QTYKG 'SCRAP KG'\nFROM comp_scrapdetails left join comp_inwardmaster on SD_REFNO = CM_ID LEFT JOIN COMPONENTS ON CO_ID = SD_COMPID \nLEFT JOIN SUPPLIER ON SD_SUPPLIER = SS_ID LEFT JOIN COMP_OPSTAGES ON SD_OPSTAGE = OS_ID\nwhere SD_SRC=3 and  MONTH(SD_DATE)={Month} and YEAR(SD_DATE)={Year}",
+      "variables": [
+        "Month",
+        "Year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:14:15.161381+00:00",
+      "updatedAt": "2026-05-04T05:14:15.161381+00:00"
+    },
+    {
+      "id": "67d9e34e-f7a5-4ff9-bc6d-a00ea2b3e3a7",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Production Scrap",
+      "queryTemplate": "SELECT PD_LotNo `LOT NO`,DATE_FORMAT(PD_DATE,'%d-%m-%Y') `DATE`,PD_BATCHNO `BATCH NO`,MM_RawMtpartNo `RAW MATERIAL`,\nMT_NAME `MATERIAL TYPE`,CO_PARTNO `PART NO`,CO_PARTNAME `PART NAME` ,PD_PRODQTY,\nround(PD_PRODQTY/c.conVal,4) as `THO RM KG`, round((PD_PRODQTY*CO_WEIGHT)/1000,4) `CAL PART KG`,round(round(PD_PRODQTY/c.conVal,4)- round((PD_PRODQTY*CO_WEIGHT)/1000,4),2) `CAL SCRAP KG`,PD_SCRAPQTY `SCRAP`\nFROM production_details left join scheduled_production on PD_PSID = PS_ID \nINNER JOIN materialmaster ON MM_ID = PD_RMID inner join materialtypemaster on mm_mtid = mt_id\niNNER JOIN components ON CO_ID = PS_PARENTCOMPID\n left join( SELECT CT_COMPID,CT_ID,\n\t\t            ((1 / (MT_Density * MM_Thickness * MM_StripWidth)) \n\t\t                * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n\t\t        FROM components_tool  INNER JOIN materialmaster  ON CT_RMID  = MM_Id \n\t\t        INNER JOIN materialtypemaster ON MM_MTID = MT_Id \n\t\t        WHERE CT_ActiveYN      = 'Y' AND CT_PPC = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY  > 0 \n\t\t    ) c ON c.CT_COMPID = PS_PARENTCOMPID AND c.CT_ID = PD_TOOLID\nwhere  MONTH(PD_DATE)={Month} and YEAR(PD_DATE)={Year}  ORDER BY PD_BATCHNO,PS_PARENTCOMPID",
+      "variables": [
+        "Month",
+        "Year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:19:12.559074+00:00",
+      "updatedAt": "2026-05-04T05:19:12.559074+00:00"
+    },
+    {
+      "id": "b05ac5db-679d-4509-9c86-ea22d6719c51",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Slitting Scrap",
+      "queryTemplate": "SELECT RI_PO as `OUTWARD NO`,RI_REPORTNO AS `INWARD NO`,DATE_FORMAT(RI_DATE,'%d-%m-%Y') `INWARD DATE`,i.RD_BATCHNO `BATCH NO`,\nconcat(mo.MM_RawMtPartNo,' , ',mi.MM_RawMtPartNo) `OUT/IN`,\ncoalesce(o.RD_ACCEPTEDQTY,0) `OUTWARD QTY`,coalesce(i.RD_ACCEPTEDQTY,0) `INWARD QTY` ,\ncoalesce(RS_QTY,0) `ENTERED SCRAP`,round((coalesce(o.RD_ACCEPTEDQTY,0) - i.RD_ACCEPTEDQTY),5) `CAL SCRAP`\nFROM rm_inwardmaster left join rm_inwarddetails i on RI_ID = i.RD_RIID \nleft join rm_scrapdetails on RS_RIID = RI_ID left join rm_inwarddetails o on i.RD_OUTWARDID = o.RD_ID \ninner join materialmaster mo on mo.mm_id =o.rd_rmid inner join materialmaster mi on mi.mm_id =i.rd_rmid \nwhere RI_MOVEMENTTYPE = 2 and RI_MOVEMENT = 'I' and MONTH(RI_DATE)={Month} and YEAR(RI_DATE)={Year};",
+      "variables": [
+        "Month",
+        "Year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:19:59.457751+00:00",
+      "updatedAt": "2026-05-04T05:19:59.457751+00:00"
+    },
+    {
+      "id": "8bd505ac-4f1d-44f9-8ef4-0c874d06eada",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Supplier Scrap",
+      "queryTemplate": "SELECT ss_name as `Supplier`,MM_RawMtPartNo as `Raw Material` ,co_partno as `Part No`,DATE_FORMAT(RI_DATE,'%d-%m-%Y') as `Date` ,RD_BATCHNO as `Batch No`,RS_QTY as `Scrap Qty`\nFROM rm_scrapdetails left join rm_inwardmaster on RS_RIID = RI_ID LEFT JOIN rm_inwarddetails ON RI_ID = RD_RIID\ninner join supplier on RI_SUPPLIERID = ss_id inner join components on co_id = RD_COMPID inner join materialmaster on rd_rmid = mm_id\nwhere RI_MOVEMENTTYPE = 4 and RI_MOVEMENT = 'I' and MONTH(RI_DATE)={Month} and YEAR(RI_DATE)={Year}",
+      "variables": [
+        "Month",
+        "Year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-04T05:20:40.747128+00:00",
+      "updatedAt": "2026-05-04T05:20:40.747128+00:00"
+    },
+    {
+      "id": "8bf62f00-e306-453f-abe2-fa1908e207ae",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Planned vs Produced Qty",
+      "queryTemplate": "select  co_partno 'Part No', CO_PARTNAME 'Part Name',plan.planqty 'Planned Qty' ,prod.prodqty 'Produced Qty'  from schedule_master, \n(select sp.PS_PARENTCOMPID comp,sp.PS_SMID smid,  sum(pd.PD_PRODQTY)  prodqty\nfrom production_details pd, scheduled_production sp  \nwhere ps_id= PD_PSID -- and sp.PS_PARENTCOMPID in (1668)\ngroup by sp.PS_PARENTCOMPID,sp.PS_SMID) prod,\n(select PS_PARENTCOMPID comp, ps_smid smid, sum(ps_qty) planqty from scheduled_production sp \ngroup by PS_PARENTCOMPID,PS_SMID) plan, components\nwhere  SM_MONTH= {month} and sm_year = {year}\nand prod.smid=plan.smid\nand prod.smid =  sm_id\nand prod.comp = plan.comp\nand prod.comp = co_id\norder by co_partno;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "createdAt": "2026-04-05T17:46:15.160Z",
+      "updatedAt": "2026-05-02T07:36:09.690911+00:00",
+      "pinned": false
+    },
+    {
+      "id": "e3c76a79-903c-426d-8e9b-c339df6af805",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Consolidated Scrap Report",
+      "queryTemplate": "select round(sum(rs_qty),2) scrap,   MT_Name 'Material', 'From Slitting' ScrapFrom  from rm_scrapdetails\nleft join (select RD_RMID, rd_id, ri_id , RD_OUTWARDID, RI_MOVEMENTTYPE  from rm_inwarddetails, rm_inwardmaster  where  ri_id = rd_riid ) rm \n on rm.RD_OUTWARDID = rs_outwardid and ri_id=RS_RIID\n left join materialmaster on rd_rmid=mm_id\n left join materialtypemaster on MM_mtId=mt_id\n where RI_MOVEMENTTYPE=2\n group by mt_id\n union \n select round(sum(rs_qty),2) scrap,   MT_Name,'From JWSupplier' ScrapFrom from rm_scrapdetails\nleft join (select RD_RMID, rd_id, ri_id , RD_OUTWARDID, RI_MOVEMENTTYPE  from rm_inwarddetails, rm_inwardmaster  where  ri_id = rd_riid ) rm \n\t\ton rm.rd_id=rs_outwardid and rm.ri_id=RS_RIID \n left join materialmaster on rd_rmid=mm_id\n left join materialtypemaster on MM_mtId=mt_id\n where RI_MOVEMENTTYPE=4\n group by mt_id\n union\n SELECT round(sum(RD_Qty),2) , MT_NAME ,'Scrap'\nFROM rm_inwardmaster inner join rm_inwarddetails on RD_RIID = RI_ID inner join materialmaster on MM_Id = RD_RMID inner join materialtypemaster on mm_mtid = mt_id\nwhere RI_Movement='O' and RI_MovementType=8\n group by mt_id\n union \n SELECT round(sum(SD_QTYKG),2) , MT_NAME, 'Component Scrap'\nFROM comp_scrapdetails left join comp_inwardmaster on SD_REFNO = CM_ID LEFT JOIN COMPONENTS ON CO_ID = SD_COMPID \nleft join materialtypemaster on CO_MATERIALTYPEID = mt_id\nLEFT JOIN SUPPLIER ON SD_SUPPLIER = SS_ID LEFT JOIN COMP_OPSTAGES ON SD_OPSTAGE = OS_ID\ngroup by MT_NAME \nhaving sum(SD_QTYKG) >0\nunion\nselect  round(sum(COALESCE( pd_scrapqty,0))-sum(coalesce(ProdQtyCorrection,0)) ,2) ,MT_NAME, 'Production Scrap' from production_details\nleft join materialmaster on MM_Id = PD_RMID inner join materialtypemaster on mm_mtid = mt_id\nLEFT JOIN (SELECT rc_rmid,  SUM(COALESCE(rc_correction, 0)) ProdQtyCorrection\n        FROM rm_prodcorrection       \n        GROUP BY  rc_rmid\n       ) prodCorrections ON  prodCorrections.rc_rmid = PD_RMID\n\ngroup by MT_NAME\n;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-05-04T16:31:02.993782+00:00",
+      "updatedAt": "2026-05-05T02:36:38.994625+00:00"
+    },
+    {
+      "id": "fa540eed-0d41-4a67-ad1b-e2dfeaeb4570",
+      "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
+      "name": "Weekly Consolidated Stock",
+      "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',\n    AP.CO_PARTNAME,\n    AP.CO_WEIGHT,\n    AP.MT_Name,\n    \n    -- Stock Values (Subquery S)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Subquery B)\n    COALESCE(B.bal_1st_Forming, 0) AS '1st Forming (With Supplier)',\n    COALESCE(B.bal_Electroplating, 0) AS 'Electroplating (With Supplier)',\n    COALESCE(B.bal_Soapwash, 0) AS 'Soapwash (With Supplier)',\n    COALESCE(B.bal_Tapping, 0) AS 'Tapping (With Supplier)',\n    COALESCE(B.bal_FG, 0) AS 'FG (With Supplier)',\n    COALESCE(B.bal_2nd_Forming, 0) AS '2nd Forming (With Supplier)',\n    COALESCE(B.bal_3rd_Forming, 0) AS '3rd Forming (With Supplier)',\n    COALESCE(B.bal_Etching, 0) AS 'Etching (With Supplier)',\n    COALESCE(B.bal_Deburring, 0) AS 'Deburring (With Supplier)',\n    COALESCE(B.bal_Laser_Welding, 0) AS 'Laser Welding (With Supplier)',\n    COALESCE(B.bal_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (With Supplier)',\n    COALESCE(B.bal_Arcor_Coating, 0) AS 'Arcor Coating (With Supplier)',\n    COALESCE(B.bal_Riveting, 0) AS 'Riveting (With Supplier)',\n    COALESCE(B.bal_Brazing, 0) AS 'Brazing (With Supplier)',\n    COALESCE(B.bal_Heat_Sealing, 0) AS 'Heat Sealing (With Supplier)',\n    COALESCE(B.bal_Dimpling, 0) AS 'Dimpling (With Supplier)',\n\n    -- QA and Rework (Subquery Q)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\nFROM (\n    SELECT DISTINCT co_partno, CO_PARTNAME, CO_WEIGHT, MT_Name\n    FROM components \n    INNER JOIN materialtypemaster ON MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL AND CO_ACTIVEYN = 'Y' AND co_id = CO_PARENTID\n) AP\n\n-- Stock Values\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS stk_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS stk_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS stk_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS stk_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS stk_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS stk_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS stk_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS stk_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS stk_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS stk_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS stk_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS stk_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS stk_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS stk_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS stk_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS stk_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) S ON AP.co_partno = S.co_partno\n\n-- QA & Rework\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 51 THEN ch_qty ELSE 0 END) AS qa_supplier,\n        SUM(CASE WHEN os_id = 52 THEN ch_qty ELSE 0 END) AS qa_production,\n        SUM(CASE WHEN os_id = 53 THEN ch_qty ELSE 0 END) AS qa_disposition,\n        SUM(CASE WHEN os_id = 54 THEN ch_qty ELSE 0 END) AS rework_pending\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) Q ON AP.co_partno = Q.co_partno\n\n-- Balance Data\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS bal_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS bal_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS bal_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS bal_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS bal_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS bal_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS bal_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS bal_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS bal_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS bal_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS bal_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS bal_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS bal_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS bal_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS bal_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS bal_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (0)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) B ON AP.co_partno = B.co_partno\n\nWHERE S.co_partno IS NOT NULL \n   OR Q.co_partno IS NOT NULL \n   OR B.co_partno IS NOT NULL \nORDER BY AP.co_partno;",
+      "variables": [
+        "year",
+        "month",
+        "week"
+      ],
+      "pinned": true,
+      "createdAt": "2026-05-06T16:48:52.536309+00:00",
+      "updatedAt": "2026-05-06T17:45:51.717584+00:00"
+    },
+    {
+      "id": "337668a8-4836-498f-9eeb-cfa0173bb101",
+      "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
+      "name": "Component Stock Pivot",
+      "queryTemplate": "SELECT\n    mt.MT_Name AS `Material Type`,\n    ROUND(\n        SUM(\n            CASE\n                -- SFG stages (all production stages except FG=6)\n                WHEN ch.CH_STAGEID IN (2,3,4,5,7,8,9,10,12,13,14,15,16,17,18,51,52,53,54)\n                    THEN (ch.CH_QTY * COALESCE(c.CO_WEIGHT, 0)) / 1000\n                ELSE 0\n            END\n        ),\n        3\n    ) AS `Sum of SFG IN KGS`,\n    ROUND(\n        SUM(\n            CASE\n                -- FG stage\n                WHEN ch.CH_STAGEID = 6\n                    THEN (ch.CH_QTY * COALESCE(c.CO_WEIGHT, 0)) / 1000\n                ELSE 0\n            END\n        ),\n        3\n    ) AS `Sum of FG IN KGS`\nFROM comp_stockhistory ch\nINNER JOIN components c\n    ON c.CO_ID = ch.CH_COMPID\nINNER JOIN materialtypemaster mt\n    ON mt.MT_ID = c.CO_MATERIALTYPEID\nWHERE ch.CH_QTY > 0\n  AND ch.CH_PLANTID IN (0,1,2)   -- include with-supplier + in-house like weekly consolidated view\n  AND ch.CH_YEAR = {year}\n  AND ch.CH_MONTH = {month}\n  AND ch.CH_WEEK = {week}\n  AND c.CO_ACTIVEYN = 'Y'\nGROUP BY mt.MT_Name\nORDER BY mt.MT_Name;",
+      "variables": [
+        "year",
+        "month",
+        "week"
+      ],
+      "pinned": true,
+      "createdAt": "2026-05-06T17:18:45.309414+00:00",
+      "updatedAt": "2026-05-06T17:45:47.293418+00:00",
+      "drilldowns": [
+        {
+          "column": "Material Type",
+          "targetReportId": "9ea8726e-49f7-4028-a67a-2273806524a1",
+          "variables": {
+            "material_name": {
+              "type": "column",
+              "value": "Material Type"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "week": {
+              "type": "parentVariable",
+              "value": "week"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "9ea8726e-49f7-4028-a67a-2273806524a1",
+      "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
+      "name": "Weekly Component Stock MaterialWise",
+      "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',\n    AP.CO_PARTNAME,\n    AP.CO_WEIGHT,\n    AP.MT_Name,\n    \n    -- Stock Values (Subquery S)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Subquery B)\n    COALESCE(B.bal_1st_Forming, 0) AS '1st Forming (With Supplier)',\n    COALESCE(B.bal_Electroplating, 0) AS 'Electroplating (With Supplier)',\n    COALESCE(B.bal_Soapwash, 0) AS 'Soapwash (With Supplier)',\n    COALESCE(B.bal_Tapping, 0) AS 'Tapping (With Supplier)',\n    COALESCE(B.bal_FG, 0) AS 'FG (With Supplier)',\n    COALESCE(B.bal_2nd_Forming, 0) AS '2nd Forming (With Supplier)',\n    COALESCE(B.bal_3rd_Forming, 0) AS '3rd Forming (With Supplier)',\n    COALESCE(B.bal_Etching, 0) AS 'Etching (With Supplier)',\n    COALESCE(B.bal_Deburring, 0) AS 'Deburring (With Supplier)',\n    COALESCE(B.bal_Laser_Welding, 0) AS 'Laser Welding (With Supplier)',\n    COALESCE(B.bal_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (With Supplier)',\n    COALESCE(B.bal_Arcor_Coating, 0) AS 'Arcor Coating (With Supplier)',\n    COALESCE(B.bal_Riveting, 0) AS 'Riveting (With Supplier)',\n    COALESCE(B.bal_Brazing, 0) AS 'Brazing (With Supplier)',\n    COALESCE(B.bal_Heat_Sealing, 0) AS 'Heat Sealing (With Supplier)',\n    COALESCE(B.bal_Dimpling, 0) AS 'Dimpling (With Supplier)',\n\n    -- QA and Rework (Subquery Q)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\nFROM (\n    SELECT DISTINCT co_partno, CO_PARTNAME, CO_WEIGHT, MT_Name\n    FROM components \n    INNER JOIN materialtypemaster ON MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL AND CO_ACTIVEYN = 'Y' AND co_id = CO_PARENTID\n) AP\n\n-- Stock Values\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS stk_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS stk_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS stk_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS stk_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS stk_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS stk_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS stk_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS stk_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS stk_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS stk_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS stk_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS stk_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS stk_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS stk_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS stk_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS stk_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) S ON AP.co_partno = S.co_partno\n\n-- QA & Rework\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 51 THEN ch_qty ELSE 0 END) AS qa_supplier,\n        SUM(CASE WHEN os_id = 52 THEN ch_qty ELSE 0 END) AS qa_production,\n        SUM(CASE WHEN os_id = 53 THEN ch_qty ELSE 0 END) AS qa_disposition,\n        SUM(CASE WHEN os_id = 54 THEN ch_qty ELSE 0 END) AS rework_pending\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) Q ON AP.co_partno = Q.co_partno\n\n-- Balance Data\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS bal_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS bal_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS bal_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS bal_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS bal_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS bal_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS bal_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS bal_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS bal_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS bal_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS bal_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS bal_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS bal_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS bal_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS bal_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS bal_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (0)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) B ON AP.co_partno = B.co_partno\n\nWHERE (S.co_partno IS NOT NULL \n   OR Q.co_partno IS NOT NULL \n   OR B.co_partno IS NOT NULL) \nAND AP.MT_Name = {material_name}\nORDER BY AP.co_partno;",
+      "variables": [
+        "year",
+        "month",
+        "week",
+        "material_name"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-06T17:21:22.724525+00:00",
+      "updatedAt": "2026-05-06T17:25:31.654068+00:00"
+    },
+    {
+      "id": "b0f73a9a-6ea7-44dd-ab35-5c20198b2209",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Dispatch Distinct",
+      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  sum(CS_QTY) AS 'Requested Qty',\n  sum(SD_LOTSIZE) AS 'Dispatched Qty',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n  AND CS_Date BETWEEN {fromDate} AND {toDate}\nGROUP BY CU_Name ,CO_partNo ,CO_partName,SD_INVOICE;",
+      "variables": [
+        "fromDate",
+        "toDate"
+      ],
+      "createdAt": "2026-04-11T18:45:00.598710+00:00",
+      "updatedAt": "2026-05-02T06:47:39.928600+00:00",
+      "pinned": false
+    },
+    {
+      "id": "8d9449d2-bcdb-4520-a325-67919996f14b",
+      "groupId": "b2cb8372-2220-4751-bf3f-66a37d5a1ae3",
+      "name": "Rejection Status Report",
+      "queryTemplate": "select DATE_FORMAT(cr_date, '%d-%m-%Y') 'Entry Date',co_partno 'Part No',CR_LOTNO 'Lot No',os_name 'Op Stage',\nIFNULL(Rej_type, '') AS 'Rej Type',COALESCE(rejres_qty, cr_qty) AS 'Qty',\ncase WHEN CR_SOURCE = 'P' THEN 'Production'\n    WHEN CR_SOURCE = 'Q' THEN 'Quality'\n    WHEN CR_SOURCE = 'F' THEN 'FG'\n    ELSE 'Others' end as 'Entry By' , sr_desc 'Entry Stage',\ncase WHEN CR_STATUS ='P' THEN 'PENDING'\n    WHEN CR_STATUS='S' THEN 'SCRAP'\n    WHEN CR_STATUS='R' THEN 'REWORK'\n     WHEN CR_STATUS='RC' THEN 'REWORK CLOSE'\n    ELSE '' end AS 'STATUS'\nfrom comp_rejectdetails\n\tleft join components on co_id =CR_COMPID \n\tleft join comp_source on CR_Src= sr_id\n    left join comp_opstages on CR_OPSTAGE=os_id\n    left join rejection_reason_details on Rej_PD_ID=cr_pdid\n    left join rejectedtype on rejtype_id = rej_id \n where  cr_plant=2 \n order by cr_date, CR_LOTNO  ;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-05-08T04:33:57.209463+00:00",
+      "updatedAt": "2026-05-08T04:33:57.209463+00:00"
+    },
+    {
+      "id": "f587a1af-f59d-469e-a67f-fb553a79f0f4",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Weekly Raw Material Stock",
+      "queryTemplate": "SELECT\n    mm.MM_RawMtPartNo AS rawMaterial,\n    mtm.MT_Name AS Material_Type,\n    rsh.RH_BATCHNO AS Batch_Number,\n\n    SUM(CASE WHEN rsh.RH_MLID = 1 THEN rsh.RH_QTY ELSE 0 END) AS `RM Inward From Supplier`,\n    SUM(CASE WHEN rsh.RH_MLID = 2 THEN rsh.RH_QTY ELSE 0 END) AS `Splitting`,\n    SUM(CASE WHEN rsh.RH_MLID = 3 THEN rsh.RH_QTY ELSE 0 END) AS `Production`,\n    SUM(CASE WHEN rsh.RH_MLID = 4 THEN rsh.RH_QTY ELSE 0 END) AS `Job Work`,\n    SUM(CASE WHEN rsh.RH_MLID = 9 THEN rsh.RH_QTY ELSE 0 END) AS `RM In Store`\nFROM rm_stockhistory rsh\nLEFT JOIN materialmaster mm      ON mm.mm_id = rsh.RH_RMID\nLEFT JOIN materialtypemaster mtm ON mtm.MT_Id = mm.MM_mtId\nWHERE rsh.RH_MONTH = {month}\n  AND rsh.RH_YEAR  = {year}\n  AND rsh.RH_WEEK  = {week}\nGROUP BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO\nORDER BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO;",
+      "variables": [
+        "month",
+        "year",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-08T09:38:35.004698+00:00",
+      "updatedAt": "2026-05-09T10:25:05.274096+00:00",
+      "drilldowns": []
+    },
+    {
+      "id": "dbf2aab9-9812-4d5e-b586-a8e7bc09e06d",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Raw Material Stock Pivot",
+      "queryTemplate": "SELECT\n    MT_Name AS Material_Type,\n    SUM(RH_QTY) AS Total_RM_Stock\nFROM rm_stockhistory\nLEFT JOIN materialmaster      ON mm_id   = RH_RMID\nLEFT JOIN materialtypemaster  ON MM_mtId = MT_Id\nLEFT JOIN rm_movements        ON ML_ID   = RH_MLID\nWHERE RH_MONTH = {month}\n  AND RH_YEAR  = {year}\n  AND RH_WEEK  = {week}\n  AND RH_MLID in (2,3,4,9)\nGROUP BY MT_Name\nORDER BY MT_Name;",
+      "variables": [
+        "month",
+        "year",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-08T09:49:20.661797+00:00",
+      "updatedAt": "2026-05-09T10:25:04.252077+00:00",
+      "drilldowns": [
+        {
+          "column": "Material_Type",
+          "targetReportId": "62be8d09-47e3-4552-a77a-333d9915c749",
+          "variables": {
+            "MT_Name": {
+              "type": "column",
+              "value": "Material_Type"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "week": {
+              "type": "parentVariable",
+              "value": "week"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "62be8d09-47e3-4552-a77a-333d9915c749",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Weekly Raw Material Stock MaterialWise",
+      "queryTemplate": "SELECT\n    mm.MM_RawMtPartNo AS rawMaterial,\n    mtm.MT_Name AS Material_Type,\n    rsh.RH_BATCHNO AS Batch_Number,\n\n    SUM(CASE WHEN rsh.RH_MLID = 1 THEN rsh.RH_QTY ELSE 0 END) AS `RM Inward From Supplier`,\n    SUM(CASE WHEN rsh.RH_MLID = 2 THEN rsh.RH_QTY ELSE 0 END) AS `Splitting`,\n    SUM(CASE WHEN rsh.RH_MLID = 3 THEN rsh.RH_QTY ELSE 0 END) AS `Production`,\n    SUM(CASE WHEN rsh.RH_MLID = 4 THEN rsh.RH_QTY ELSE 0 END) AS `Job Work`,\n    SUM(CASE WHEN rsh.RH_MLID = 9 THEN rsh.RH_QTY ELSE 0 END) AS `RM In Store`\nFROM rm_stockhistory rsh\nLEFT JOIN materialmaster mm      ON mm.mm_id = rsh.RH_RMID\nLEFT JOIN materialtypemaster mtm ON mtm.MT_Id = mm.MM_mtId\nWHERE rsh.RH_MONTH = {month}\n  AND rsh.RH_YEAR  = {year}\n  AND rsh.RH_WEEK  = {week}\n  and mtm.MT_Name ={MT_Name } \nGROUP BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO\nORDER BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO;",
+      "variables": [
+        "month",
+        "year",
+        "week",
+        "MT_Name"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-08T09:51:14.076112+00:00",
+      "updatedAt": "2026-05-08T13:04:37.571321+00:00"
+    },
+    {
+      "id": "43839ceb-51dc-40b1-9f80-b9940ace2100",
+      "groupId": "6d1302a9-67bb-4ce9-b7db-ca80234727b3",
+      "name": "Component Stock Pivot",
+      "queryTemplate": "SELECT\n    mt.MT_Name AS `Material Type`,\n    ROUND(\n        SUM(\n            CASE\n                -- SFG stages (all production stages except FG=6)\n                WHEN ch.CH_STAGEID IN (2,3,4,5,7,8,9,10,12,13,14,15,16,17,18,51,52,53,54)\n                    THEN (ch.CH_QTY * COALESCE(c.CO_WEIGHT, 0)) / 1000\n                ELSE 0\n            END\n        ),\n        3\n    ) AS `Sum of SFG IN KGS`,\n    ROUND(\n        SUM(\n            CASE\n                -- FG stage\n                WHEN ch.CH_STAGEID = 6\n                    THEN (ch.CH_QTY * COALESCE(c.CO_WEIGHT, 0)) / 1000\n                ELSE 0\n            END\n        ),\n        3\n    ) AS `Sum of FG IN KGS`\nFROM comp_stockhistory ch\nINNER JOIN components c\n    ON c.CO_ID = ch.CH_COMPID\nINNER JOIN materialtypemaster mt\n    ON mt.MT_ID = c.CO_MATERIALTYPEID\nWHERE ch.CH_QTY > 0\n  AND ch.CH_PLANTID IN (0,1,2)   -- include with-supplier + in-house like weekly consolidated view\n  AND ch.CH_YEAR = {year}\n  AND ch.CH_MONTH = {month}\n  AND ch.CH_WEEK = {week}\n  AND c.CO_ACTIVEYN = 'Y'\nGROUP BY mt.MT_Name\nORDER BY mt.MT_Name;",
+      "variables": [
+        "year",
+        "month",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-09T10:21:36.200275+00:00",
+      "updatedAt": "2026-05-09T10:21:36.200275+00:00",
+      "drilldowns": [
+        {
+          "column": "Material Type",
+          "targetReportId": "9ea8726e-49f7-4028-a67a-2273806524a1",
+          "variables": {
+            "material_name": {
+              "type": "column",
+              "value": "Material Type"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "week": {
+              "type": "parentVariable",
+              "value": "week"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "d8c833c0-f23a-451d-8e85-4bafbdeec567",
+      "groupId": "6d1302a9-67bb-4ce9-b7db-ca80234727b3",
+      "name": "Weekly Consolidated Stock",
+      "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',\n    AP.CO_PARTNAME,\n    AP.CO_WEIGHT,\n    AP.MT_Name,\n    \n    -- Stock Values (Subquery S)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n\n    -- Balance Values (Subquery B)\n    COALESCE(B.bal_1st_Forming, 0) AS '1st Forming (With Supplier)',\n    COALESCE(B.bal_Electroplating, 0) AS 'Electroplating (With Supplier)',\n    COALESCE(B.bal_Soapwash, 0) AS 'Soapwash (With Supplier)',\n    COALESCE(B.bal_Tapping, 0) AS 'Tapping (With Supplier)',\n    COALESCE(B.bal_FG, 0) AS 'FG (With Supplier)',\n    COALESCE(B.bal_2nd_Forming, 0) AS '2nd Forming (With Supplier)',\n    COALESCE(B.bal_3rd_Forming, 0) AS '3rd Forming (With Supplier)',\n    COALESCE(B.bal_Etching, 0) AS 'Etching (With Supplier)',\n    COALESCE(B.bal_Deburring, 0) AS 'Deburring (With Supplier)',\n    COALESCE(B.bal_Laser_Welding, 0) AS 'Laser Welding (With Supplier)',\n    COALESCE(B.bal_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (With Supplier)',\n    COALESCE(B.bal_Arcor_Coating, 0) AS 'Arcor Coating (With Supplier)',\n    COALESCE(B.bal_Riveting, 0) AS 'Riveting (With Supplier)',\n    COALESCE(B.bal_Brazing, 0) AS 'Brazing (With Supplier)',\n    COALESCE(B.bal_Heat_Sealing, 0) AS 'Heat Sealing (With Supplier)',\n    COALESCE(B.bal_Dimpling, 0) AS 'Dimpling (With Supplier)',\n\n    -- QA and Rework (Subquery Q)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\nFROM (\n    SELECT DISTINCT co_partno, CO_PARTNAME, CO_WEIGHT, MT_Name\n    FROM components \n    INNER JOIN materialtypemaster ON MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL AND CO_ACTIVEYN = 'Y' AND co_id = CO_PARENTID\n) AP\n\n-- Stock Values\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS stk_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS stk_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS stk_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS stk_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS stk_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS stk_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS stk_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS stk_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS stk_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS stk_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS stk_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS stk_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS stk_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS stk_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS stk_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS stk_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) S ON AP.co_partno = S.co_partno\n\n-- QA & Rework\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 51 THEN ch_qty ELSE 0 END) AS qa_supplier,\n        SUM(CASE WHEN os_id = 52 THEN ch_qty ELSE 0 END) AS qa_production,\n        SUM(CASE WHEN os_id = 53 THEN ch_qty ELSE 0 END) AS qa_disposition,\n        SUM(CASE WHEN os_id = 54 THEN ch_qty ELSE 0 END) AS rework_pending\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (1, 2)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) Q ON AP.co_partno = Q.co_partno\n\n-- Balance Data\nLEFT JOIN (\n    SELECT \n        co_partno,\n        SUM(CASE WHEN os_id = 2 THEN ch_qty ELSE 0 END) AS bal_1st_Forming,\n        SUM(CASE WHEN os_id = 3 THEN ch_qty ELSE 0 END) AS bal_Electroplating,\n        SUM(CASE WHEN os_id = 4 THEN ch_qty ELSE 0 END) AS bal_Soapwash,\n        SUM(CASE WHEN os_id = 5 THEN ch_qty ELSE 0 END) AS bal_Tapping,\n        SUM(CASE WHEN os_id = 6 THEN ch_qty ELSE 0 END) AS bal_FG,\n        SUM(CASE WHEN os_id = 7 THEN ch_qty ELSE 0 END) AS bal_2nd_Forming,\n        SUM(CASE WHEN os_id = 8 THEN ch_qty ELSE 0 END) AS bal_3rd_Forming,\n        SUM(CASE WHEN os_id = 9 THEN ch_qty ELSE 0 END) AS bal_Etching,\n        SUM(CASE WHEN os_id = 10 THEN ch_qty ELSE 0 END) AS bal_Deburring,\n        SUM(CASE WHEN os_id = 12 THEN ch_qty ELSE 0 END) AS bal_Laser_Welding,\n        SUM(CASE WHEN os_id = 13 THEN ch_qty ELSE 0 END) AS bal_Ultrasonic_Cleaning,\n        SUM(CASE WHEN os_id = 14 THEN ch_qty ELSE 0 END) AS bal_Arcor_Coating,\n        SUM(CASE WHEN os_id = 15 THEN ch_qty ELSE 0 END) AS bal_Riveting,\n        SUM(CASE WHEN os_id = 16 THEN ch_qty ELSE 0 END) AS bal_Brazing,\n        SUM(CASE WHEN os_id = 17 THEN ch_qty ELSE 0 END) AS bal_Heat_Sealing,\n        SUM(CASE WHEN os_id = 18 THEN ch_qty ELSE 0 END) AS bal_Dimpling\n    FROM comp_stockhistory\n    LEFT JOIN comp_opstages ON CH_STAGEID = os_id\n    LEFT JOIN components ON CH_COMPID = co_id\n    WHERE ch_qty > 0 AND ch_plantid IN (0)\n    AND CH_YEAR = {year} AND CH_MONTH = {month}  AND CH_WEEK = {week}\n    GROUP BY co_partno\n) B ON AP.co_partno = B.co_partno\n\nWHERE S.co_partno IS NOT NULL \n   OR Q.co_partno IS NOT NULL \n   OR B.co_partno IS NOT NULL \nORDER BY AP.co_partno;",
+      "variables": [
+        "year",
+        "month",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-09T10:22:35.847198+00:00",
+      "updatedAt": "2026-05-09T10:22:35.847198+00:00"
+    },
+    {
+      "id": "a984dc89-b865-4f6e-9a79-e834e6373d87",
+      "groupId": "6d1302a9-67bb-4ce9-b7db-ca80234727b3",
+      "name": "Raw Material Stock Pivot",
+      "queryTemplate": "SELECT\n    MT_Name AS Material_Type,\n    SUM(RH_QTY) AS Total_RM_Stock\nFROM rm_stockhistory\nLEFT JOIN materialmaster      ON mm_id   = RH_RMID\nLEFT JOIN materialtypemaster  ON MM_mtId = MT_Id\nLEFT JOIN rm_movements        ON ML_ID   = RH_MLID\nWHERE RH_MONTH = {month}\n  AND RH_YEAR  = {year}\n  AND RH_WEEK  = {week}\n  AND RH_MLID in (2,3,4,9)\nGROUP BY MT_Name\nORDER BY MT_Name;",
+      "variables": [
+        "month",
+        "year",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-09T10:23:46.438229+00:00",
+      "updatedAt": "2026-05-09T10:23:46.438229+00:00",
+      "drilldowns": [
+        {
+          "column": "Material_Type",
+          "targetReportId": "62be8d09-47e3-4552-a77a-333d9915c749",
+          "variables": {
+            "MT_Name": {
+              "type": "column",
+              "value": "Material_Type"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "week": {
+              "type": "parentVariable",
+              "value": "week"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "e61ca31f-ef3f-4e0e-a4ed-1feaff85628f",
+      "groupId": "6d1302a9-67bb-4ce9-b7db-ca80234727b3",
+      "name": "Weekly Raw Material Stock",
+      "queryTemplate": "SELECT\n    mm.MM_RawMtPartNo AS rawMaterial,\n    mtm.MT_Name AS Material_Type,\n    rsh.RH_BATCHNO AS Batch_Number,\n\n    SUM(CASE WHEN rsh.RH_MLID = 1 THEN rsh.RH_QTY ELSE 0 END) AS `RM Inward From Supplier`,\n    SUM(CASE WHEN rsh.RH_MLID = 2 THEN rsh.RH_QTY ELSE 0 END) AS `Splitting`,\n    SUM(CASE WHEN rsh.RH_MLID = 3 THEN rsh.RH_QTY ELSE 0 END) AS `Production`,\n    SUM(CASE WHEN rsh.RH_MLID = 4 THEN rsh.RH_QTY ELSE 0 END) AS `Job Work`,\n    SUM(CASE WHEN rsh.RH_MLID = 9 THEN rsh.RH_QTY ELSE 0 END) AS `RM In Store`\nFROM rm_stockhistory rsh\nLEFT JOIN materialmaster mm      ON mm.mm_id = rsh.RH_RMID\nLEFT JOIN materialtypemaster mtm ON mtm.MT_Id = mm.MM_mtId\nWHERE rsh.RH_MONTH = {month}\n  AND rsh.RH_YEAR  = {year}\n  AND rsh.RH_WEEK  = {week}\nGROUP BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO\nORDER BY\n    mm.MM_RawMtPartNo,\n    mtm.MT_Name,\n    rsh.RH_BATCHNO;",
+      "variables": [
+        "month",
+        "year",
+        "week"
+      ],
+      "pinned": false,
+      "createdAt": "2026-05-09T10:24:45.419108+00:00",
+      "updatedAt": "2026-05-09T10:24:45.419108+00:00"
     }
   ]
 }

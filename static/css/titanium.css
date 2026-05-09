@@ -394,11 +394,213 @@ body {
 }
 
 @media (max-width: 768px) {
-  .ti-reports-flyout {
-    display: none !important;
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background: #0b1220;
+  }
+
+  .ti-main {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  .ti-content {
+    padding: 10px;
+    height: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .ti-section,
+  .ti-hub-section-fill {
+    border-radius: 14px;
+  }
+
+  .ti-section {
+    background: var(--ti-glass);
+    border: 1px solid var(--ti-glass-border);
+  }
+
+  /* Mobile-native touch rhythm */
+  .ti-btn,
+  .rr-btn,
+  .ti-filter-btn,
+  .ti-select,
+  .ti-input,
+  .rr-search,
+  .rr-var__ctl {
+    min-height: 40px !important;
+    font-size: 16px;
+  }
+
+  .ti-btn-xs,
+  .ti-btn-sm {
+    min-height: 36px !important;
+  }
+
+  .ti-btn-icon {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* Make section headers feel app-like */
+  .ti-hub-inventory .ti-hub-inventory__toolbar,
+  .ti-dpr-toolbar,
+  .rr-toolbar,
+  .ti-reports-manage__intro,
+  #maint-tabs.ti-tabs--maint,
+  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--ti-glass) 88%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--ti-border);
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* More native spacing for cards and stats blocks */
+  .ti-card,
+  .ti-dpr-kpi-card,
+  .ti-column,
+  .rr-grid-host,
+  .ti-table-wrap,
+  .ti-dc-scroll-wrap {
+    border-radius: 12px;
+  }
+
+  .ti-dpr-kpi-grid {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .ti-dpr-kpi-value {
+    font-size: clamp(26px, 6.4vw, 34px);
+    line-height: 1.1;
+  }
+
+  .ti-dpr-kpi-label {
+    font-size: 12px;
+  }
+
+  /* Tabular content tuning for phones */
+  .sg-table,
+  .ti-dg,
+  .ti-excel-table {
+    font-size: 14px;
+  }
+
+  .sg-table td,
+  .sg-table th,
+  .ti-dg td,
+  .ti-dg th {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  /* Horizontal scroll affordance for data-heavy areas */
+  .ti-table-container,
+  .ti-dc-scroll-wrap.ti-dc-excel-host .sg-scroll,
+  .reports-runner .sg-scroll,
+  .ti-hub-section-fill .sg-scroll {
+    scrollbar-width: thin;
+  }
+
+  .ti-table-container::-webkit-scrollbar,
+  .ti-dc-scroll-wrap.ti-dc-excel-host .sg-scroll::-webkit-scrollbar,
+  .reports-runner .sg-scroll::-webkit-scrollbar,
+  .ti-hub-section-fill .sg-scroll::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  /* Reports runner: prioritize actions and run controls on top */
+  .rr-toolbar {
+    row-gap: 8px;
+  }
+
+  .rr-toolbar > #runExecuteBtn,
+  .rr-toolbar > #runExportBtn {
+    order: -1;
+  }
+
+  .rr-toolbar__vars {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .rr-var {
+    flex: 0 0 auto;
+  }
+
+  /* Report management cards and actions */
+  .ti-reports-manage__report-list .ti-card {
+    border-radius: 12px;
+  }
+
+  .ti-reports-manage__report-list .ti-card .ti-btn {
+    min-height: 34px !important;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  /* Dispatch controls stack with full visibility */
+  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .ti-dc-toolbar-actions {
+    gap: 8px;
+  }
+
+  /* Bottom breathing room like native apps */
+  .ti-content > .ti-section:last-child,
+  .ti-content > .ti-hub-section-fill:last-child {
+    margin-bottom: max(18px, env(safe-area-inset-bottom));
   }
 }
 
+@media (max-width: 420px) {
+  .ti-content {
+    padding: 8px;
+  }
+
+  .ti-btn,
+  .rr-btn,
+  .ti-select,
+  .ti-input,
+  .rr-search {
+    font-size: 15px;
+  }
+
+  .ti-dpr-kpi-value {
+    font-size: clamp(22px, 6.1vw, 28px);
+  }
+
+  .ti-dpr-board-row {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .ti-dpr-toolbar-left .ti-btn {
+    flex: 1 1 100% !important;
+  }
+
+  .ti-hub-inventory #export-btn {
+    width: 100%;
+  }
+}
 /* Reports sidebar drill-down — single sidebar scroll, match primary nav density */
 .ti-nav-expandable {
   margin-bottom: 2px;
@@ -6267,9 +6469,173 @@ body.sg-resizing {
   text-shadow: none;
 }
 
+.ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--legend-hidden {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
 .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-cell--out {
   opacity: 0.35;
   color: var(--ti-text-dim);
+}
+
+/* ── Mobile responsiveness hardening (Hub sections) ─────────────────── */
+@media (max-width: 768px) {
+  .ti-hub-section-fill {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .ti-content:has(.ti-reports-manage),
+  .ti-content:has(.reports-runner) {
+    overflow: auto;
+  }
+
+  /* Inventory */
+  .ti-hub-inventory .ti-hub-inventory__toolbar {
+    gap: 10px !important;
+  }
+
+  .ti-hub-inventory .ti-hub-inventory__toolbar > .ti-flex {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ti-hub-inventory #global-search {
+    min-width: 0 !important;
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .ti-hub-inventory #export-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* Maintenance */
+  .ti-tabs--maint .ti-tabs__nav {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ti-tabs--maint .ti-tab {
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .ti-tabs--maint .ti-tabs__inline {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .ti-three-col .ti-column {
+    max-height: none;
+  }
+
+  .ti-column-body.scrollable {
+    max-height: 52vh;
+  }
+
+  /* DPR */
+  .ti-dpr-toolbar-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ti-dpr-date-input {
+    min-width: 170px;
+    width: 100%;
+  }
+
+  #section-dpr .ti-dpr-toolbar-left .ti-btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+
+  #section-dpr .ti-dpr-toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Reports viewer */
+  .rr-toolbar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .rr-toolbar__spacer {
+    display: none;
+  }
+
+  .rr-toolbar__title,
+  .rr-toolbar__hint,
+  .rr-toolbar__vars {
+    width: 100%;
+    max-width: none;
+  }
+
+  .rr-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  /* Reports management */
+  .ti-reports-manage__columns {
+    flex-direction: column;
+    overflow: visible;
+    gap: 12px;
+  }
+
+  .ti-reports-manage__sidebar {
+    width: 100%;
+  }
+
+  .ti-reports-manage__group-scroll {
+    max-height: 28vh;
+  }
+
+  .ti-reports-manage__report-list .ti-card > div {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .ti-reports-manage__report-list .ti-card > div > .ti-flex:last-child {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Dispatch calendar */
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right,
+  #section-dispatch-calendar .ti-dc-toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ti-dc-legend--inline {
+    border-left: none;
+    padding-left: 0;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+
+  .ti-dc-toolbar-search {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+
+  .ti-dc-week-select {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table td.ti-dc-total-cell {
@@ -6476,4 +6842,250 @@ body.sg-resizing {
 
 [data-theme="light"] .ti-dc-scroll-wrap .sg-table.ti-dc-sg-table tbody tr.ti-dc-grand-total-row td {
   background: #e5e7eb !important;
+}
+
+/* ==========================================================================
+   MOBILE OVERHAUL (APP-LIKE)
+   Large-screen styles remain unchanged; these apply only on phones/tablets.
+   ========================================================================== */
+@media (max-width: 900px) {
+  :root {
+    --ti-mobile-pad: 10px;
+    --ti-mobile-radius: 14px;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .ti-main {
+    min-height: 100dvh;
+    height: 100dvh;
+  }
+
+  .ti-content {
+    height: 100%;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: var(--ti-mobile-pad) !important;
+    gap: 10px;
+  }
+
+  .ti-section,
+  .ti-hub-section-fill,
+  .ti-card,
+  .ti-table-wrap,
+  .sg-wrap,
+  .rr-grid-host {
+    border-radius: var(--ti-mobile-radius) !important;
+  }
+
+  .ti-hub-section-fill {
+    overflow: auto !important;
+    min-height: calc(100dvh - 92px);
+    height: auto !important;
+  }
+
+  .ti-btn,
+  .ti-input,
+  .ti-select,
+  .rr-btn,
+  .rr-search,
+  .rr-var__ctl {
+    min-height: 40px !important;
+    font-size: 15px !important;
+  }
+
+  .ti-btn-icon {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  /* Keep key toolbars visible while scrolling */
+  .ti-dpr-toolbar,
+  .rr-toolbar,
+  .ti-hub-inventory__toolbar,
+  #maint-tabs,
+  #section-dispatch-calendar .ti-dc-toolbar {
+    position: sticky !important;
+    top: 0;
+    z-index: 30;
+    background: color-mix(in srgb, var(--ti-glass) 92%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--ti-border);
+  }
+
+  /* Inventory */
+  .ti-hub-inventory__toolbar,
+  .ti-hub-inventory__toolbar > .ti-flex {
+    width: 100%;
+    min-width: 0;
+    gap: 8px !important;
+  }
+  #global-search {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  #export-btn, #hard-refresh-btn {
+    flex: 0 0 auto;
+  }
+  .ti-hub-inventory .ti-table-container {
+    overflow: auto !important;
+  }
+
+  /* DPR */
+  .ti-dpr-toolbar-left {
+    width: 100%;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .ti-dpr-toolbar-right {
+    width: 100%;
+    justify-content: flex-start !important;
+  }
+  #dpr-date {
+    width: 100% !important;
+    min-width: 170px;
+  }
+  #section-dpr .ti-dpr-toolbar-left .ti-btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+  #section-dpr .ti-card[style*="overflow:hidden"] {
+    overflow: visible !important;
+  }
+  #dpr-table-container {
+    overflow: auto !important;
+  }
+
+  /* Maintenance */
+  .ti-tabs--maint .ti-tabs__nav,
+  .ti-tabs--maint .ti-tabs__inline {
+    width: 100%;
+    margin-left: 0 !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .ti-tabs--maint .ti-tab,
+  .ti-tabs--maint .ti-filter-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .ti-three-col {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .ti-three-col .ti-column {
+    max-height: none !important;
+  }
+  .ti-column-body.scrollable {
+    max-height: 52vh;
+    overflow: auto !important;
+  }
+
+  /* Reports viewer */
+  .rr-toolbar {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+  .rr-toolbar__spacer {
+    display: none !important;
+  }
+  .rr-toolbar__title,
+  .rr-toolbar__hint,
+  .rr-toolbar__vars {
+    width: 100%;
+    max-width: none !important;
+  }
+  .rr-toolbar__vars {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .rr-var { flex: 0 0 auto; }
+  .rr-search { width: 100% !important; max-width: none !important; }
+  .reports-runner .sg-scroll { overflow: auto !important; }
+
+  /* Report management */
+  .ti-reports-manage__columns {
+    flex-direction: column !important;
+    overflow: visible !important;
+    gap: 10px !important;
+  }
+  .ti-reports-manage__sidebar {
+    width: 100% !important;
+  }
+  .ti-reports-manage__group-scroll {
+    max-height: 30vh;
+  }
+  .ti-reports-manage__report-list .ti-card > div {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .ti-reports-manage__report-list .ti-card > div > .ti-flex:last-child {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  #rptReportModal .ti-modal,
+  #rptGroupModal .ti-modal,
+  #rptDeleteModal .ti-modal {
+    width: calc(100vw - 18px) !important;
+    max-width: none !important;
+    margin: 0 9px;
+  }
+
+  /* Dispatch calendar */
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one {
+    gap: 8px !important;
+  }
+  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  #section-dispatch-calendar .ti-dc-toolbar-right,
+  #section-dispatch-calendar .ti-dc-toolbar-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+  .ti-dc-legend--inline {
+    border-left: none !important;
+    padding-left: 0 !important;
+    flex-wrap: wrap !important;
+  }
+  .ti-dc-week-select,
+  .ti-dc-toolbar-search {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+  .ti-dc-scroll-wrap.ti-dc-excel-host .sg-scroll {
+    overflow: auto !important;
+  }
+
+  /* SuperGrid/DataGrid readability + tap comfort */
+  .sg-table th, .sg-table td,
+  .ti-dg th, .ti-dg td {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    font-size: 14px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  :root { --ti-mobile-pad: 8px; }
+
+  .ti-content { padding: var(--ti-mobile-pad) !important; }
+
+  #section-dpr .ti-dpr-toolbar-left .ti-btn {
+    flex: 1 1 100%;
+  }
+
+  #export-btn {
+    width: 100%;
+  }
 }
