@@ -6,6 +6,7 @@ helpers (fetch_all, fetch_one, execute) with raw SQL.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -59,6 +60,26 @@ def _get_tool_strokes_by_tool_no(tool_no: str) -> int:
     return int(row["totalQty"]) if row else 0
 
 
+def _normalize_attachment_path(value: Optional[str]) -> Optional[str]:
+    """Return API-served PM attachment URL for legacy/raw DB values."""
+    if not value:
+        return None
+
+    attachment = str(value).strip()
+    if not attachment:
+        return None
+
+    # Keep absolute URLs and already-correct API route untouched.
+    if attachment.startswith(("http://", "https://", "/api/pm/attachment/")):
+        return attachment
+
+    # Legacy values can be "/<filename>" or plain "<filename>".
+    if attachment.startswith("/"):
+        attachment = attachment.lstrip("/")
+    attachment = os.path.basename(attachment)
+    return f"/api/pm/attachment/{attachment}" if attachment else None
+
+
 # ── Public API ──────────────────────────────────────────────────────────
 
 def get_entries() -> List[Dict[str, Any]]:
@@ -76,7 +97,7 @@ def get_entries() -> List[Dict[str, Any]]:
             "date": _format_date(pm["PM_date"]),
             "currentStroke": int(pm["PM_current_stroke"]),
             "nextStroke": int(pm["PM_next_stroke"]),
-            "attachment": pm.get("PM_maintenance_attachment"),
+            "attachment": _normalize_attachment_path(pm.get("PM_maintenance_attachment")),
         }
         history_by_tool_id.setdefault(tid, []).append(rec)
 

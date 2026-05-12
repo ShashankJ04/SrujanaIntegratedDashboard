@@ -7,7 +7,9 @@
         <h2 class="ti-dc-title">Dispatch Calendar</h2>
         <p class="ti-dc-subtitle" id="dispatch-calendar-subtitle">Loading…</p>
       </div>
-      <div class="ti-dc-legend ti-dc-legend--inline" aria-label="Coverage legend">
+    </div>
+    <div class="ti-dc-toolbar-mid">
+      <div class="ti-dc-legend ti-dc-legend--inline ti-dc-legend--grid2" aria-label="Coverage legend">
         <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="ok" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Covered</button>
         <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="partial" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Partially covered</button>
         <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="short" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Shortage</button>
@@ -44,7 +46,7 @@
       </div>
       <span id="dispatch-calendar-count" class="ti-dc-toolbar-count sg-count" aria-live="polite"></span>
       <input type="search" id="dispatch-calendar-search" class="ti-input sg-search ti-dc-toolbar-search" placeholder="Search all columns…" autocomplete="off" />
-      <button type="button" id="dispatch-calendar-refresh" class="ti-btn ti-btn-outline ti-btn-sm" title="Reload current month">Refresh</button>
+      <button type="button" id="dispatch-calendar-export" class="ti-btn ti-btn-outline ti-btn-sm" title="Export current month to Excel">⬇ Export</button>
     </div>
   </div>
 

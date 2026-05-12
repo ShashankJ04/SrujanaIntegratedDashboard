@@ -66,6 +66,7 @@ def pm_status():
         SELECT
             tl.TL_tool_id          AS toolId,
             tl.TL_tool_number      AS toolNo,
+            COALESCE(parts.partNo, '') AS partNo,
             tl.TL_life_span        AS toolLife,
             tl.TL_spm              AS spm,
             tl.TL_preventive_maintenance_strokes AS pmStrokes,
@@ -84,6 +85,15 @@ def pm_status():
             ) latest_pm ON latest_pm.PM_tool_number = pm1.PM_tool_number
                 AND latest_pm.maxId = pm1.PM_id
         ) pm ON pm.PM_tool_number = tl.TL_tool_number
+        LEFT JOIN (
+            SELECT
+                ct.CT_TOOLNO AS toolNo,
+                GROUP_CONCAT(DISTINCT c.CO_PARTNO ORDER BY c.CO_PARTNO SEPARATOR ', ') AS partNo
+            FROM components_tool ct
+            INNER JOIN components c ON c.CO_ID = ct.CT_COMPID
+            WHERE ct.CT_ACTIVEYN = 'Y'
+            GROUP BY ct.CT_TOOLNO
+        ) parts ON parts.toolNo = tl.TL_tool_number
         LEFT JOIN (
             SELECT
                 comp.toolNo,
@@ -114,6 +124,7 @@ def pm_status():
           AND EXISTS (
             SELECT 1
             FROM components_tool ct_active
+            INNER JOIN components c_active ON c_active.CO_ID = ct_active.CT_COMPID
             WHERE ct_active.CT_TOOLNO = tl.TL_tool_number
               AND ct_active.CT_ACTIVEYN = 'Y'
           )
@@ -278,6 +289,12 @@ def export_pm():
 
     mode = request.args.get("mode", "all")
     search = request.args.get("search", "").strip().lower()
+    tool_nos_param = request.args.get("toolNos", "")
+    explicit_tool_nos = {
+        t.strip().lower()
+        for t in tool_nos_param.split(",")
+        if t and t.strip()
+    }
 
     # Reuse the same status query with active-tool filter
     rows = fetch_all(
@@ -352,7 +369,10 @@ def export_pm():
         pm_pct = max(0, round((completed_in_cycle / pm_strokes) * 100)) if pm_strokes > 0 else 0
 
         tool_no = str(r["toolNo"]).lower()
-        if search and search not in tool_no:
+        part_no = str(r.get("partNo") or "").lower()
+        if explicit_tool_nos and tool_no not in explicit_tool_nos:
+            continue
+        if search and (search not in tool_no and search not in part_no):
             continue
         if mode == "safe" and pm_pct >= 80:
             continue
@@ -363,6 +383,7 @@ def export_pm():
 
         processed.append({
             "toolNo": r["toolNo"],
+            "partNo": r.get("partNo") or "",
             "toolLife": int(r["toolLife"]),
             "spm": int(r["spm"]),
             "pmStrokes": pm_strokes,
@@ -378,7 +399,7 @@ def export_pm():
     ws.title = "Preventive Maintenance"
 
     headers = [
-        "Sl No", "Tool No", "Tool Life", "SPM", "PM Strokes",
+        "Sl No", "Tool No", "Part No", "Tool Life", "SPM", "PM Strokes",
         "Total Strokes", "Next PM Stroke", "PM %", "Maintenance Count",
         "Last Maintenance",
     ]
@@ -399,7 +420,7 @@ def export_pm():
 
     for row_idx, entry in enumerate(processed, 2):
         vals = [
-            row_idx - 1, entry["toolNo"], entry["toolLife"], entry["spm"],
+            row_idx - 1, entry["toolNo"], entry["partNo"], entry["toolLife"], entry["spm"],
             entry["pmStrokes"], entry["totalLifetimeStrokes"], entry["nextStroke"],
             entry["pmPercentage"], entry["maintenanceCount"], entry["lastMaintenanceDate"],
         ]

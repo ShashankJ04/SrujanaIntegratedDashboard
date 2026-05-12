@@ -814,6 +814,14 @@
     return data;
   }
 
+  function exportCalendarExcel(payload) {
+    if (!payload) return;
+    const params = new URLSearchParams();
+    if (payload.month) params.set('month', String(payload.month));
+    if (payload.year) params.set('year', String(payload.year));
+    apiDownloadGet(`/api/dispatch-calendar/export?${params.toString()}`, 'dispatch_calendar.xlsx');
+  }
+
   function updateSubtitle(el, payload) {
     if (!el || !payload) return;
     const mo = payload.month;
@@ -853,7 +861,7 @@
     init() {
       const root = document.getElementById('dispatch-calendar-root');
       const subtitle = document.getElementById('dispatch-calendar-subtitle');
-      const refreshBtn = document.getElementById('dispatch-calendar-refresh');
+      const exportBtn = document.getElementById('dispatch-calendar-export');
       if (!root) return;
       bindLegendFilter(root);
 
@@ -896,7 +904,7 @@
         }
       };
 
-      if (refreshBtn) refreshBtn.addEventListener('click', () => load());
+      if (exportBtn) exportBtn.addEventListener('click', () => exportCalendarExcel(_lastPayload));
 
       load();
     },

@@ -4,7 +4,7 @@ import os
 from datetime import date
 from typing import Any, Dict, List
 
-from flask import Blueprint, current_app, g, jsonify, request, url_for
+from flask import Blueprint, current_app, g, jsonify, request, send_file, url_for
 
 from .auth import api_login_required, is_dpr_editor
 from .dispatch_calendar import build_dispatch_calendar_payload
@@ -584,4 +584,62 @@ def api_dispatch_calendar() -> Any:
     except ValueError as e:
         return jsonify({"message": str(e)}), 400
     return jsonify(payload)
+
+
+@api_bp.get("/dispatch-calendar/export")
+@require_access("rept")
+def api_dispatch_calendar_export() -> Any:
+    """Export dispatch calendar month rows to Excel."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    t = date.today()
+    month = _parse_int("month", t.month)
+    year = _parse_int("year", t.year)
+    if month < 1 or month > 12:
+        month = t.month
+    if year < 1900 or year > 2100:
+        year = t.year
+
+    payload = build_dispatch_calendar_payload(month, year)
+    columns = payload.get("columns") or []
+    rows = payload.get("rows") or []
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Dispatch Calendar"
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    for col_idx, col_name in enumerate(columns, 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    for row_idx, row in enumerate(rows, 2):
+        for col_idx, col_name in enumerate(columns, 1):
+            val = row.get(col_name, "")
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"dispatch_calendar_{year}_{month:02d}.xlsx",
+    )
 

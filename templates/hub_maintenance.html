@@ -412,6 +412,7 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 // ══════════════════════════════════════════════════════════════════════
 var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
 var _pmSearchFilter='', _pmThresholdFilter='all';
+var _pmVisibleToolNos=[];
 var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
 
 async function loadPmData() {
@@ -447,6 +448,7 @@ function renderPmTable() {
     rows=rows.filter(r=>{const p=pctMap.get(r.tool.toolNo)||0;if(_pmThresholdFilter==='critical')return p>=100;if(_pmThresholdFilter==='warning')return p>=80&&p<100;return p<80;});
   }
   if (_pmSearchFilter) { const q=_pmSearchFilter.toLowerCase(); rows=rows.filter(r=>r.tool.toolNo.toLowerCase().includes(q)||r.tool.partNo.toLowerCase().includes(q)); }
+  _pmVisibleToolNos = rows.map(r => r.tool.toolNo);
 
   const columns = [
     { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:140 },
@@ -529,7 +531,10 @@ async function loadPmToolStrokes(toolId){try{const d=await apiFetch('/api/pm/too
 document.getElementById('pmSearch').addEventListener('input',e=>{_pmSearchFilter=e.target.value.trim();renderPmTable();});
 ['safe','warning','critical'].forEach(key=>{const btn=document.getElementById(key==='safe'?'pmSafeBtn':key==='warning'?'pmWarnBtn':'pmCritBtn');btn.addEventListener('click',()=>{_pmThresholdFilter=_pmThresholdFilter===key?'all':key;document.querySelectorAll('.ti-filter-btn').forEach(b=>b.classList.remove('active'));if(_pmThresholdFilter!=='all')btn.classList.add('active');renderPmTable();});});
 
-document.getElementById('pmExportBtn').addEventListener('click',()=>{apiDownloadGet('/api/pm/export?mode='+_pmThresholdFilter+'&search='+_pmSearchFilter,'preventive_maintenance.xlsx');});
+document.getElementById('pmExportBtn').addEventListener('click',()=>{
+  const toolNos = (_pmVisibleToolNos || []).join(',');
+  apiDownloadGet('/api/pm/export?mode='+encodeURIComponent(_pmThresholdFilter)+'&search='+encodeURIComponent(_pmSearchFilter)+'&toolNos='+encodeURIComponent(toolNos),'preventive_maintenance.xlsx');
+});
 document.getElementById('pmAddPmStrokes').addEventListener('input',()=>{if(_pmSelectedAddTool){const cur=parseInt((document.getElementById('pmAddCurrent').value||'').replace(/,/g,''))||0;const ps=parseInt(document.getElementById('pmAddPmStrokes').value)||0;document.getElementById('pmAddNext').value=cur+ps;}});
 document.getElementById('pmAddSubmit').addEventListener('click',async()=>{if(!_pmSelectedAddTool)return;try{await apiPost('/api/pm/',{toolId:_pmSelectedAddTool.id,toolNo:_pmSelectedAddTool.toolNo,toolLife:parseInt(document.getElementById('pmAddLife').value),spm:parseInt(document.getElementById('pmAddSpm').value),pmStrokes:parseInt(document.getElementById('pmAddPmStrokes').value),nextStroke:parseInt(document.getElementById('pmAddNext').value)});closePmModal('pmAddModal');loadPmData();}catch(e){showSnackbar(e.message);}});
 document.getElementById('pmEditSubmit').addEventListener('click',async()=>{try{await apiPatch('/api/pm/'+_pmEditToolId,{toolLife:parseInt(document.getElementById('pmEditLife').value),spm:parseInt(document.getElementById('pmEditSpm').value),pmStrokes:parseInt(document.getElementById('pmEditPmStrokes').value)});closePmModal('pmEditModal');loadPmData();}catch(e){showSnackbar(e.message);}});

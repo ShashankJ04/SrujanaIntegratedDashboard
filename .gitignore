@@ -22,6 +22,10 @@ build/
 dist/
 pm-attachments/
 qr-codes/
+data/Untitled*
+.cursor/
+dashboards.code-workspace
+scripts/
 
 # OS/editor noise
 .DS_Store
@@ -29,3 +33,4 @@ Thumbs.db
 
 # Local environment config
 .env
+/dashboards

@@ -6086,27 +6086,11 @@ body.sg-resizing {
 
 /* One control row: title + legend | KPI | Days + search — grid prevents column overlap */
 .ti-dc-toolbar--all-in-one {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-x: visible;
   padding-bottom: 2px;
-}
-
-/*
- * Toolbar: flex (not grid) so the KPI reliably grows — grid `1fr` can shrink-wrap and leave dead space.
- * Left / right = intrinsic width; KPI = flex:1 fills everything between.
- */
-#section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  gap: 10px 14px;
 }
 
 .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
@@ -6117,24 +6101,12 @@ body.sg-resizing {
 
 #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px 12px;
+  gap: 6px;
   flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
-}
-
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
-  flex: 1 1 0%;
-  min-width: min(240px, 100%);
-  width: auto;
-  max-width: none;
-}
-
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
-  flex: 0 0 auto;
-  margin-left: 0;
 }
 
 .ti-dc-toolbar--all-in-one .ti-dc-title-block {
@@ -6216,6 +6188,10 @@ body.sg-resizing {
   font-size: 18px;
   font-weight: 800;
   color: var(--ti-text-bright);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  animation: none;
 }
 
 .ti-dc-subtitle {
@@ -6223,6 +6199,10 @@ body.sg-resizing {
   font-size: 13px;
   color: var(--ti-text-muted);
   max-width: 56ch;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  animation: none;
 }
 
 .ti-dc-toolbar-right {
@@ -6230,6 +6210,180 @@ body.sg-resizing {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 10px 16px;
+}
+
+/* Dispatch Calendar toolbar: full-width row — KPI grows; search fixed width; KPI type scales (container) */
+#section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-title {
+  font-size: 17px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-subtitle {
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-mid {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: visible;
+}
+
+/* Legend: 2×2 grid (fits narrow band beside title) */
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend--grid2.ti-dc-legend--inline {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  grid-template-rows: repeat(2, auto);
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--ti-border);
+  overflow: visible;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend-item {
+  gap: 6px;
+  padding: 3px 5px;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-swatch {
+  width: 13px;
+  height: 13px;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  padding: 4px 8px;
+  gap: 2px;
+  align-self: stretch;
+  align-items: flex-start;
+  container-type: inline-size;
+  container-name: dc-kpi;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-head {
+  margin-bottom: 0;
+  gap: 3px;
+  column-gap: 6px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-title {
+  font-size: 9px;
+  font-size: clamp(8px, 0.75cqi + 6px, 10px);
+  line-height: 1.1;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
+  font-size: 8px;
+  font-size: clamp(7px, 0.85cqi + 5px, 9px);
+  line-height: 1.15;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px min(10px, 2.5cqi);
+  min-width: 0;
+  width: 100%;
+  justify-items: start;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
+  min-width: 0;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
+  font-size: 12px;
+  font-size: clamp(10px, 2.85cqi + 5px, 18px);
+  font-weight: 800;
+  line-height: 1.12;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: none;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+  display: flex;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 0;
+  width: auto;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count {
+  min-width: 4.25rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-select {
+  min-width: 105px;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-search {
+  flex: 0 0 auto;
+  width: 180px;
+  min-width: 160px;
+  max-width: 200px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-filter,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
+  flex-shrink: 0;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 /* Row count + search aligned with Refresh (same row, before button) */
