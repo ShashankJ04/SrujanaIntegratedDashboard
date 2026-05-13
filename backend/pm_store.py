@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote, unquote
 
 from .db import execute, fetch_all, fetch_one
 
@@ -60,8 +61,31 @@ def _get_tool_strokes_by_tool_no(tool_no: str) -> int:
     return int(row["totalQty"]) if row else 0
 
 
+def _safe_pm_attachment_relpath(raw: str) -> Optional[str]:
+    """Build a safe relative path (forward slashes) under pm-attachments; None if invalid."""
+    s = unquote(raw.strip()).replace("\\", "/")
+    if not s:
+        return None
+    s = s.lstrip("/")
+    low = s.lower()
+    if low.startswith("pm-attachments/"):
+        s = s[len("pm-attachments/") :]
+    parts: List[str] = []
+    for p in s.split("/"):
+        if not p or p == ".":
+            continue
+        if p == "..":
+            return None
+        parts.append(p)
+    return "/".join(parts) if parts else None
+
+
 def _normalize_attachment_path(value: Optional[str]) -> Optional[str]:
-    """Return API-served PM attachment URL for legacy/raw DB values."""
+    """Return API-served PM attachment URL for legacy/raw DB values.
+
+    Preserves nested folders (e.g. ``S1/PT041/01A/file.pdf``) instead of basename-only,
+    so URLs match files stored under ``pm-attachments/<subdirs>/``.
+    """
     if not value:
         return None
 
@@ -69,15 +93,20 @@ def _normalize_attachment_path(value: Optional[str]) -> Optional[str]:
     if not attachment:
         return None
 
-    # Keep absolute URLs and already-correct API route untouched.
-    if attachment.startswith(("http://", "https://", "/api/pm/attachment/")):
+    if attachment.startswith(("http://", "https://")):
         return attachment
 
-    # Legacy values can be "/<filename>" or plain "<filename>".
-    if attachment.startswith("/"):
-        attachment = attachment.lstrip("/")
-    attachment = os.path.basename(attachment)
-    return f"/api/pm/attachment/{attachment}" if attachment else None
+    if attachment.startswith("/api/pm/attachment/"):
+        inner = attachment[len("/api/pm/attachment/") :]
+        safe = _safe_pm_attachment_relpath(inner)
+        if not safe:
+            return attachment
+        return f"/api/pm/attachment/{quote(safe, safe='/')}"
+
+    safe = _safe_pm_attachment_relpath(attachment)
+    if not safe:
+        return None
+    return f"/api/pm/attachment/{quote(safe, safe='/')}"
 
 
 # ── Public API ──────────────────────────────────────────────────────────

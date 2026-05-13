@@ -249,6 +249,15 @@
 function closePmModal(id) { document.getElementById(id).classList.remove('open'); }
 function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 
+/** Normalize tool numbers for Map lookups (Unicode NFKC + trim; matches server /api/pm + /api/tools). */
+function _pmKey(no) {
+  try {
+    return String(no || '').normalize('NFKC').trim();
+  } catch (e) {
+    return String(no || '').trim();
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // TOOLS TODAY TAB
 // ══════════════════════════════════════════════════════════════════════
@@ -282,7 +291,7 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
   }
 
   function makeToolCard(entry, pmMap) {
-    const pm = pmMap.get(entry.toolNo);
+    const pm = pmMap.get(_pmKey(entry.toolNo));
     const hasPM = !!pm;
     const pmPct = pm ? pm.pmPercentage : 0;
     const lifePct = hasPM && pm.toolLife > 0 ? Math.min(Math.round((pm.totalLifetimeStrokes/pm.toolLife)*100),100) : 0;
@@ -350,13 +359,13 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
     try {
       const [todayData, futureData, pmStatus, pmAll, toolsCount] = await Promise.all([
         apiFetch('/api/tools/today'), apiFetch('/api/tools/for-date/'+dateOffset(futureOffset)),
-        apiFetch('/api/pm/status?threshold=80&mode=above'), apiFetch('/api/pm/status?mode=all'),
+        apiFetch('/api/pm/status?threshold=80&mode=above&per_component=0'), apiFetch('/api/pm/status?mode=all&per_component=0'),
         apiFetch('/api/tools/count'),
       ]);
       document.getElementById('toolsDate').textContent = formatDate(todayData.date||new Date().toISOString().slice(0,10));
 
       const pmByToolNo = new Map();
-      pmAll.forEach(e => pmByToolNo.set(e.toolNo, e));
+      pmAll.forEach(e => pmByToolNo.set(_pmKey(e.toolNo), e));
 
       const totalTools = toolsCount.total||0;
       const warnTools = pmAll.filter(t => { const p = t.toolLife>0?(t.totalLifetimeStrokes/t.toolLife)*100:0; return p>=50&&p<80; }).length;
@@ -410,7 +419,7 @@ function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 // ══════════════════════════════════════════════════════════════════════
 // PREVENTIVE MAINTENANCE TAB
 // ══════════════════════════════════════════════════════════════════════
-var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
+var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[], _pmStatusSlots=[];
 var _pmSearchFilter='', _pmThresholdFilter='all';
 var _pmVisibleToolNos=[];
 var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
@@ -418,8 +427,11 @@ var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDelete
 async function loadPmData() {
   document.getElementById('pmLoading').style.display='flex';
   try {
-    [_pmEntries, _pmAllTools, _pmStatusAll] = await Promise.all([
-      apiFetch('/api/pm/'), apiFetch('/api/tools/all'), apiFetch('/api/pm/status?mode=all'),
+    [_pmEntries, _pmAllTools, _pmStatusAll, _pmStatusSlots] = await Promise.all([
+      apiFetch('/api/pm/'),
+      apiFetch('/api/tools/all'),
+      apiFetch('/api/pm/status?mode=all&per_component=0'),
+      apiFetch('/api/pm/status?mode=all&per_component=1'),
     ]);
     renderPmTable();
   } catch(err) { showSnackbar(err.message); }
@@ -427,27 +439,174 @@ async function loadPmData() {
 }
 
 function getPmEntryByToolNo(toolNo) {
-  const m = _pmEntries.filter(e => e.toolNo === toolNo);
+  const m = _pmEntries.filter(e => _pmKey(e.toolNo) === _pmKey(toolNo));
   if (!m.length) return null;
   return m.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
 }
 
+/** Per-slot PM rows when one cavity has 0 strokes and another has production (matches backend _pm_should_expand_slots). */
+function _pmExpandSlotCondition(slots) {
+  if (!slots || slots.length <= 1) return false;
+  const nums = slots.map(s => Number(s.totalLifetimeStrokes) || 0);
+  const lo = Math.min(...nums), hi = Math.max(...nums);
+  return lo === 0 && hi > 0;
+}
+
+function _pmPctFromStatusRow(s) {
+  const pmStrokes = Number(s.pmStrokes) || 0;
+  const nextStroke = Number(s.nextStroke) || 0;
+  const total = Number(s.totalLifetimeStrokes) || 0;
+  if (pmStrokes <= 0) return 0;
+  const cycleStart = nextStroke - pmStrokes;
+  const completed = total - cycleStart;
+  return Math.max(0, Math.round((completed / pmStrokes) * 100));
+}
+
+/** Merge rows sharing ``compId`` (``CT_COMPID``); mirrors server _pm_merge_component_slots. */
+function _pmMergeSlotsByComp(slots) {
+  if (!slots || !slots.length) return [];
+  const map = new Map();
+  const order = [];
+  for (const s of slots) {
+    let cid = Number(s.compId) || 0;
+    if (cid <= 0) cid = -(Number(s.componentToolId) || 0);
+    if (!map.has(cid)) {
+      order.push(cid);
+      map.set(cid, {
+        ...s,
+        totalLifetimeStrokes: Number(s.totalLifetimeStrokes) || 0,
+        componentToolId: Number(s.componentToolId) || 0,
+      });
+    } else {
+      const m = map.get(cid);
+      m.totalLifetimeStrokes = (Number(m.totalLifetimeStrokes) || 0) + (Number(s.totalLifetimeStrokes) || 0);
+      const a = m.componentToolId || 0, b = Number(s.componentToolId) || 0;
+      m.componentToolId = a && b ? Math.min(a, b) : (a || b);
+    }
+  }
+  return order.map(k => {
+    const m = { ...map.get(k) };
+    m.pmPercentage = _pmPctFromStatusRow(m);
+    return m;
+  }).sort((a, b) =>
+    (Number(a.compId) || 0) - (Number(b.compId) || 0) ||
+    String(a.partNo || '').localeCompare(String(b.partNo || '')) ||
+    (Number(a.componentToolId) || 0) - (Number(b.componentToolId) || 0)
+  );
+}
+
+function _pmPartLabelKey(s) {
+  return _pmKey(s.partNo).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Second pass: same normalized part label (matches server _pm_merge_duplicate_part_labels). */
+function _pmMergeDuplicatePartLabels(slots) {
+  if (!slots || slots.length <= 1) return slots;
+  const map = new Map();
+  const order = [];
+  for (const s of slots) {
+    const pk = _pmPartLabelKey(s);
+    if (!map.has(pk)) {
+      order.push(pk);
+      map.set(pk, {
+        ...s,
+        totalLifetimeStrokes: Number(s.totalLifetimeStrokes) || 0,
+        componentToolId: Number(s.componentToolId) || 0,
+      });
+    } else {
+      const m = map.get(pk);
+      m.totalLifetimeStrokes = (Number(m.totalLifetimeStrokes) || 0) + (Number(s.totalLifetimeStrokes) || 0);
+      const a = m.componentToolId || 0, b = Number(s.componentToolId) || 0;
+      m.componentToolId = a && b ? Math.min(a, b) : (a || b);
+    }
+  }
+  return order.map(k => {
+    const m = { ...map.get(k) };
+    m.pmPercentage = _pmPctFromStatusRow(m);
+    return m;
+  }).sort((a, b) =>
+    _pmPartLabelKey(a).localeCompare(_pmPartLabelKey(b)) ||
+    (Number(a.componentToolId) || 0) - (Number(b.componentToolId) || 0)
+  );
+}
+
+function _pmDedupeSlots(slots) {
+  return _pmMergeDuplicatePartLabels(_pmMergeSlotsByComp(slots));
+}
+
+/** One row per tool (aggregated) or one row per slot when idle+active cavities — mirrors /api/pm/export. */
+function _pmBuildDisplayToolRows() {
+  const slotByTool = new Map();
+  (_pmStatusSlots || []).forEach(s => {
+    const k = _pmKey(s.toolNo);
+    if (!slotByTool.has(k)) slotByTool.set(k, []);
+    slotByTool.get(k).push(s);
+  });
+  const aggByTool = new Map();
+  (_pmStatusAll || []).forEach(s => aggByTool.set(_pmKey(s.toolNo), s));
+  const out = [];
+  for (const t of _pmAllTools) {
+    const k = _pmKey(t.toolNo);
+    const slots = _pmDedupeSlots(slotByTool.get(k) || []);
+    if (_pmExpandSlotCondition(slots)) {
+      for (const s of slots) {
+        out.push({
+          id: s.componentToolId,
+          toolNo: t.toolNo,
+          partNo: s.partNo || '-',
+          pmPct: s.pmPercentage,
+          slotStrokes: Number(s.totalLifetimeStrokes) || 0,
+        });
+      }
+    } else {
+      const ag = aggByTool.get(k);
+      out.push({
+        id: t.id,
+        toolNo: t.toolNo,
+        partNo: t.partNo || '-',
+        pmPct: ag != null ? ag.pmPercentage : null,
+        slotStrokes: null,
+      });
+    }
+  }
+  return out;
+}
+
 function renderPmTable() {
-  const pctMap = new Map(); const lifeMap = new Map();
-  _pmStatusAll.forEach(s => { pctMap.set(s.toolNo, s.pmPercentage); lifeMap.set(s.toolNo, s.totalLifetimeStrokes); });
+  const displayTools = _pmBuildDisplayToolRows();
+  const aggByTool = new Map();
+  (_pmStatusAll || []).forEach(s => aggByTool.set(_pmKey(s.toolNo), s));
 
   let safe=0,warn=0,crit=0;
-  _pmAllTools.forEach(t => { const p=pctMap.get(t.toolNo)||0; if(p>=100)crit++; else if(p>=80)warn++; else safe++; });
+  displayTools.forEach(t => { const p = t.pmPct != null ? t.pmPct : 0; if (p >= 100) crit++; else if (p >= 80) warn++; else safe++; });
   document.getElementById('pmSafeCount').textContent=safe;
   document.getElementById('pmWarnCount').textContent=warn;
   document.getElementById('pmCritCount').textContent=crit;
 
-  let rows = _pmAllTools.map(t => ({tool:t, entry:(()=>{const e=getPmEntryByToolNo(t.toolNo); return e?{...e,totalLifetimeStrokes:lifeMap.get(t.toolNo)||0}:null;})()}));
+  let rows = displayTools.map(t => ({
+    tool: t,
+    entry: (() => {
+      const e = getPmEntryByToolNo(t.toolNo);
+      if (!e) return null;
+      let strokes = 0;
+      if (t.slotStrokes != null) strokes = t.slotStrokes;
+      else {
+        const ag = aggByTool.get(_pmKey(t.toolNo));
+        strokes = ag ? (Number(ag.totalLifetimeStrokes) || 0) : 0;
+      }
+      return { ...e, totalLifetimeStrokes: strokes };
+    })(),
+  }));
 
   if (_pmThresholdFilter!=='all') {
-    rows=rows.filter(r=>{const p=pctMap.get(r.tool.toolNo)||0;if(_pmThresholdFilter==='critical')return p>=100;if(_pmThresholdFilter==='warning')return p>=80&&p<100;return p<80;});
+    rows = rows.filter(r => {
+      const p = r.tool.pmPct != null ? r.tool.pmPct : 0;
+      if (_pmThresholdFilter === 'critical') return p >= 100;
+      if (_pmThresholdFilter === 'warning') return p >= 80 && p < 100;
+      return p < 80;
+    });
   }
-  if (_pmSearchFilter) { const q=_pmSearchFilter.toLowerCase(); rows=rows.filter(r=>r.tool.toolNo.toLowerCase().includes(q)||r.tool.partNo.toLowerCase().includes(q)); }
+  if (_pmSearchFilter) { const q=_pmSearchFilter.toLowerCase(); rows=rows.filter(r=>r.tool.toolNo.toLowerCase().includes(q)||String(r.tool.partNo||'').toLowerCase().includes(q)); }
   _pmVisibleToolNos = rows.map(r => r.tool.toolNo);
 
   const columns = [
@@ -480,7 +639,7 @@ function renderPmTable() {
     if (e) {
       actionsHtml = `<button class="ti-btn-icon" title="Edit" data-edit="${e.toolId}">✏️</button><button class="ti-btn-icon" title="History" data-history="${e.toolId}">🕐</button><button class="ti-btn-icon" title="Delete" data-delete="${e.toolId}" style="color:var(--ti-red)">🗑️</button><button class="ti-btn-icon" title="Confirm PM" data-confirm="${e.toolId}" style="color:var(--ti-emerald)">✅</button>`;
     } else {
-      actionsHtml = `<button class="ti-btn ti-btn-outline ti-btn-xs" data-configure="${t.toolNo}">+ Configure</button>`;
+      actionsHtml = `<button class="ti-btn ti-btn-outline ti-btn-xs" data-configure="${t.id}">+ Configure</button>`;
     }
     return {
       toolNo: t.toolNo,
@@ -492,7 +651,7 @@ function renderPmTable() {
       nextPm: e?(latest?latest.nextStroke:'Not set'):null,
       lastMaint: e?(latest?new Date(latest.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'No maint.'):'-',
       pmCount: e?e.maintenanceHistory.length:null,
-      pmPct: pctMap.get(t.toolNo)||null,
+      pmPct: t.pmPct != null ? t.pmPct : null,
       actionsHtml
     };
   });
@@ -521,7 +680,21 @@ function renderPmTable() {
     } else if (btn.hasAttribute('data-confirm')) {
       const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value=''; openPmModal('pmConfirmModal'); try{const info=await apiFetch('/api/pm/'+id+'/stroke-info'); document.getElementById('pmConfirmCurrent').value=formatIndianNumber(info.currentStroke); document.getElementById('pmConfirmNext').value=info.suggestedNextStroke;}catch{}
     } else if (btn.hasAttribute('data-configure')) {
-      const toolNo = btn.getAttribute('data-configure'); const tool=_pmAllTools.find(t=>t.toolNo===toolNo); if(tool){_pmSelectedAddTool=tool; document.getElementById('pmAddTitle').textContent='Configure: '+tool.toolNo; document.getElementById('pmAddSearch').parentElement.style.display='none'; document.getElementById('pmAddSearchResults').style.display='none'; document.getElementById('pmAddSelectedTool').style.display='block'; document.getElementById('pmAddToolDisplay').value=tool.toolNo; document.getElementById('pmAddLife').value=''; document.getElementById('pmAddSpm').value=''; document.getElementById('pmAddPmStrokes').value=''; loadPmToolStrokes(tool.id); openPmModal('pmAddModal');}
+      const ctid = parseInt(btn.getAttribute('data-configure'), 10);
+      const tool = _pmBuildDisplayToolRows().find(t => t.id === ctid) || _pmAllTools.find(t => t.id === ctid);
+      if (tool) {
+        _pmSelectedAddTool = { id: tool.id, toolNo: tool.toolNo, partNo: tool.partNo };
+        document.getElementById('pmAddTitle').textContent = 'Configure: ' + tool.toolNo + (tool.partNo && tool.partNo !== '-' ? ' · ' + tool.partNo : '');
+        document.getElementById('pmAddSearch').parentElement.style.display = 'none';
+        document.getElementById('pmAddSearchResults').style.display = 'none';
+        document.getElementById('pmAddSelectedTool').style.display = 'block';
+        document.getElementById('pmAddToolDisplay').value = tool.toolNo;
+        document.getElementById('pmAddLife').value = '';
+        document.getElementById('pmAddSpm').value = '';
+        document.getElementById('pmAddPmStrokes').value = '';
+        loadPmToolStrokes(tool.id);
+        openPmModal('pmAddModal');
+      }
     }
   };
 }
@@ -532,8 +705,9 @@ document.getElementById('pmSearch').addEventListener('input',e=>{_pmSearchFilter
 ['safe','warning','critical'].forEach(key=>{const btn=document.getElementById(key==='safe'?'pmSafeBtn':key==='warning'?'pmWarnBtn':'pmCritBtn');btn.addEventListener('click',()=>{_pmThresholdFilter=_pmThresholdFilter===key?'all':key;document.querySelectorAll('.ti-filter-btn').forEach(b=>b.classList.remove('active'));if(_pmThresholdFilter!=='all')btn.classList.add('active');renderPmTable();});});
 
 document.getElementById('pmExportBtn').addEventListener('click',()=>{
-  const toolNos = (_pmVisibleToolNos || []).join(',');
-  apiDownloadGet('/api/pm/export?mode='+encodeURIComponent(_pmThresholdFilter)+'&search='+encodeURIComponent(_pmSearchFilter)+'&toolNos='+encodeURIComponent(toolNos),'preventive_maintenance.xlsx');
+  // mode + search only — server rebuilds the full filtered set. Omitting toolNos avoids
+  // URL truncation (large lists) and comma-split bugs when a tool number contains ','.
+  apiDownloadGet('/api/pm/export?mode='+encodeURIComponent(_pmThresholdFilter)+'&search='+encodeURIComponent(_pmSearchFilter),'preventive_maintenance.xlsx');
 });
 document.getElementById('pmAddPmStrokes').addEventListener('input',()=>{if(_pmSelectedAddTool){const cur=parseInt((document.getElementById('pmAddCurrent').value||'').replace(/,/g,''))||0;const ps=parseInt(document.getElementById('pmAddPmStrokes').value)||0;document.getElementById('pmAddNext').value=cur+ps;}});
 document.getElementById('pmAddSubmit').addEventListener('click',async()=>{if(!_pmSelectedAddTool)return;try{await apiPost('/api/pm/',{toolId:_pmSelectedAddTool.id,toolNo:_pmSelectedAddTool.toolNo,toolLife:parseInt(document.getElementById('pmAddLife').value),spm:parseInt(document.getElementById('pmAddSpm').value),pmStrokes:parseInt(document.getElementById('pmAddPmStrokes').value),nextStroke:parseInt(document.getElementById('pmAddNext').value)});closePmModal('pmAddModal');loadPmData();}catch(e){showSnackbar(e.message);}});

@@ -12,6 +12,7 @@ from flask import Blueprint, jsonify, request
 from .auth import api_login_required
 from .rbac import require_access, require_any_access
 from .db import fetch_all, fetch_one
+from .pm_api import _norm_tool_no
 
 tools_bp = Blueprint("tools_bp", __name__, url_prefix="/api/tools")
 
@@ -43,24 +44,18 @@ def tools_count():
 @tools_bp.route("/all", methods=["GET"])
 @require_any_access(["tools", "preventive_maintenance"])
 def all_tools():
-    rows = fetch_all(
-        """
-        SELECT
-            MIN(ct.CT_ID) AS id,
-            ct.CT_TOOLNO AS toolNo,
-            GROUP_CONCAT(DISTINCT c.CO_PARTNO ORDER BY c.CO_PARTNO SEPARATOR ', ') AS partNo
-        FROM components_tool ct
-        INNER JOIN components c ON ct.CT_COMPID = c.CO_ID
-        WHERE ct.CT_ACTIVEYN = 'Y'
-        GROUP BY ct.CT_TOOLNO
-        ORDER BY ct.CT_TOOLNO
-        """
-    )
+    expand = str(request.args.get("per_component", "0")).lower() in ("1", "true", "yes")
+    from . import pm_api
+
+    if expand:
+        rows = fetch_all(pm_api._PM_COMPONENT_TOOL_ROWS_SQL)
+    else:
+        rows = fetch_all(pm_api._PM_GROUPED_TOOL_ROWS_SQL)
     result = []
     for r in rows:
         result.append({
             "id": r["id"],
-            "toolNo": r["toolNo"],
+            "toolNo": _norm_tool_no(r["toolNo"]),
             "partNo": r["partNo"] or "",
         })
     return jsonify(result)
@@ -94,7 +89,7 @@ def search_tools():
     for r in rows:
         result.append({
             "id": r["id"],
-            "toolNo": r["toolNo"],
+            "toolNo": _norm_tool_no(r["toolNo"]),
             "partNo": r["partNo"],
         })
     return jsonify(result)

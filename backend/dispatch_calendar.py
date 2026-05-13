@@ -321,7 +321,7 @@ LEFT JOIN (
         LEFT JOIN comp_opstages ON cd_opstage = os_id
         LEFT JOIN components ON CD_COMPID = co_id AND CO_ACTIVEYN = 'Y'
         LEFT JOIN comp_scrapdetails ON sd_source='S' AND sd_src=3 AND sd_refno=CD_CMID AND sd_compid = cd_compid AND SD_OPSTAGE = cd_opstage
-        WHERE co_id IS NOT NULL
+        WHERE cm_id = cd_cmid and co_id is not null and CD_SOURCE='C'
         GROUP BY cd_compid, cd_opstage, co_id, CO_PARTNO,CO_PARTNAME
     ) t3
     WHERE compbalance > 0
