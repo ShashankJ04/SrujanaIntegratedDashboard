@@ -184,22 +184,16 @@ def _pm_entry_created_ts(e: dict) -> float:
         return 0.0
 
 
-def _entry_by_tool_no(entries: list) -> dict:
-    """Newest createdAt wins per tool number (stripped key)."""
-    by_key: dict = {}
-    for e in entries:
-        key = _norm_tool_no(e.get("toolNo"))
-        if not key:
-            continue
-        cur = by_key.get(key)
-        if cur is None or _pm_entry_created_ts(e) >= _pm_entry_created_ts(cur):
-            by_key[key] = e
-    return by_key
-
-
 def _canon_tool_key(tool_no: str, all_by_lower: dict[str, str]) -> str:
     n = _norm_tool_no(tool_no)
     return all_by_lower.get(n.lower(), n)
+
+
+def _status_tool_key(value: object) -> str:
+    """Hub / export join key: exact string like StableVersion1.7 JSON (no NFKC merge)."""
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _pm_pct_for_status_row(st: dict) -> int:
@@ -347,15 +341,7 @@ def _auth():
 @pm_bp.route("/", methods=["GET"])
 @require_access("preventive_maintenance")
 def list_entries():
-    entries = pm_store.get_entries()
-    _, all_by_lower = _all_active_tools_maps()
-    out = []
-    for e in entries:
-        canon = _canon_tool_key(str(e.get("toolNo", "")), all_by_lower)
-        row = dict(e)
-        row["toolNo"] = canon
-        out.append(row)
-    return jsonify(out)
+    return jsonify(pm_store.get_entries())
 
 
 # ── GET /status — PM status with percentage ─────────────────────────────
@@ -369,7 +355,7 @@ def pm_status():
     mode = request.args.get("mode", "above")
     per_component = str(request.args.get("per_component", "0")).lower() in ("1", "true", "yes")
     cache_seconds = int(current_app.config.get("PM_STATUS_CACHE_SECONDS", 20) or 20)
-    cache_key = (9, int(threshold), str(mode), int(per_component))
+    cache_key = (10, int(threshold), str(mode), int(per_component))
     now = time.monotonic()
     if cache_seconds > 0:
         with _PM_STATUS_CACHE_LOCK:
@@ -401,21 +387,19 @@ def pm_status():
                 )
             )
             rows.extend(_pm_dedupe_component_slot_rows(lst))
-    else:
-        all_by_lower = {}
-        for r in rows:
-            k = _norm_tool_no(r.get("toolNo"))
-            if k:
-                all_by_lower[k.lower()] = k
 
     results = []
     for r in rows:
         pm_pct = _pm_pct_for_status_row(r)
-        canon_no = _canon_tool_key(str(r.get("toolNo") or ""), all_by_lower)
+        if per_component:
+            tool_no_out = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
+        else:
+            # StableVersion1.7: raw TL_tool_number (must match /api/tools/all CT_TOOLNO string-for-string for hub pills).
+            tool_no_out = r.get("toolNo")
 
         entry = {
             "toolId": r["toolId"],
-            "toolNo": canon_no,
+            "toolNo": tool_no_out,
             "toolLife": int(r["toolLife"]),
             "spm": int(r["spm"]),
             "pmStrokes": int(r["pmStrokes"] or 0),
@@ -572,27 +556,29 @@ def _all_active_tools_maps():
 
 
 def _load_pm_export_context():
-    """Maps for PM hub + export: one grouped tool row per CT_TOOLNO + aggregated status (StableVersion1.7 semantics)."""
+    """Maps for PM hub + export: grouped tools + status joined by exact tool string (StableVersion1.7)."""
     from .db import fetch_all
 
-    all_tool_rows, all_by_lower = _all_active_tools_maps()
+    all_tool_rows, _ = _all_active_tools_maps()
 
     status_rows = fetch_all(_PM_STATUS_TOOL_AGG_SQL)
-    status_by_tool: dict[str, dict] = {}
+    status_by_exact: dict[str, dict] = {}
     for r in status_rows:
-        tn = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
-        status_by_tool[tn] = r
+        k = _status_tool_key(r.get("toolNo"))
+        if k:
+            status_by_exact[k] = r
 
     entries = pm_store.get_entries()
-    raw_ent = _entry_by_tool_no(entries)
-    entry_by_tool: dict = {}
-    for k, e in raw_ent.items():
-        canon = _canon_tool_key(k, all_by_lower)
-        ex = entry_by_tool.get(canon)
+    entry_by_exact: dict[str, dict] = {}
+    for e in entries:
+        k = _status_tool_key(e.get("toolNo"))
+        if not k:
+            continue
+        ex = entry_by_exact.get(k)
         if ex is None or _pm_entry_created_ts(e) >= _pm_entry_created_ts(ex):
-            entry_by_tool[canon] = e
+            entry_by_exact[k] = e
 
-    return all_tool_rows, all_by_lower, status_by_tool, entry_by_tool
+    return all_tool_rows, status_by_exact, entry_by_exact
 
 
 def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
@@ -602,18 +588,18 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
     by proxies/browsers, and comma-separated tool numbers break when a tool no. contains ','.
     """
     search_l = (search or "").strip().lower()
-    all_tool_rows, all_by_lower, status_by_tool, entry_by_tool = _load_pm_export_context()
+    all_tool_rows, status_by_exact, entry_by_exact = _load_pm_export_context()
 
     processed: list[dict] = []
     for r in all_tool_rows:
-        canon_tool = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
-        part_display = _norm_tool_no(r.get("partNo"))
-        tool_no_l = canon_tool.lower()
+        ct_key = _status_tool_key(r.get("toolNo"))
+        part_display = str(r.get("partNo") or "")
+        tool_no_l = ct_key.lower()
         part_no_l = part_display.lower()
         if search_l and search_l not in tool_no_l and search_l not in part_no_l:
             continue
 
-        st = status_by_tool.get(canon_tool)
+        st = status_by_exact.get(ct_key)
         pm_pct = _pm_pct_for_status_row(st) if st else 0
         if mode == "safe" and pm_pct >= 80:
             continue
@@ -622,7 +608,7 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
         if mode == "critical" and pm_pct < 100:
             continue
 
-        ent = entry_by_tool.get(canon_tool)
+        ent = entry_by_exact.get(ct_key)
 
         latest = None
         if ent and ent.get("maintenanceHistory"):
@@ -649,7 +635,7 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
             next_pm_val = int(st["nextStroke"] or 0)
 
         processed.append({
-            "toolNo": canon_tool,
+            "toolNo": ct_key,
             "partNo": part_display,
             "toolLife": int(ent["toolLife"]) if ent else None,
             "spm": int(ent["spm"]) if ent else None,
@@ -666,17 +652,17 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
 def pm_export_hub_parity_counts(search: str = "") -> dict[str, int]:
     """Counts matching hub Safe/Warning/Critical pills (one bucket per grouped tool, StableVersion1.7)."""
     search_l = (search or "").strip().lower()
-    all_tool_rows, all_by_lower, status_by_tool, _entry_by_tool = _load_pm_export_context()
+    all_tool_rows, status_by_exact, _ = _load_pm_export_context()
 
     safe = warn = crit = 0
     for r in all_tool_rows:
-        canon_tool = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
-        part_display = _norm_tool_no(r.get("partNo"))
-        tnl = canon_tool.lower()
+        ct_key = _status_tool_key(r.get("toolNo"))
+        part_display = str(r.get("partNo") or "")
+        tnl = ct_key.lower()
         pnl = part_display.lower()
         if search_l and search_l not in tnl and search_l not in pnl:
             continue
-        st = status_by_tool.get(canon_tool)
+        st = status_by_exact.get(ct_key)
         p = _pm_pct_for_status_row(st) if st else 0
         if p >= 100:
             crit += 1

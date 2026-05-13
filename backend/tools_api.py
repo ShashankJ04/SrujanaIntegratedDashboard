@@ -55,7 +55,7 @@ def all_tools():
     for r in rows:
         result.append({
             "id": r["id"],
-            "toolNo": _norm_tool_no(r["toolNo"]),
+            "toolNo": r["toolNo"],
             "partNo": r["partNo"] or "",
         })
     return jsonify(result)

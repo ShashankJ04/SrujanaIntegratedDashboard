@@ -249,15 +249,6 @@
 function closePmModal(id) { document.getElementById(id).classList.remove('open'); }
 function openPmModal(id) { document.getElementById(id).classList.add('open'); }
 
-/** Normalize tool numbers for Map lookups (Unicode NFKC + trim; matches server /api/pm + /api/tools). */
-function _pmKey(no) {
-  try {
-    return String(no || '').normalize('NFKC').trim();
-  } catch (e) {
-    return String(no || '').trim();
-  }
-}
-
 // ══════════════════════════════════════════════════════════════════════
 // TOOLS TODAY TAB
 // ══════════════════════════════════════════════════════════════════════
@@ -291,7 +282,7 @@ function _pmKey(no) {
   }
 
   function makeToolCard(entry, pmMap) {
-    const pm = pmMap.get(_pmKey(entry.toolNo));
+    const pm = pmMap.get(entry.toolNo);
     const hasPM = !!pm;
     const pmPct = pm ? pm.pmPercentage : 0;
     const lifePct = hasPM && pm.toolLife > 0 ? Math.min(Math.round((pm.totalLifetimeStrokes/pm.toolLife)*100),100) : 0;
@@ -365,7 +356,7 @@ function _pmKey(no) {
       document.getElementById('toolsDate').textContent = formatDate(todayData.date||new Date().toISOString().slice(0,10));
 
       const pmByToolNo = new Map();
-      pmAll.forEach(e => pmByToolNo.set(_pmKey(e.toolNo), e));
+      pmAll.forEach(e => pmByToolNo.set(e.toolNo, e));
 
       const totalTools = toolsCount.total||0;
       const warnTools = pmAll.filter(t => { const p = t.toolLife>0?(t.totalLifetimeStrokes/t.toolLife)*100:0; return p>=50&&p<80; }).length;
@@ -438,7 +429,7 @@ async function loadPmData() {
 }
 
 function getPmEntryByToolNo(toolNo) {
-  const m = _pmEntries.filter(e => _pmKey(e.toolNo) === _pmKey(toolNo));
+  const m = _pmEntries.filter(e => e.toolNo === toolNo);
   if (!m.length) return null;
   return m.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
 }
@@ -447,14 +438,14 @@ function renderPmTable() {
   const pctMap = new Map();
   const lifeMap = new Map();
   (_pmStatusAll || []).forEach(s => {
-    const k = _pmKey(s.toolNo);
+    const k = s.toolNo;
     pctMap.set(k, s.pmPercentage);
     lifeMap.set(k, s.totalLifetimeStrokes);
   });
 
   let safe = 0, warn = 0, crit = 0;
   _pmAllTools.forEach(t => {
-    const p = pctMap.get(_pmKey(t.toolNo)) || 0;
+    const p = pctMap.get(t.toolNo) || 0;
     if (p >= 100) crit++;
     else if (p >= 80) warn++;
     else safe++;
@@ -467,13 +458,13 @@ function renderPmTable() {
     tool: t,
     entry: (() => {
       const e = getPmEntryByToolNo(t.toolNo);
-      return e ? { ...e, totalLifetimeStrokes: lifeMap.get(_pmKey(t.toolNo)) || 0 } : null;
+      return e ? { ...e, totalLifetimeStrokes: lifeMap.get(t.toolNo) || 0 } : null;
     })(),
   }));
 
   if (_pmThresholdFilter !== 'all') {
     rows = rows.filter(r => {
-      const p = pctMap.get(_pmKey(r.tool.toolNo)) || 0;
+      const p = pctMap.get(r.tool.toolNo) || 0;
       if (_pmThresholdFilter === 'critical') return p >= 100;
       if (_pmThresholdFilter === 'warning') return p >= 80 && p < 100;
       return p < 80;
@@ -515,7 +506,7 @@ function renderPmTable() {
     if (e) {
       actionsHtml = `<button class="ti-btn-icon" title="Edit" data-edit="${e.toolId}">✏️</button><button class="ti-btn-icon" title="History" data-history="${e.toolId}">🕐</button><button class="ti-btn-icon" title="Delete" data-delete="${e.toolId}" style="color:var(--ti-red)">🗑️</button><button class="ti-btn-icon" title="Confirm PM" data-confirm="${e.toolId}" style="color:var(--ti-emerald)">✅</button>`;
     } else {
-      actionsHtml = `<button class="ti-btn ti-btn-outline ti-btn-xs" data-configure="${t.id}">+ Configure</button>`;
+      actionsHtml = `<button class="ti-btn ti-btn-outline ti-btn-xs" data-configure="${t.toolNo}">+ Configure</button>`;
     }
     return {
       toolNo: t.toolNo,
@@ -527,7 +518,7 @@ function renderPmTable() {
       nextPm: e?(latest?latest.nextStroke:'Not set'):null,
       lastMaint: e?(latest?new Date(latest.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'No maint.'):'-',
       pmCount: e?e.maintenanceHistory.length:null,
-      pmPct: pctMap.get(_pmKey(t.toolNo))||null,
+      pmPct: pctMap.get(t.toolNo)||null,
       actionsHtml
     };
   });
@@ -555,8 +546,8 @@ function renderPmTable() {
     } else if (btn.hasAttribute('data-confirm')) {
       const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value=''; openPmModal('pmConfirmModal'); try{const info=await apiFetch('/api/pm/'+id+'/stroke-info'); document.getElementById('pmConfirmCurrent').value=formatIndianNumber(info.currentStroke); document.getElementById('pmConfirmNext').value=info.suggestedNextStroke;}catch{}
     } else if (btn.hasAttribute('data-configure')) {
-      const ctid = parseInt(btn.getAttribute('data-configure'), 10);
-      const tool = _pmAllTools.find(t => t.id === ctid);
+      const toolNo = btn.getAttribute('data-configure');
+      const tool = _pmAllTools.find(t => t.toolNo === toolNo);
       if (tool) {
         _pmSelectedAddTool = tool;
         document.getElementById('pmAddTitle').textContent = 'Configure: ' + tool.toolNo;
