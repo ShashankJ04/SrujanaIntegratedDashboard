@@ -129,6 +129,9 @@ def create_app() -> Flask:
     # CENTRAL OPERATIONS HUB — Unified entry point
     # ══════════════════════════════════════════════════════════════
 
+    # Hub RM Variance partial — off while under development; set True with hub.js RM_VARIANCE_HUB_ENABLED
+    RM_VARIANCE_HUB_ENABLED = False
+
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "reports", "reports-manage",
@@ -166,7 +169,9 @@ def create_app() -> Flask:
     def hub_section(name: str) -> str:
         if name not in VALID_SECTIONS:
             return "Section not found", 404
-            
+        if name == "rm-variance" and not RM_VARIANCE_HUB_ENABLED:
+            return "Section not found", 404
+
         # RBAC Check for partials
         from . import rbac
         from .auth import is_dpr_editor

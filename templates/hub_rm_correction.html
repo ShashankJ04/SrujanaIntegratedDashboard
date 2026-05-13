@@ -1,119 +1,132 @@
-<!-- Hub RM Correction Section — Port of RMCorrectionPage.tsx -->
-<div class="ti-hub-section-fill">
+<!-- Hub RM Correction — parity with dashboards RMCorrectionPage.tsx -->
+<div class="ti-hub-section-fill" id="rmcRoot">
 
-<div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px;padding:0 4px">
-  <div style="display:flex;align-items:center;gap:10px">
-    <span style="font-size:24px">✏️</span>
-    <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">RM Correction</h2>
-  </div>
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <label style="font-size:12px;font-weight:600;color:var(--ti-text-muted)">Start Date</label>
-    <input type="date" class="ti-input" id="rmcStartDate" style="width:170px" />
-    <span id="rmcEntryCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
-    <button class="ti-btn ti-btn-primary" id="rmcSubmitBtn">Submit All</button>
-  </div>
-</div>
-
-<div id="rmcLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
-<div id="rmcError" class="ti-alert ti-alert-error" style="display:none;margin:16px 4px"></div>
-<div id="rmcEmpty" class="ti-empty" style="display:none"><div class="ti-empty-icon">📋</div><div class="ti-empty-text">No records found.</div></div>
-
-<div id="rmcTableWrap" style="display:none;overflow:auto;flex:1;border:1px solid var(--ti-border);border-radius:8px;margin:0 4px">
-  <table class="ti-table" id="rmcTable" style="width:100%;min-width:1100px;font-size:12px;table-layout:fixed">
-    <colgroup>
-      <col style="width:12%"><col style="width:9%"><col style="width:9%"><col style="width:8%">
-      <col style="width:8%"><col style="width:7%"><col style="width:9%"><col style="width:13%">
-      <col style="width:9%"><col style="width:13%"><col style="width:7%">
-    </colgroup>
-    <thead>
-      <tr>
-        <th>Raw Material</th>
-        <th>Batch</th>
-        <th class="text-right">Total Inwarded</th>
-        <th class="text-right">RM Given</th>
-        <th class="text-right">Theo RM Remaining</th>
-        <th class="text-right">Scrap</th>
-        <th>Actual RM</th>
-        <th>RM Remarks</th>
-        <th>Actual Scrap</th>
-        <th>Scrap Remarks</th>
-        <th style="text-align:center">Action</th>
-      </tr>
-    </thead>
-    <tbody id="rmcTbody"></tbody>
-  </table>
-</div>
-
-<div id="rmcMoreWrap" style="display:none;text-align:center;padding:12px 0">
-  <button class="ti-btn ti-btn-outline" id="rmcMoreBtn">⋯ Load More</button>
-</div>
-
-</div><!-- /.ti-hub-section-fill -->
-
-<!-- History Modal -->
-<div id="rmcHistoryOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center">
-  <div style="background:var(--ti-surface);border-radius:12px;width:min(720px,92vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3)">
-    <div style="padding:16px 20px;border-bottom:1px solid var(--ti-border);display:flex;justify-content:space-between;align-items:center">
-      <h3 style="margin:0;font-size:15px;font-weight:700;color:var(--ti-text-bright)">Correction History</h3>
-      <button id="rmcHistoryClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ti-text-muted);padding:0 4px">✕</button>
+  <div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px;padding:0 4px;background:var(--ti-surface);border-bottom:1px solid var(--ti-border);padding-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">✏️</span>
+      <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">RM Correction</h2>
     </div>
-    <div id="rmcHistoryMeta" style="padding:8px 20px;background:var(--ti-surface-2);font-size:12px;color:var(--ti-text-muted);display:flex;gap:20px"></div>
-    <div id="rmcHistoryBody" style="padding:16px 20px;overflow:auto;flex:1"></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label style="font-size:12px;font-weight:600;color:var(--ti-text-muted)">Start Date</label>
+      <input type="date" class="ti-input" id="rmcStartDate" style="width:190px" />
+    </div>
   </div>
+
+  <div id="rmcLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+  <div id="rmcError" class="ti-alert ti-alert-error" style="display:none;margin:16px 4px"></div>
+  <div id="rmcEmpty" class="ti-empty" style="display:none"><div class="ti-empty-icon">📋</div><div class="ti-empty-text">No records found.</div></div>
+
+  <div id="rmcTableWrap" style="display:none;overflow:auto;flex:1;border:1px solid var(--ti-border);border-radius:8px;margin:0 4px">
+    <table class="ti-table" id="rmcTable" style="width:100%;min-width:900px;font-size:12px;table-layout:fixed">
+      <colgroup>
+        <col style="width:14%"><col style="width:10%"><col style="width:10%"><col style="width:9%">
+        <col style="width:10%"><col style="width:9%"><col style="width:12%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Raw Material</th>
+          <th>Batch</th>
+          <th class="text-right">Total Inwarded</th>
+          <th class="text-right">RM Given</th>
+          <th class="text-right">Theo RM Remaining</th>
+          <th class="text-right">Scrap</th>
+          <th style="text-align:center">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rmcTbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Edit dialog -->
+  <div id="rmcEditOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px">
+    <div style="background:#ffffff;border-radius:12px;width:min(480px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.35)">
+      <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;background:#ffffff;border-radius:12px 12px 0 0">
+        <h3 style="margin:0;font-size:15px;font-weight:700;color:#1a1a1a">Update RM and Scrap Correction</h3>
+      </div>
+      <div style="padding:16px 20px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px;background:#ffffff">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;padding:10px 12px;background:#f0f4f8;border-radius:8px;font-size:12px;color:#333">
+          <span>Theo RM Remaining: <strong id="rmcEditTheoRm" style="color:#1a1a1a">—</strong></span>
+          <span>Scrap: <strong id="rmcEditScrapDisplay" style="color:#1a1a1a">—</strong></span>
+        </div>
+        <label style="font-size:11px;font-weight:600;color:#333">Actual RM</label>
+        <input type="number" class="ti-input" id="rmcEditActualRm" step="0.01" min="0" style="background:#fff;color:#1a1a1a;border:1px solid #ccc" />
+        <label style="font-size:11px;font-weight:600;color:#333">RM Remarks</label>
+        <input type="text" class="ti-input" id="rmcEditRmRemarks" maxlength="50" style="background:#fff;color:#1a1a1a;border:1px solid #ccc" />
+        <label style="font-size:11px;font-weight:600;color:#333">Actual Scrap</label>
+        <input type="number" class="ti-input" id="rmcEditActualScrap" step="0.01" style="background:#fff;color:#1a1a1a;border:1px solid #ccc" />
+        <label style="font-size:11px;font-weight:600;color:#333">Scrap Remarks</label>
+        <input type="text" class="ti-input" id="rmcEditScrapRemarks" maxlength="50" style="background:#fff;color:#1a1a1a;border:1px solid #ccc" />
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;gap:8px;background:#ffffff;border-radius:0 0 12px 12px">        <button type="button" class="ti-btn ti-btn-outline" id="rmcEditCancel">Cancel</button>
+        <button type="button" class="ti-btn ti-btn-primary" id="rmcEditSubmit">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History dialog -->
+  <div id="rmcHistoryOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px">
+    <div style="background:#ffffff;border-radius:12px;width:min(720px,96vw);max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.35)">
+      <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:#ffffff;border-radius:12px 12px 0 0">
+        <h3 style="margin:0;font-size:15px;font-weight:700;color:#1a1a1a">Correction History</h3>
+        <button type="button" id="rmcHistoryClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666;padding:0 4px" aria-label="Close">✕</button>
+      </div>
+      <div id="rmcHistoryMeta" style="padding:8px 20px;background:#f0f4f8;font-size:12px;color:#555;display:flex;gap:20px;flex-wrap:wrap"></div>
+      <div id="rmcHistoryBody" style="padding:16px 20px;overflow:auto;flex:1;background:#ffffff"></div>
+      <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;background:#ffffff;border-radius:0 0 12px 12px">
+        <button type="button" class="ti-btn ti-btn-outline" id="rmcHistoryClose2">Close</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 (function() {
-  const PAGE_SIZE = 30;
-  const ALLOWED_EDIT_USER_IDS = [5, 43, 268];
+  const ALLOWED_EDIT_USER_IDS = [5, 43, 268, 231];
+  const currentUserId = Number((window.CURRENT_USER && window.CURRENT_USER.userId) || 0);
+  const canEdit = ALLOWED_EDIT_USER_IDS.includes(currentUserId);
+
   let _entries = [];
-  let _visibleCount = PAGE_SIZE;
-  let _form = {};
-  let _editing = {};
   let _expanded = {};
   let _batchCache = {};
+  let _editEntry = null;
   let _submitting = false;
 
-  const currentUserId = (window.CURRENT_USER && window.CURRENT_USER.userId) || 0;
-  const canEdit = ALLOWED_EDIT_USER_IDS.includes(Number(currentUserId));
-
-  // ── Init date ──────────────────────────────────────────────────────
   const dateInput = document.getElementById('rmcStartDate');
   const d = new Date();
   d.setDate(d.getDate() - 10);
   dateInput.value = d.toISOString().slice(0, 10);
   dateInput.max = new Date().toISOString().slice(0, 10);
 
-  function rowKey(entry) { return entry.rawMaterial + '__' + entry.batch; }
+  function rowKey(e) { return (e.rawMaterial || '') + '__' + (e.batch || ''); }
 
-  function getForm(key) {
-    return _form[key] || { rmCorrection: '', rmRemarks: '', scrapCorrection: '', scrapRemarks: '' };
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  // ── Load entries ───────────────────────────────────────────────────
   async function loadEntries() {
     const loading = document.getElementById('rmcLoading');
     const errorEl = document.getElementById('rmcError');
     const tableWrap = document.getElementById('rmcTableWrap');
     const emptyEl = document.getElementById('rmcEmpty');
-    const moreWrap = document.getElementById('rmcMoreWrap');
 
     loading.style.display = 'flex';
     errorEl.style.display = 'none';
     tableWrap.style.display = 'none';
     emptyEl.style.display = 'none';
-    moreWrap.style.display = 'none';
 
     try {
       const startDate = dateInput.value;
       const data = await apiFetch('/api/rm-correction/?startDate=' + encodeURIComponent(startDate));
       _entries = data.entries || [];
-      _visibleCount = PAGE_SIZE;
-      _form = {};
-      _editing = {};
       _expanded = {};
       _batchCache = {};
-      renderTable();
+      renderMain();
     } catch (err) {
       errorEl.textContent = err.message || 'Failed to load RM correction data';
       errorEl.style.display = 'block';
@@ -122,108 +135,65 @@
     }
   }
 
-  // ── Render table ───────────────────────────────────────────────────
-  function renderTable() {
+  function renderMain() {
     const tableWrap = document.getElementById('rmcTableWrap');
     const emptyEl = document.getElementById('rmcEmpty');
-    const moreWrap = document.getElementById('rmcMoreWrap');
     const tbody = document.getElementById('rmcTbody');
-    const countEl = document.getElementById('rmcEntryCount');
-
-    countEl.textContent = _entries.length + ' entries';
 
     if (!_entries.length) {
       tableWrap.style.display = 'none';
       emptyEl.style.display = 'block';
-      moreWrap.style.display = 'none';
       return;
     }
-
     tableWrap.style.display = '';
     emptyEl.style.display = 'none';
 
-    const displayed = _entries.slice(0, _visibleCount);
     tbody.innerHTML = '';
+    _entries.forEach(function(entry, idx) {
+      var key = rowKey(entry);
+      var exp = !!_expanded[key];
 
-    displayed.forEach((entry, idx) => {
-      const key = rowKey(entry);
-      const f = getForm(key);
-      const editing = !!_editing[key];
-      const expanded = !!_expanded[key];
-      const rmDisabled = entry.rmRemaining === 0;
-      const editAllowed = canEdit;
-
-      const tr = document.createElement('tr');
+      var tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid var(--ti-border)';
-
-      tr.innerHTML = `
-        <td style="font-weight:600">${entry.rawMaterial || '—'}</td>
-        <td>
-          <button class="ti-btn-icon" data-expand="${key}" data-batch="${entry.batch}" style="color:var(--ti-blue);font-weight:600;font-size:12px;padding:0;text-decoration:underline;background:none;border:none;cursor:pointer">
-            ${entry.batch} ${expanded ? '▲' : '▼'}
-          </button>
-        </td>
-        <td class="text-right">${entry.totalInwarded.toFixed(2)}</td>
-        <td class="text-right">${entry.rmGiven.toFixed(2)}</td>
-        <td class="text-right">${entry.rmRemaining.toFixed(2)}</td>
-        <td class="text-right">${entry.scrap.toFixed(2)}</td>
-        <td>${editing
-          ? '<input type="number" class="ti-input" data-field="rmCorrection" data-key="'+key+'" value="'+(f.rmCorrection)+'" step="0.01" min="0" placeholder="'+(rmDisabled?'NA':'0.00')+'" style="width:100%;font-size:11px;padding:4px 6px" '+(rmDisabled?'disabled':'')+'>'
-          : '<span style="color:'+(f.rmCorrection?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+( f.rmCorrection||'—')+'</span>'
-        }</td>
-        <td>${editing
-          ? '<input type="text" class="ti-input" data-field="rmRemarks" data-key="'+key+'" value="'+(f.rmRemarks||'')+'" placeholder="'+(rmDisabled?'NA':'Enter remarks')+'" style="width:100%;font-size:11px;padding:4px 6px" '+(rmDisabled?'disabled':'')+'>'
-          : '<span style="color:'+(f.rmRemarks?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.rmRemarks||'—')+'</span>'
-        }</td>
-        <td>${editing
-          ? '<input type="number" class="ti-input" data-field="scrapCorrection" data-key="'+key+'" value="'+(f.scrapCorrection)+'" step="0.01" placeholder="0.00" style="width:100%;font-size:11px;padding:4px 6px">'
-          : '<span style="color:'+(f.scrapCorrection?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.scrapCorrection||'—')+'</span>'
-        }</td>
-        <td>${editing
-          ? '<input type="text" class="ti-input" data-field="scrapRemarks" data-key="'+key+'" value="'+(f.scrapRemarks||'')+'" placeholder="Enter remarks" style="width:100%;font-size:11px;padding:4px 6px">'
-          : '<span style="color:'+(f.scrapRemarks?'var(--ti-text-bright)':'var(--ti-text-dim)')+'">'+(f.scrapRemarks||'—')+'</span>'
-        }</td>
-        <td style="text-align:center;white-space:nowrap">
-          ${editAllowed ? '<button class="ti-btn '+(editing?'ti-btn-primary':'ti-btn-outline')+' ti-btn-xs" data-toggle-edit="'+key+'" style="font-size:11px">'+(editing?'Done':'Edit')+'</button>' : ''}
-          <button class="ti-btn ti-btn-outline ti-btn-xs" data-history-batch="${entry.batch}" data-history-rmid="${entry.rmid}" data-history-rm="${entry.rawMaterial}" style="font-size:11px;margin-left:2px" title="Correction History">📜</button>
-        </td>
-      `;
+      var editTitle = canEdit ? 'Edit' : 'You do not have permission to edit corrections';
+      tr.innerHTML =
+        '<td style="font-weight:600">' + escapeHtml(entry.rawMaterial || '—') + '</td>' +
+        '<td>' + escapeHtml(entry.batch || '') + '</td>' +
+        '<td class="text-right">' + Number(entry.totalInwarded).toFixed(2) + '</td>' +
+        '<td class="text-right">' + Number(entry.rmGiven).toFixed(2) + '</td>' +
+        '<td class="text-right">' + Number(entry.rmRemaining).toFixed(2) + '</td>' +
+        '<td class="text-right">' + Number(entry.scrap).toFixed(2) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap">' +
+          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-edit" data-idx="' + idx + '" ' +
+            (canEdit ? '' : 'disabled ') +
+            'style="font-size:11px;margin:0 2px" title="' + escapeHtml(editTitle) + '">✎</button>' +
+          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-detail" data-idx="' + idx + '" style="font-size:11px;margin:0 2px" title="Production Details">▤</button>' +
+          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-history" data-idx="' + idx + '" style="font-size:11px;margin:0 2px" title="Correction History">📜</button>' +
+        '</td>';
       tbody.appendChild(tr);
 
-      if (expanded) {
-        const detailTr = document.createElement('tr');
-        detailTr.innerHTML = '<td colspan="11" style="background:var(--ti-surface-2);padding:8px 12px" id="detail-' + key + '"></td>';
-        tbody.appendChild(detailTr);
-        loadBatchDetail(entry.batch, key);
+      if (exp) {
+        var dtr = document.createElement('tr');
+        dtr.innerHTML = '<td colspan="7" style="background:var(--ti-surface-2);padding:8px 12px;vertical-align:top" id="rmc-detail-' + idx + '"></td>';
+        tbody.appendChild(dtr);
+        var cell = document.getElementById('rmc-detail-' + idx);
+        if (cell) loadBatchDetail(entry.batch, cell);
       }
     });
-
-    const hasMore = _visibleCount < _entries.length;
-    moreWrap.style.display = hasMore ? '' : 'none';
-    if (hasMore) {
-      const remaining = Math.min(PAGE_SIZE, _entries.length - _visibleCount);
-      document.getElementById('rmcMoreBtn').textContent = '⋯ More (' + remaining + ' more)';
-    }
   }
 
-  // ── Batch detail drill-down ────────────────────────────────────────
-  async function loadBatchDetail(batch, key) {
-    const container = document.getElementById('detail-' + key);
-    if (!container) return;
-
+  async function loadBatchDetail(batch, container) {
     if (_batchCache[batch] && _batchCache[batch].entries) {
       renderBatchDetail(container, _batchCache[batch].entries);
       return;
     }
-
     container.innerHTML = '<span style="color:var(--ti-text-muted);font-size:12px">Loading batch production details…</span>';
-
     try {
-      const data = await apiFetch('/api/rm-correction/batch/' + encodeURIComponent(batch));
+      var data = await apiFetch('/api/rm-correction/batch/' + encodeURIComponent(batch));
       _batchCache[batch] = { entries: data.entries || [] };
       renderBatchDetail(container, _batchCache[batch].entries);
     } catch (err) {
-      container.innerHTML = '<div class="ti-alert ti-alert-error" style="margin:4px 0;font-size:12px">' + (err.message || 'Failed to load batch details') + '</div>';
+      container.innerHTML = '<div class="ti-alert ti-alert-error" style="margin:4px 0;font-size:12px">' + escapeHtml(err.message || 'Failed to load batch details') + '</div>';
     }
   }
 
@@ -232,241 +202,222 @@
       container.innerHTML = '<span style="color:var(--ti-text-dim);font-size:12px">No production rows found for this batch in selected date range.</span>';
       return;
     }
-
-    let totals = { noOfComp:0, calCompWt:0, sfRejNos:0, suWastageNos:0, scrapKg:0, partWtKg:0, theoRmKg:0 };
-    rows.forEach(r => {
-      totals.noOfComp += r.noOfComp;
-      totals.calCompWt += r.calCompWt;
-      totals.sfRejNos += r.sfRejNos;
-      totals.suWastageNos += r.suWastageNos;
-      totals.scrapKg += r.scrapKg;
-      totals.partWtKg += r.partWtKg;
-      totals.theoRmKg += r.theoRmKg;
+    var totals = { noOfComp:0, theoRmKg:0, calCompWt:0, theoScrap:0, sfRejNos:0, suWastageNos:0, scrapKg:0, partWtKg:0 };
+    rows.forEach(function(r) {
+      totals.noOfComp += Number(r.noOfComp) || 0;
+      totals.theoRmKg += Number(r.theoRmKg) || 0;
+      totals.calCompWt += Number(r.calCompWt) || 0;
+      totals.theoScrap += (Number(r.theoRmKg) - Number(r.calCompWt)) || 0;
+      totals.sfRejNos += Number(r.sfRejNos) || 0;
+      totals.suWastageNos += Number(r.suWastageNos) || 0;
+      totals.scrapKg += Number(r.scrapKg) || 0;
+      totals.partWtKg += Number(r.partWtKg) || 0;
     });
 
-    let html = '<table class="ti-table" style="width:100%;font-size:11px;table-layout:fixed"><thead><tr>';
+    var html = '<div style="display:inline-block;margin-bottom:8px;padding:4px 10px;border-radius:6px;background:#1565c0;color:#fff;font-size:11px;font-weight:700">Production Details</div>';
+    html += '<table class="ti-table" style="width:100%;font-size:11px;table-layout:fixed;border:1px solid #1565c0;border-radius:6px"><thead><tr>';
     html += '<th>Production Date</th><th>Part No</th><th>Lot No</th><th>Tool</th>';
-    html += '<th class="text-right">No Of Comp</th><th class="text-right">Cal Comp Wt (Kg)</th>';
-    html += '<th class="text-right">SF Rej(Nos)</th><th class="text-right">SU Wastage(Nos)</th>';
-    html += '<th class="text-right">Scrap(Kg)</th><th class="text-right">Part Wt(Kg)</th>';
-    html += '<th class="text-right">Theo RM(Kg)</th></tr></thead><tbody>';
+    html += '<th class="text-right">No Of Comp</th><th class="text-right">Theo RM(Kg)</th><th class="text-right">Cal Comp Wt (Kg)</th>';
+    html += '<th class="text-right">Theo Scrap</th><th class="text-right">SF Rej(Nos)</th><th class="text-right">SU Wastage(Nos)</th>';
+    html += '<th class="text-right">Scrap(Kg)</th><th class="text-right">Part Wt(Kg)</th></tr></thead><tbody>';
 
-    rows.forEach(r => {
-      html += `<tr>
-        <td>${r.productionDate}</td><td>${r.partNo || '—'}</td><td>${r.lotNo || '—'}</td><td>${r.tool || '—'}</td>
-        <td class="text-right">${r.noOfComp}</td><td class="text-right">${r.calCompWt.toFixed(4)}</td>
-        <td class="text-right">${r.sfRejNos}</td><td class="text-right">${r.suWastageNos}</td>
-        <td class="text-right">${r.scrapKg.toFixed(2)}</td><td class="text-right">${r.partWtKg.toFixed(2)}</td>
-        <td class="text-right">${r.theoRmKg.toFixed(4)}</td>
-      </tr>`;
+    rows.forEach(function(r) {
+      var theo = Number(r.theoRmKg) || 0;
+      var cal = Number(r.calCompWt) || 0;
+      html += '<tr><td>' + escapeHtml(r.productionDate) + '</td><td>' + escapeHtml(r.partNo || '—') + '</td><td>' + escapeHtml(r.lotNo || '—') + '</td><td>' + escapeHtml(r.tool || '—') + '</td>';
+      html += '<td class="text-right">' + r.noOfComp + '</td>';
+      html += '<td class="text-right">' + theo.toFixed(4) + '</td>';
+      html += '<td class="text-right">' + cal.toFixed(4) + '</td>';
+      html += '<td class="text-right">' + (theo - cal).toFixed(4) + '</td>';
+      html += '<td class="text-right">' + r.sfRejNos + '</td><td class="text-right">' + r.suWastageNos + '</td>';
+      html += '<td class="text-right">' + (Number(r.scrapKg)||0).toFixed(2) + '</td><td class="text-right">' + (Number(r.partWtKg)||0).toFixed(2) + '</td></tr>';
     });
 
-    html += `<tr style="font-weight:700;background:var(--ti-surface-3)">
-      <td colspan="4">Total</td>
-      <td class="text-right">${totals.noOfComp}</td><td class="text-right">${totals.calCompWt.toFixed(4)}</td>
-      <td class="text-right">${totals.sfRejNos}</td><td class="text-right">${totals.suWastageNos}</td>
-      <td class="text-right">${totals.scrapKg.toFixed(2)}</td><td class="text-right">${totals.partWtKg.toFixed(2)}</td>
-      <td class="text-right">${totals.theoRmKg.toFixed(4)}</td>
-    </tr>`;
-
-    html += '</tbody></table>';
+    html += '<tr style="font-weight:700;background:var(--ti-surface-3)">';
+    html += '<td colspan="4">Total</td>';
+    html += '<td class="text-right">' + totals.noOfComp + '</td>';
+    html += '<td class="text-right">' + totals.theoRmKg.toFixed(4) + '</td>';
+    html += '<td class="text-right">' + totals.calCompWt.toFixed(4) + '</td>';
+    html += '<td class="text-right">' + totals.theoScrap.toFixed(4) + '</td>';
+    html += '<td class="text-right">' + totals.sfRejNos + '</td><td class="text-right">' + totals.suWastageNos + '</td>';
+    html += '<td class="text-right">' + totals.scrapKg.toFixed(2) + '</td><td class="text-right">' + totals.partWtKg.toFixed(2) + '</td>';
+    html += '</tr></tbody></table>';
     container.innerHTML = html;
   }
 
-  // ── Correction History ─────────────────────────────────────────────
-  async function openHistory(batch, rmid, rawMaterial) {
-    const overlay = document.getElementById('rmcHistoryOverlay');
-    const meta = document.getElementById('rmcHistoryMeta');
-    const body = document.getElementById('rmcHistoryBody');
-
-    meta.innerHTML = '<span>Raw Material: <strong>' + (rawMaterial || '—') + '</strong></span><span>Batch: <strong>' + (batch || '—') + '</strong></span>';
-    body.innerHTML = '<div style="text-align:center;padding:24px"><div class="ti-spinner"></div></div>';
-    overlay.style.display = 'flex';
-
-    try {
-      const data = await apiFetch('/api/rm-correction/history/' + encodeURIComponent(batch) + '/' + encodeURIComponent(rmid));
-      const entries = data.entries || [];
-
-      if (!entries.length) {
-        body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--ti-text-dim);font-size:13px">No RM/Scrap correction history found for this Batch and RM.</div>';
-        return;
-      }
-
-      let html = '<table class="ti-table" style="width:100%;font-size:12px"><thead><tr>';
-      html += '<th>Type</th><th class="text-right">Qty Before</th><th class="text-right">Actual Qty</th>';
-      html += '<th>Remarks</th><th>Entry Time</th><th>User</th></tr></thead><tbody>';
-
-      entries.forEach(item => {
-        html += `<tr>
-          <td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:${item.type === 'RM' ? 'var(--ti-blue)' : 'var(--ti-orange,#e65100)'};color:#fff">${item.type}</span></td>
-          <td class="text-right">${item.qtyBefore.toFixed(2)}</td>
-          <td class="text-right">${(item.qtyBefore - item.correction).toFixed(2)}</td>
-          <td>${item.remarks || '—'}</td>
-          <td>${item.createdAt}</td>
-          <td>${item.userLogin || '—'}</td>
-        </tr>`;
-      });
-
-      html += '</tbody></table>';
-      body.innerHTML = html;
-    } catch (err) {
-      body.innerHTML = '<div class="ti-alert ti-alert-error">' + (err.message || 'Failed to load correction history') + '</div>';
-    }
+  function openEdit(entry) {
+    _editEntry = entry;
+    document.getElementById('rmcEditTheoRm').textContent = Number(entry.rmRemaining).toFixed(2);
+    document.getElementById('rmcEditScrapDisplay').textContent = Number(entry.scrap).toFixed(2);
+    document.getElementById('rmcEditActualRm').value = '';
+    document.getElementById('rmcEditRmRemarks').value = '';
+    document.getElementById('rmcEditActualScrap').value = '';
+    document.getElementById('rmcEditScrapRemarks').value = '';
+    document.getElementById('rmcEditActualRm').disabled = (Number(entry.rmRemaining) === 0);
+    document.getElementById('rmcEditRmRemarks').disabled = (Number(entry.rmRemaining) === 0);
+    var ov = document.getElementById('rmcEditOverlay');
+    ov.style.display = 'flex';
   }
 
-  document.getElementById('rmcHistoryClose').addEventListener('click', function() {
-    document.getElementById('rmcHistoryOverlay').style.display = 'none';
-  });
-  document.getElementById('rmcHistoryOverlay').addEventListener('click', function(e) {
-    if (e.target === this) this.style.display = 'none';
-  });
+  function closeEdit() {
+    _editEntry = null;
+    document.getElementById('rmcEditOverlay').style.display = 'none';
+  }
 
-  // ── Validation & Submit ────────────────────────────────────────────
-  async function validateAndSubmit() {
-    if (_submitting) return;
+  async function submitEdit() {
+    if (!_editEntry || _submitting) return;
+    var entry = _editEntry;
+    var rmStr = document.getElementById('rmcEditActualRm').value.trim();
+    var rmRem = document.getElementById('rmcEditRmRemarks').value.trim();
+    var scStr = document.getElementById('rmcEditActualScrap').value.trim();
+    var scRem = document.getElementById('rmcEditScrapRemarks').value.trim();
+    var rmEntered = rmStr !== '';
+    var scrapEntered = scStr !== '';
 
-    // Build items array from all rows that have corrections
-    const items = [];
-    for (let i = 0; i < _entries.length; i++) {
-      const entry = _entries[i];
-      const key = rowKey(entry);
-      const f = getForm(key);
-
-      const rmEntered = f.rmCorrection.toString().trim() !== '';
-      const scrapEntered = f.scrapCorrection.toString().trim() !== '';
-
-      if (!rmEntered && !scrapEntered) continue;
-
-      // Validation
-      if (rmEntered) {
-        if (entry.rmRemaining === 0) {
-          showSnackbar('Row ' + (i+1) + ': RM Correction cannot be entered when RM Remaining is 0.');
-          return;
-        }
-        const rmVal = Number(f.rmCorrection);
-        if (isNaN(rmVal) || rmVal < 0) {
-          showSnackbar('Row ' + (i+1) + ': Actual RM must be a valid non-negative number.');
-          return;
-        }
-        if (!f.rmRemarks.trim()) {
-          showSnackbar('Row ' + (i+1) + ': RM Remarks is required when Actual RM is entered.');
-          return;
-        }
-      }
-
-      if (scrapEntered) {
-        const scrapVal = Number(f.scrapCorrection);
-        if (isNaN(scrapVal)) {
-          showSnackbar('Row ' + (i+1) + ': Actual Scrap must be a valid number.');
-          return;
-        }
-        if (!f.scrapRemarks.trim()) {
-          showSnackbar('Row ' + (i+1) + ': Scrap Remarks is required when Actual Scrap is entered.');
-          return;
-        }
-      }
-
-      // Build item payload
-      const item = { batch: entry.batch, rmid: entry.rmid };
-
-      if (rmEntered) {
-        item.theoRmRemaining = entry.rmRemaining;
-        item.actualRm = Number(f.rmCorrection);
-        item.rmRemarks = f.rmRemarks.trim();
-      }
-      if (scrapEntered) {
-        item.scrapBefore = entry.scrap;
-        item.actualScrap = Number(f.scrapCorrection);
-        item.scrapRemarks = f.scrapRemarks.trim();
-      }
-
-      items.push({ item, key, entry, rmEntered, scrapEntered, f });
-    }
-
-    if (items.length === 0) {
-      showSnackbar('No corrections entered. Edit a row first.');
+    if (!rmEntered && !scrapEntered) {
+      showSnackbar('Enter at least one Actual RM or Actual Scrap with remarks to submit.');
       return;
     }
 
+    var item = { batch: entry.batch, rmid: entry.rmid };
+
+    if (rmEntered) {
+      if (Number(entry.rmRemaining) === 0) {
+        showSnackbar('Actual RM cannot be entered when Theo RM Remaining is 0.');
+        return;
+      }
+      var rmVal = Number(rmStr);
+      if (isNaN(rmVal) || rmVal < 0) {
+        showSnackbar('Actual RM must be a valid non-negative number.');
+        return;
+      }
+      if (!rmRem) {
+        showSnackbar('RM Remarks is required when Actual RM is entered.');
+        return;
+      }
+      item.theoRmRemaining = Number(entry.rmRemaining);
+      item.actualRm = rmVal;
+      item.rmRemarks = rmRem;
+    }
+
+    if (scrapEntered) {
+      var scVal = Number(scStr);
+      if (isNaN(scVal)) {
+        showSnackbar('Actual Scrap must be a valid number.');
+        return;
+      }
+      if (!scRem) {
+        showSnackbar('Scrap Remarks is required when Actual Scrap is entered.');
+        return;
+      }
+      item.scrapBefore = Number(entry.scrap);
+      item.actualScrap = scVal;
+      item.scrapRemarks = scRem;
+    }
+
     _submitting = true;
-    const submitBtn = document.getElementById('rmcSubmitBtn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting…';
+    var btn = document.getElementById('rmcEditSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
 
     try {
-      const payload = { items: items.map(x => x.item) };
-      const result = await apiFetch('/api/rm-correction/submit', {
+      var result = await apiFetch('/api/rm-correction/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ items: [item] })
       });
-
-      // Update local state with new values
-      items.forEach(({ key, entry, rmEntered, scrapEntered, f }) => {
-        if (rmEntered) entry.rmRemaining = Number(f.rmCorrection);
-        if (scrapEntered) entry.scrap = Number(f.scrapCorrection);
-        _form[key] = { rmCorrection: '', rmRemarks: '', scrapCorrection: '', scrapRemarks: '' };
-        _editing[key] = false;
-      });
-
+      if (rmEntered) entry.rmRemaining = Number(document.getElementById('rmcEditActualRm').value);
+      if (scrapEntered) entry.scrap = Number(document.getElementById('rmcEditActualScrap').value);
       showSnackbar('Submitted successfully (' + result.inserted + ' row(s): RM ' + result.insertedRm + ', Scrap ' + result.insertedScrap + ')');
-      renderTable();
+      closeEdit();
+      renderMain();
     } catch (err) {
       showSnackbar(err.message || 'Failed to submit RM corrections');
     } finally {
       _submitting = false;
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Submit All';
+      btn.disabled = false;
+      btn.textContent = 'Submit';
     }
   }
 
-  // ── Event listeners ────────────────────────────────────────────────
-  const tableWrap = document.getElementById('rmcTableWrap');
+  async function openHistory(batch, rmid, rawMaterial) {
+    var overlay = document.getElementById('rmcHistoryOverlay');
+    var meta = document.getElementById('rmcHistoryMeta');
+    var body = document.getElementById('rmcHistoryBody');
+    meta.innerHTML = '<span>Raw Material: <strong>' + escapeHtml(rawMaterial || '—') + '</strong></span><span>Batch: <strong>' + escapeHtml(batch || '—') + '</strong></span>';
+    body.innerHTML = '<div style="text-align:center;padding:24px"><div class="ti-spinner"></div></div>';
+    overlay.style.display = 'flex';
 
-  tableWrap.addEventListener('click', function(e) {
-    const editBtn = e.target.closest('[data-toggle-edit]');
-    if (editBtn) {
-      const key = editBtn.getAttribute('data-toggle-edit');
-      if (_editing[key]) {
-        tableWrap.querySelectorAll('input[data-key="' + key + '"]').forEach(inp => {
-          const field = inp.getAttribute('data-field');
-          if (!_form[key]) _form[key] = { rmCorrection:'', rmRemarks:'', scrapCorrection:'', scrapRemarks:'' };
-          _form[key][field] = inp.value;
-        });
+    try {
+      var data = await apiFetch('/api/rm-correction/history/' + encodeURIComponent(rmid) + '/' + encodeURIComponent(batch));
+      var entries = data.entries || [];
+      if (!entries.length) {
+        body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--ti-text-dim);font-size:13px">No RM/Scrap correction history found for this Batch and RM.</div>';
+        return;
       }
-      _editing[key] = !_editing[key];
-      renderTable();
+      var html = '<table class="ti-table" style="width:100%;font-size:12px"><thead><tr>';
+      html += '<th>Type</th><th class="text-right">Qty Before</th><th class="text-right">Actual Qty</th>';
+      html += '<th>Remarks</th><th>Entry Time</th><th>User</th></tr></thead><tbody>';
+      entries.forEach(function(item) {
+        var badge = item.type === 'RM' ? 'background:var(--ti-blue);color:#fff' : 'background:#e65100;color:#fff';
+        var actualQty = (Number(item.qtyBefore) - Number(item.correction)).toFixed(2);
+        html += '<tr><td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;' + badge + '">' + escapeHtml(item.type) + '</span></td>';
+        html += '<td class="text-right">' + Number(item.qtyBefore).toFixed(2) + '</td>';
+        html += '<td class="text-right">' + actualQty + '</td>';
+        html += '<td>' + escapeHtml(item.remarks || '—') + '</td>';
+        html += '<td>' + escapeHtml(item.createdAt) + '</td>';
+        html += '<td>' + escapeHtml(item.userLogin || '—') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      body.innerHTML = html;
+    } catch (err) {
+      body.innerHTML = '<div class="ti-alert ti-alert-error">' + escapeHtml(err.message || 'Failed to load correction history') + '</div>';
+    }
+  }
+
+  function closeHistory() {
+    document.getElementById('rmcHistoryOverlay').style.display = 'none';
+  }
+
+  document.getElementById('rmcTbody').addEventListener('click', function(e) {
+    var editBtn = e.target.closest('.rmc-act-edit');
+    if (editBtn && !editBtn.disabled) {
+      var ix = parseInt(editBtn.getAttribute('data-idx'), 10);
+      if (!isNaN(ix) && _entries[ix]) openEdit(_entries[ix]);
       return;
     }
-
-    const expandBtn = e.target.closest('[data-expand]');
-    if (expandBtn) {
-      const key = expandBtn.getAttribute('data-expand');
-      _expanded[key] = !_expanded[key];
-      renderTable();
+    var detBtn = e.target.closest('.rmc-act-detail');
+    if (detBtn) {
+      var dix = parseInt(detBtn.getAttribute('data-idx'), 10);
+      var de = _entries[dix];
+      if (!de) return;
+      var dk = rowKey(de);
+      _expanded[dk] = !_expanded[dk];
+      renderMain();
       return;
     }
-
-    const histBtn = e.target.closest('[data-history-batch]');
+    var histBtn = e.target.closest('.rmc-act-history');
     if (histBtn) {
-      const batch = histBtn.getAttribute('data-history-batch');
-      const rmid = histBtn.getAttribute('data-history-rmid');
-      const rm = histBtn.getAttribute('data-history-rm');
-      openHistory(batch, rmid, rm);
-      return;
+      var hix = parseInt(histBtn.getAttribute('data-idx'), 10);
+      var he = _entries[hix];
+      if (he) openHistory(he.batch, he.rmid, he.rawMaterial);
     }
   });
 
   dateInput.addEventListener('change', loadEntries);
 
-  document.getElementById('rmcMoreBtn').addEventListener('click', function() {
-    _visibleCount = Math.min(_visibleCount + PAGE_SIZE, _entries.length);
-    renderTable();
+  document.getElementById('rmcEditCancel').addEventListener('click', closeEdit);
+  document.getElementById('rmcEditSubmit').addEventListener('click', submitEdit);
+  document.getElementById('rmcEditOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeEdit();
   });
 
-  document.getElementById('rmcSubmitBtn').addEventListener('click', validateAndSubmit);
+  document.getElementById('rmcHistoryClose').addEventListener('click', closeHistory);
+  document.getElementById('rmcHistoryClose2').addEventListener('click', closeHistory);
+  document.getElementById('rmcHistoryOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeHistory();
+  });
 
-  // ── Initial load ───────────────────────────────────────────────────
   loadEntries();
 })();
 </script>

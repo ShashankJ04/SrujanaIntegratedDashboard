@@ -144,6 +144,9 @@ const Hub = (() => {
   };
 
   // ── SPA Router ─────────────────────────────────────────────────────
+  /** Hub RM Variance section — off while under development; set true to restore nav + deep links */
+  const RM_VARIANCE_HUB_ENABLED = false;
+
   const SECTIONS = {
     overview:    { title: 'Overview',        icon: '📊' },
     production:  { title: 'Production',      icon: '🏭' },
@@ -171,7 +174,7 @@ const Hub = (() => {
     if (section === 'dpr') return ACCESS.has('rept');
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
-    if (section === 'rm-variance') return ACCESS.has('rm_variance');
+    if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
     if (section === 'executive') return ACCESS.has('executive');
     if (section === 'reports') return ACCESS.has('rept');
@@ -183,7 +186,7 @@ const Hub = (() => {
   }
 
   function getDefaultSection() {
-    const order = ['overview', 'production', 'maintenance', 'rm-variance', 'executive', 'reports', 'admin'];
+    const order = ['overview', 'production', 'maintenance', 'executive', 'reports', 'admin'];
     return order.find(canAccessSection) || 'overview';
   }
 
