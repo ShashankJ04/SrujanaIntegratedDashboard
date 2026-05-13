@@ -419,7 +419,7 @@ function _pmKey(no) {
 // ══════════════════════════════════════════════════════════════════════
 // PREVENTIVE MAINTENANCE TAB
 // ══════════════════════════════════════════════════════════════════════
-var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[], _pmStatusSlots=[];
+var _pmAllTools=[], _pmEntries=[], _pmStatusAll=[];
 var _pmSearchFilter='', _pmThresholdFilter='all';
 var _pmVisibleToolNos=[];
 var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
@@ -427,11 +427,10 @@ var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDelete
 async function loadPmData() {
   document.getElementById('pmLoading').style.display='flex';
   try {
-    [_pmEntries, _pmAllTools, _pmStatusAll, _pmStatusSlots] = await Promise.all([
+    [_pmEntries, _pmAllTools, _pmStatusAll] = await Promise.all([
       apiFetch('/api/pm/'),
       apiFetch('/api/tools/all'),
-      apiFetch('/api/pm/status?mode=all&per_component=0'),
-      apiFetch('/api/pm/status?mode=all&per_component=1'),
+      apiFetch('/api/pm/status?mode=all'),
     ]);
     renderPmTable();
   } catch(err) { showSnackbar(err.message); }
@@ -444,169 +443,46 @@ function getPmEntryByToolNo(toolNo) {
   return m.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
 }
 
-/** Per-slot PM rows when one cavity has 0 strokes and another has production (matches backend _pm_should_expand_slots). */
-function _pmExpandSlotCondition(slots) {
-  if (!slots || slots.length <= 1) return false;
-  const nums = slots.map(s => Number(s.totalLifetimeStrokes) || 0);
-  const lo = Math.min(...nums), hi = Math.max(...nums);
-  return lo === 0 && hi > 0;
-}
-
-function _pmPctFromStatusRow(s) {
-  const pmStrokes = Number(s.pmStrokes) || 0;
-  const nextStroke = Number(s.nextStroke) || 0;
-  const total = Number(s.totalLifetimeStrokes) || 0;
-  if (pmStrokes <= 0) return 0;
-  const cycleStart = nextStroke - pmStrokes;
-  const completed = total - cycleStart;
-  return Math.max(0, Math.round((completed / pmStrokes) * 100));
-}
-
-/** Merge rows sharing ``compId`` (``CT_COMPID``); mirrors server _pm_merge_component_slots. */
-function _pmMergeSlotsByComp(slots) {
-  if (!slots || !slots.length) return [];
-  const map = new Map();
-  const order = [];
-  for (const s of slots) {
-    let cid = Number(s.compId) || 0;
-    if (cid <= 0) cid = -(Number(s.componentToolId) || 0);
-    if (!map.has(cid)) {
-      order.push(cid);
-      map.set(cid, {
-        ...s,
-        totalLifetimeStrokes: Number(s.totalLifetimeStrokes) || 0,
-        componentToolId: Number(s.componentToolId) || 0,
-      });
-    } else {
-      const m = map.get(cid);
-      m.totalLifetimeStrokes = (Number(m.totalLifetimeStrokes) || 0) + (Number(s.totalLifetimeStrokes) || 0);
-      const a = m.componentToolId || 0, b = Number(s.componentToolId) || 0;
-      m.componentToolId = a && b ? Math.min(a, b) : (a || b);
-    }
-  }
-  return order.map(k => {
-    const m = { ...map.get(k) };
-    m.pmPercentage = _pmPctFromStatusRow(m);
-    return m;
-  }).sort((a, b) =>
-    (Number(a.compId) || 0) - (Number(b.compId) || 0) ||
-    String(a.partNo || '').localeCompare(String(b.partNo || '')) ||
-    (Number(a.componentToolId) || 0) - (Number(b.componentToolId) || 0)
-  );
-}
-
-function _pmPartLabelKey(s) {
-  return _pmKey(s.partNo).toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-/** Second pass: same normalized part label (matches server _pm_merge_duplicate_part_labels). */
-function _pmMergeDuplicatePartLabels(slots) {
-  if (!slots || slots.length <= 1) return slots;
-  const map = new Map();
-  const order = [];
-  for (const s of slots) {
-    const pk = _pmPartLabelKey(s);
-    if (!map.has(pk)) {
-      order.push(pk);
-      map.set(pk, {
-        ...s,
-        totalLifetimeStrokes: Number(s.totalLifetimeStrokes) || 0,
-        componentToolId: Number(s.componentToolId) || 0,
-      });
-    } else {
-      const m = map.get(pk);
-      m.totalLifetimeStrokes = (Number(m.totalLifetimeStrokes) || 0) + (Number(s.totalLifetimeStrokes) || 0);
-      const a = m.componentToolId || 0, b = Number(s.componentToolId) || 0;
-      m.componentToolId = a && b ? Math.min(a, b) : (a || b);
-    }
-  }
-  return order.map(k => {
-    const m = { ...map.get(k) };
-    m.pmPercentage = _pmPctFromStatusRow(m);
-    return m;
-  }).sort((a, b) =>
-    _pmPartLabelKey(a).localeCompare(_pmPartLabelKey(b)) ||
-    (Number(a.componentToolId) || 0) - (Number(b.componentToolId) || 0)
-  );
-}
-
-function _pmDedupeSlots(slots) {
-  return _pmMergeDuplicatePartLabels(_pmMergeSlotsByComp(slots));
-}
-
-/** One row per tool (aggregated) or one row per slot when idle+active cavities — mirrors /api/pm/export. */
-function _pmBuildDisplayToolRows() {
-  const slotByTool = new Map();
-  (_pmStatusSlots || []).forEach(s => {
-    const k = _pmKey(s.toolNo);
-    if (!slotByTool.has(k)) slotByTool.set(k, []);
-    slotByTool.get(k).push(s);
-  });
-  const aggByTool = new Map();
-  (_pmStatusAll || []).forEach(s => aggByTool.set(_pmKey(s.toolNo), s));
-  const out = [];
-  for (const t of _pmAllTools) {
-    const k = _pmKey(t.toolNo);
-    const slots = _pmDedupeSlots(slotByTool.get(k) || []);
-    if (_pmExpandSlotCondition(slots)) {
-      for (const s of slots) {
-        out.push({
-          id: s.componentToolId,
-          toolNo: t.toolNo,
-          partNo: s.partNo || '-',
-          pmPct: s.pmPercentage,
-          slotStrokes: Number(s.totalLifetimeStrokes) || 0,
-        });
-      }
-    } else {
-      const ag = aggByTool.get(k);
-      out.push({
-        id: t.id,
-        toolNo: t.toolNo,
-        partNo: t.partNo || '-',
-        pmPct: ag != null ? ag.pmPercentage : null,
-        slotStrokes: null,
-      });
-    }
-  }
-  return out;
-}
-
 function renderPmTable() {
-  const displayTools = _pmBuildDisplayToolRows();
-  const aggByTool = new Map();
-  (_pmStatusAll || []).forEach(s => aggByTool.set(_pmKey(s.toolNo), s));
+  const pctMap = new Map();
+  const lifeMap = new Map();
+  (_pmStatusAll || []).forEach(s => {
+    const k = _pmKey(s.toolNo);
+    pctMap.set(k, s.pmPercentage);
+    lifeMap.set(k, s.totalLifetimeStrokes);
+  });
 
-  let safe=0,warn=0,crit=0;
-  displayTools.forEach(t => { const p = t.pmPct != null ? t.pmPct : 0; if (p >= 100) crit++; else if (p >= 80) warn++; else safe++; });
-  document.getElementById('pmSafeCount').textContent=safe;
-  document.getElementById('pmWarnCount').textContent=warn;
-  document.getElementById('pmCritCount').textContent=crit;
+  let safe = 0, warn = 0, crit = 0;
+  _pmAllTools.forEach(t => {
+    const p = pctMap.get(_pmKey(t.toolNo)) || 0;
+    if (p >= 100) crit++;
+    else if (p >= 80) warn++;
+    else safe++;
+  });
+  document.getElementById('pmSafeCount').textContent = safe;
+  document.getElementById('pmWarnCount').textContent = warn;
+  document.getElementById('pmCritCount').textContent = crit;
 
-  let rows = displayTools.map(t => ({
+  let rows = _pmAllTools.map(t => ({
     tool: t,
     entry: (() => {
       const e = getPmEntryByToolNo(t.toolNo);
-      if (!e) return null;
-      let strokes = 0;
-      if (t.slotStrokes != null) strokes = t.slotStrokes;
-      else {
-        const ag = aggByTool.get(_pmKey(t.toolNo));
-        strokes = ag ? (Number(ag.totalLifetimeStrokes) || 0) : 0;
-      }
-      return { ...e, totalLifetimeStrokes: strokes };
+      return e ? { ...e, totalLifetimeStrokes: lifeMap.get(_pmKey(t.toolNo)) || 0 } : null;
     })(),
   }));
 
-  if (_pmThresholdFilter!=='all') {
+  if (_pmThresholdFilter !== 'all') {
     rows = rows.filter(r => {
-      const p = r.tool.pmPct != null ? r.tool.pmPct : 0;
+      const p = pctMap.get(_pmKey(r.tool.toolNo)) || 0;
       if (_pmThresholdFilter === 'critical') return p >= 100;
       if (_pmThresholdFilter === 'warning') return p >= 80 && p < 100;
       return p < 80;
     });
   }
-  if (_pmSearchFilter) { const q=_pmSearchFilter.toLowerCase(); rows=rows.filter(r=>r.tool.toolNo.toLowerCase().includes(q)||String(r.tool.partNo||'').toLowerCase().includes(q)); }
+  if (_pmSearchFilter) {
+    const q = _pmSearchFilter.toLowerCase();
+    rows = rows.filter(r => r.tool.toolNo.toLowerCase().includes(q) || String(r.tool.partNo || '').toLowerCase().includes(q));
+  }
   _pmVisibleToolNos = rows.map(r => r.tool.toolNo);
 
   const columns = [
@@ -651,7 +527,7 @@ function renderPmTable() {
       nextPm: e?(latest?latest.nextStroke:'Not set'):null,
       lastMaint: e?(latest?new Date(latest.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'No maint.'):'-',
       pmCount: e?e.maintenanceHistory.length:null,
-      pmPct: t.pmPct != null ? t.pmPct : null,
+      pmPct: pctMap.get(_pmKey(t.toolNo))||null,
       actionsHtml
     };
   });
@@ -666,7 +542,6 @@ function renderPmTable() {
     options: { search: false, exportBtn: false, omitToolbar: true, countElement: document.getElementById('pmStatusCount') }
   });
 
-  // Global listener for action buttons inside SuperGrid
   const gridEl=document.getElementById('pmGrid');
   gridEl.onclick = async function(e) {
     const btn = e.target.closest('button[data-edit], button[data-history], button[data-delete], button[data-confirm], button[data-configure]');
@@ -681,10 +556,10 @@ function renderPmTable() {
       const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value=''; openPmModal('pmConfirmModal'); try{const info=await apiFetch('/api/pm/'+id+'/stroke-info'); document.getElementById('pmConfirmCurrent').value=formatIndianNumber(info.currentStroke); document.getElementById('pmConfirmNext').value=info.suggestedNextStroke;}catch{}
     } else if (btn.hasAttribute('data-configure')) {
       const ctid = parseInt(btn.getAttribute('data-configure'), 10);
-      const tool = _pmBuildDisplayToolRows().find(t => t.id === ctid) || _pmAllTools.find(t => t.id === ctid);
+      const tool = _pmAllTools.find(t => t.id === ctid);
       if (tool) {
-        _pmSelectedAddTool = { id: tool.id, toolNo: tool.toolNo, partNo: tool.partNo };
-        document.getElementById('pmAddTitle').textContent = 'Configure: ' + tool.toolNo + (tool.partNo && tool.partNo !== '-' ? ' · ' + tool.partNo : '');
+        _pmSelectedAddTool = tool;
+        document.getElementById('pmAddTitle').textContent = 'Configure: ' + tool.toolNo;
         document.getElementById('pmAddSearch').parentElement.style.display = 'none';
         document.getElementById('pmAddSearchResults').style.display = 'none';
         document.getElementById('pmAddSelectedTool').style.display = 'block';

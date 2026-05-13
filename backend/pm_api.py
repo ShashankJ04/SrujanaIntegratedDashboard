@@ -25,12 +25,12 @@ _PM_STATUS_CACHE_LOCK = threading.Lock()
 _PM_STATUS_CACHE = {}
 
 # ── Aggregated: one row per tool (tool_life + latest PM + MAX strokes across parts).
+# Core query matches git branch StableVersion1.7 backend/pm_api pm_status SQL.
 # Used by GET /api/pm/status when per_component=0 (e.g. Life Report, Tools Today PM map).
 _PM_STATUS_TOOL_AGG_SQL = """
         SELECT
             tl.TL_tool_id          AS toolId,
             tl.TL_tool_number      AS toolNo,
-            COALESCE(parts.partNo, '') AS partNo,
             tl.TL_life_span        AS toolLife,
             tl.TL_spm              AS spm,
             tl.TL_preventive_maintenance_strokes AS pmStrokes,
@@ -49,15 +49,6 @@ _PM_STATUS_TOOL_AGG_SQL = """
             ) latest_pm ON latest_pm.PM_tool_number = pm1.PM_tool_number
                 AND latest_pm.maxId = pm1.PM_id
         ) pm ON pm.PM_tool_number = tl.TL_tool_number
-        LEFT JOIN (
-            SELECT
-                ct.CT_TOOLNO AS toolNo,
-                GROUP_CONCAT(DISTINCT c.CO_PARTNO ORDER BY c.CO_PARTNO SEPARATOR ', ') AS partNo
-            FROM components_tool ct
-            INNER JOIN components c ON c.CO_ID = ct.CT_COMPID
-            WHERE ct.CT_ACTIVEYN = 'Y'
-            GROUP BY ct.CT_TOOLNO
-        ) parts ON parts.toolNo = tl.TL_tool_number
         LEFT JOIN (
             SELECT
                 comp.toolNo,
@@ -88,7 +79,6 @@ _PM_STATUS_TOOL_AGG_SQL = """
           AND EXISTS (
             SELECT 1
             FROM components_tool ct_active
-            INNER JOIN components c_active ON c_active.CO_ID = ct_active.CT_COMPID
             WHERE ct_active.CT_TOOLNO = tl.TL_tool_number
               AND ct_active.CT_ACTIVEYN = 'Y'
           )
@@ -379,7 +369,7 @@ def pm_status():
     mode = request.args.get("mode", "above")
     per_component = str(request.args.get("per_component", "0")).lower() in ("1", "true", "yes")
     cache_seconds = int(current_app.config.get("PM_STATUS_CACHE_SECONDS", 20) or 20)
-    cache_key = (7, int(threshold), str(mode), int(per_component))
+    cache_key = (9, int(threshold), str(mode), int(per_component))
     now = time.monotonic()
     if cache_seconds > 0:
         with _PM_STATUS_CACHE_LOCK:
@@ -568,17 +558,6 @@ def serve_attachment(filename):
     )
 
 
-def _pm_should_expand_slots(slot_status_rows: list[dict]) -> bool:
-    """True when per-slot PM rows are needed (idle cavity + active cavity on same tool).
-
-    Otherwise one aggregated row per tool (legacy pm.ts) — e.g. two parts both producing.
-    """
-    strokes = [int(r.get("totalLifetimeStrokes") or 0) for r in slot_status_rows]
-    if len(strokes) <= 1:
-        return False
-    return min(strokes) == 0 and max(strokes) > 0
-
-
 def _all_active_tools_maps():
     """PM hub / export: one row per tool number (GROUP_CONCAT parts), like legacy pm.ts export."""
     from .db import fetch_all
@@ -593,7 +572,7 @@ def _all_active_tools_maps():
 
 
 def _load_pm_export_context():
-    """Maps for PM hub + export: tool-level agg status + per-slot component rows."""
+    """Maps for PM hub + export: one grouped tool row per CT_TOOLNO + aggregated status (StableVersion1.7 semantics)."""
     from .db import fetch_all
 
     all_tool_rows, all_by_lower = _all_active_tools_maps()
@@ -604,21 +583,6 @@ def _load_pm_export_context():
         tn = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
         status_by_tool[tn] = r
 
-    comp_rows = fetch_all(_PM_STATUS_COMPONENT_ROWS_SQL)
-    comp_by_tool: dict[str, list[dict]] = {}
-    for r in comp_rows:
-        tn = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
-        comp_by_tool.setdefault(tn, []).append(r)
-    for tn, lst in list(comp_by_tool.items()):
-        lst.sort(
-            key=lambda x: (
-                int(x.get("compId") or 0),
-                _norm_tool_no(x.get("partNo")),
-                int(x.get("componentToolId") or 0),
-            )
-        )
-        comp_by_tool[tn] = _pm_dedupe_component_slot_rows(lst)
-
     entries = pm_store.get_entries()
     raw_ent = _entry_by_tool_no(entries)
     entry_by_tool: dict = {}
@@ -628,51 +592,7 @@ def _load_pm_export_context():
         if ex is None or _pm_entry_created_ts(e) >= _pm_entry_created_ts(ex):
             entry_by_tool[canon] = e
 
-    return all_tool_rows, all_by_lower, status_by_tool, entry_by_tool, comp_by_tool
-
-
-def _pm_iter_hub_display_rows(
-    search_l: str,
-    all_tool_rows: list,
-    all_by_lower: dict,
-    status_by_tool: dict,
-    comp_by_tool: dict,
-    entry_by_tool: dict,
-):
-    """Yield one logical PM table row per tool (collapsed) or per slot (expanded)."""
-    for r in all_tool_rows:
-        canon_tool = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
-        part_grouped = _norm_tool_no(r.get("partNo"))
-        tn_l = canon_tool.lower()
-        grp_l = part_grouped.lower()
-        slots = comp_by_tool.get(canon_tool) or []
-        expand = _pm_should_expand_slots(slots)
-        ent = entry_by_tool.get(canon_tool)
-
-        if expand:
-            for cr in slots:
-                part_slot = _norm_tool_no(cr.get("partNo"))
-                ps_l = part_slot.lower()
-                if search_l and search_l not in tn_l and search_l not in grp_l and search_l not in ps_l:
-                    continue
-                yield {
-                    "canon_tool": canon_tool,
-                    "partNo": part_slot,
-                    "status": cr,
-                    "pm_pct": _pm_pct_for_status_row(cr),
-                    "ent": ent,
-                }
-        else:
-            if search_l and search_l not in tn_l and search_l not in grp_l:
-                continue
-            st = status_by_tool.get(canon_tool)
-            yield {
-                "canon_tool": canon_tool,
-                "partNo": part_grouped,
-                "status": st,
-                "pm_pct": _pm_pct_for_status_row(st) if st else 0,
-                "ent": ent,
-            }
+    return all_tool_rows, all_by_lower, status_by_tool, entry_by_tool
 
 
 def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
@@ -682,14 +602,19 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
     by proxies/browsers, and comma-separated tool numbers break when a tool no. contains ','.
     """
     search_l = (search or "").strip().lower()
-    ctx = _load_pm_export_context()
-    all_tool_rows, all_by_lower, status_by_tool, entry_by_tool, comp_by_tool = ctx
+    all_tool_rows, all_by_lower, status_by_tool, entry_by_tool = _load_pm_export_context()
 
     processed: list[dict] = []
-    for row in _pm_iter_hub_display_rows(
-        search_l, all_tool_rows, all_by_lower, status_by_tool, comp_by_tool, entry_by_tool
-    ):
-        pm_pct = row["pm_pct"]
+    for r in all_tool_rows:
+        canon_tool = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
+        part_display = _norm_tool_no(r.get("partNo"))
+        tool_no_l = canon_tool.lower()
+        part_no_l = part_display.lower()
+        if search_l and search_l not in tool_no_l and search_l not in part_no_l:
+            continue
+
+        st = status_by_tool.get(canon_tool)
+        pm_pct = _pm_pct_for_status_row(st) if st else 0
         if mode == "safe" and pm_pct >= 80:
             continue
         if mode == "warning" and not (80 <= pm_pct < 100):
@@ -697,10 +622,7 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
         if mode == "critical" and pm_pct < 100:
             continue
 
-        canon_tool = row["canon_tool"]
-        part_display = row["partNo"]
-        st = row["status"]
-        ent = row["ent"]
+        ent = entry_by_tool.get(canon_tool)
 
         latest = None
         if ent and ent.get("maintenanceHistory"):
@@ -742,15 +664,20 @@ def _build_pm_export_rows(mode: str, search: str) -> list[dict]:
 
 
 def pm_export_hub_parity_counts(search: str = "") -> dict[str, int]:
-    """Counts matching hub pills + export, for a given search (no threshold filter)."""
+    """Counts matching hub Safe/Warning/Critical pills (one bucket per grouped tool, StableVersion1.7)."""
     search_l = (search or "").strip().lower()
-    all_tool_rows, all_by_lower, status_by_tool, entry_by_tool, comp_by_tool = _load_pm_export_context()
+    all_tool_rows, all_by_lower, status_by_tool, _entry_by_tool = _load_pm_export_context()
 
     safe = warn = crit = 0
-    for row in _pm_iter_hub_display_rows(
-        search_l, all_tool_rows, all_by_lower, status_by_tool, comp_by_tool, entry_by_tool
-    ):
-        p = row["pm_pct"]
+    for r in all_tool_rows:
+        canon_tool = _canon_tool_key(_norm_tool_no(r.get("toolNo")), all_by_lower)
+        part_display = _norm_tool_no(r.get("partNo"))
+        tnl = canon_tool.lower()
+        pnl = part_display.lower()
+        if search_l and search_l not in tnl and search_l not in pnl:
+            continue
+        st = status_by_tool.get(canon_tool)
+        p = _pm_pct_for_status_row(st) if st else 0
         if p >= 100:
             crit += 1
         elif p >= 80:
