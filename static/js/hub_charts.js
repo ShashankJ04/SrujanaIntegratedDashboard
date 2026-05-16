@@ -26,7 +26,14 @@ const HubCharts = (() => {
   }
 
   function fmtQty(v) { return Number(v || 0).toLocaleString('en-IN'); }
+  function fmtShortageKg(v) {
+    const n = Math.abs(Number(v) || 0);
+    return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  }
   function trunc(s, m = 26) { const t = String(s ?? ''); return t.length <= m ? t : t.slice(0, m - 1) + '\u2026'; }
+  function chartTextColor() {
+    return (typeof Hub !== 'undefined' && Hub.getTheme && Hub.getTheme() === 'light') ? '#334155' : '#94a3b8';
+  }
   function el(id) { const e = document.getElementById(id); return e && window.Plotly ? e : null; }
 
   const BLUE = 'rgba(59,130,246,0.85)';
@@ -52,26 +59,79 @@ const HubCharts = (() => {
     wireRmShortageMode(data);
     const e = el('chart-rm-shortage-by-material'); if (!e) return;
     const items = data.rm_shortage_by_material || [];
-    if (!items.length) { e.innerHTML = '<div class="ti-placeholder">No RM shortage data</div>'; return; }
-    
+    const shortages = items.filter(r => Number(r.rm_shortage_actual) < 0);
+    if (!shortages.length) {
+      e.innerHTML = '<div class="ti-placeholder">No actual RM shortages (stock meets or exceeds requirement)</div>';
+      return;
+    }
+
     const showAll = mode === 'all';
-    const sorted = [...items].sort((a, b) => Math.abs(Number(b.rm_shortage_actual)||0) - Math.abs(Number(a.rm_shortage_actual)||0));
+    const sorted = [...shortages].sort(
+      (a, b) => Number(a.rm_shortage_actual) - Number(b.rm_shortage_actual)
+    );
     const limited = showAll ? sorted : sorted.slice(0, 15);
 
-    const labels = limited.map(r => trunc(r.rm_rawmt_part_no, 20));
-    const vals = limited.map(r => Number(r.rm_shortage_actual) || 0);
-    const colors = vals.map(v => v < 0 ? RED : v > 0 ? GREEN : DIM);
-    const hovers = limited.map(r => `<b>${r.rm_rawmt_part_no||'–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)}<br>Req: ${fmtQty(r.total_rm_production_requirement)}<br><b>Shortage: ${fmtQty(r.rm_shortage_actual)}</b>`);
-    
+    const displayVals = limited.map(r => Math.abs(Number(r.rm_shortage_actual) || 0));
+    const hovers = limited.map(r => `<b>${r.rm_rawmt_part_no || '–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)} kgs<br>Required: ${fmtQty(r.total_rm_production_requirement)} kgs<br><b>Shortage: ${fmtQty(r.rm_shortage_actual)} kgs</b>`);
+
     if (window.Plotly && window.Plotly.purge) window.Plotly.purge(e);
 
-    Plotly.newPlot(e, [{ type:'bar', orientation:'h', y:labels, x:vals, marker:{color:colors, cornerradius:3}, hoverinfo:'text', hovertext:hovers }],
-      base({ 
-        margin:{l:120,r:20,t:10,b:40}, 
-        xaxis:{title:'RM Shortage (kgs)',gridcolor:'rgba(148,163,184,0.08)',zeroline:true,zerolinecolor:'rgba(148,163,184,0.15)'}, 
-        yaxis:{automargin:true,tickfont:{size:10},autorange:'reversed'}, 
-        height: Math.min(showAll ? 6000 : 480, Math.max(250, limited.length * 28)) 
+    const barTrace = {
+      type: 'bar',
+      marker: {
+        color: 'rgba(239, 68, 68, 0.88)',
+        line: { color: 'rgba(185, 28, 28, 0.45)', width: 1 },
+        cornerradius: 4,
+      },
+      text: displayVals.map(fmtShortageKg),
+      textposition: 'outside',
+      textfont: { size: 11, color: chartTextColor() },
+      cliponaxis: false,
+      hoverinfo: 'text',
+      hovertext: hovers,
+    };
+
+    const yAxisCommon = {
+      title: 'Shortage (kgs)',
+      rangemode: 'tozero',
+      tickformat: ',.0f',
+      gridcolor: 'rgba(148,163,184,0.08)',
+      zeroline: true,
+      zerolinecolor: 'rgba(148,163,184,0.15)',
+    };
+
+    if (showAll) {
+      const labels = limited.map(r => trunc(r.rm_rawmt_part_no, 28));
+      Plotly.newPlot(e, [{
+        ...barTrace,
+        orientation: 'h',
+        y: labels,
+        x: displayVals,
+      }], base({
+        margin: { l: 148, r: 48, t: 52, b: 24 },
+        xaxis: { ...yAxisCommon, side: 'top' },
+        yaxis: { automargin: true, tickfont: { size: 11 }, autorange: 'reversed' },
+        height: Math.min(900, Math.max(360, limited.length * 30)),
+        bargap: 0.28,
       }), CFG);
+    } else {
+      const labels = limited.map(r => trunc(r.rm_rawmt_part_no, 14));
+      Plotly.newPlot(e, [{
+        ...barTrace,
+        x: labels,
+        y: displayVals,
+      }], base({
+        margin: { l: 56, r: 24, t: 28, b: 88 },
+        yaxis: yAxisCommon,
+        xaxis: {
+          automargin: true,
+          tickfont: { size: 11 },
+          tickangle: 0,
+        },
+        height: 400,
+        bargap: 0.35,
+      }), CFG);
+    }
   }
 
   function renderTopRmRequirement(data) {

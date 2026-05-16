@@ -1,14 +1,16 @@
 <!-- Hub RM Correction — parity with dashboards RMCorrectionPage.tsx -->
-<div class="ti-hub-section-fill" id="rmcRoot">
+<div class="ti-hub-section-fill ti-rm-correction" id="rmcRoot">
 
-  <div class="ti-flex-between ti-mb-16" style="flex-wrap:wrap;gap:12px;padding:0 4px;background:var(--ti-surface);border-bottom:1px solid var(--ti-border);padding-bottom:12px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:24px">✏️</span>
+  <div class="ti-rm-header">
+    <div class="ti-rm-header-filters">
+      <span style="font-size:24px;line-height:1" aria-hidden="true">✏️</span>
       <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">RM Correction</h2>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <label style="font-size:12px;font-weight:600;color:var(--ti-text-muted)">Start Date</label>
-      <input type="date" class="ti-input" id="rmcStartDate" style="width:190px" />
+      <input type="date" class="ti-input" id="rmcStartDate" style="width:190px" aria-label="Start date" />
+    </div>
+    <div class="ti-rm-header-tail">
+      <span class="ti-rm-count" id="rmcItemCount">—</span>
+      <input type="search" class="ti-input ti-rm-grid-search" id="rmcGridSearch" placeholder="Filter rows…" autocomplete="off" disabled aria-label="Filter table" />
     </div>
   </div>
 
@@ -16,25 +18,8 @@
   <div id="rmcError" class="ti-alert ti-alert-error" style="display:none;margin:16px 4px"></div>
   <div id="rmcEmpty" class="ti-empty" style="display:none"><div class="ti-empty-icon">📋</div><div class="ti-empty-text">No records found.</div></div>
 
-  <div id="rmcTableWrap" style="display:none;overflow:auto;flex:1;border:1px solid var(--ti-border);border-radius:8px;margin:0 4px">
-    <table class="ti-table" id="rmcTable" style="width:100%;min-width:900px;font-size:12px;table-layout:fixed">
-      <colgroup>
-        <col style="width:14%"><col style="width:10%"><col style="width:10%"><col style="width:9%">
-        <col style="width:10%"><col style="width:9%"><col style="width:12%">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Raw Material</th>
-          <th>Batch</th>
-          <th class="text-right">Total Inwarded</th>
-          <th class="text-right">RM Given</th>
-          <th class="text-right">Theo RM Remaining</th>
-          <th class="text-right">Scrap</th>
-          <th style="text-align:center">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="rmcTbody"></tbody>
-    </table>
+  <div id="rmcGridHost">
+    <div id="rmcGrid" class="ti-hub-section-fill__grid"></div>
   </div>
 
   <!-- Edit dialog -->
@@ -57,7 +42,8 @@
         <label style="font-size:11px;font-weight:600;color:#333">Scrap Remarks</label>
         <input type="text" class="ti-input" id="rmcEditScrapRemarks" maxlength="50" style="background:#fff;color:#1a1a1a;border:1px solid #ccc" />
       </div>
-      <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;gap:8px;background:#ffffff;border-radius:0 0 12px 12px">        <button type="button" class="ti-btn ti-btn-outline" id="rmcEditCancel">Cancel</button>
+      <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;gap:8px;background:#ffffff;border-radius:0 0 12px 12px">
+        <button type="button" class="ti-btn ti-btn-outline" id="rmcEditCancel">Cancel</button>
         <button type="button" class="ti-btn ti-btn-primary" id="rmcEditSubmit">Submit</button>
       </div>
     </div>
@@ -83,6 +69,7 @@
 <script>
 (function() {
   const ALLOWED_EDIT_USER_IDS = [5, 43, 268, 231];
+  const SG_LAYOUT_KEY = 'hub-rm-correction';
   const currentUserId = Number((window.CURRENT_USER && window.CURRENT_USER.userId) || 0);
   const canEdit = ALLOWED_EDIT_USER_IDS.includes(currentUserId);
 
@@ -91,8 +78,14 @@
   let _batchCache = {};
   let _editEntry = null;
   let _submitting = false;
+  let _grid = null;
 
   const dateInput = document.getElementById('rmcStartDate');
+  const gridHost = document.getElementById('rmcGridHost');
+  const gridEl = document.getElementById('rmcGrid');
+  const gridSearch = document.getElementById('rmcGridSearch');
+  const itemCount = document.getElementById('rmcItemCount');
+
   const d = new Date();
   d.setDate(d.getDate() - 10);
   dateInput.value = d.toISOString().slice(0, 10);
@@ -109,100 +102,99 @@
       .replace(/"/g, '&quot;');
   }
 
-  async function loadEntries() {
-    const loading = document.getElementById('rmcLoading');
-    const errorEl = document.getElementById('rmcError');
-    const tableWrap = document.getElementById('rmcTableWrap');
-    const emptyEl = document.getElementById('rmcEmpty');
-
-    loading.style.display = 'flex';
-    errorEl.style.display = 'none';
-    tableWrap.style.display = 'none';
-    emptyEl.style.display = 'none';
-
-    try {
-      const startDate = dateInput.value;
-      const data = await apiFetch('/api/rm-correction/?startDate=' + encodeURIComponent(startDate));
-      _entries = data.entries || [];
-      _expanded = {};
-      _batchCache = {};
-      renderMain();
-    } catch (err) {
-      errorEl.textContent = err.message || 'Failed to load RM correction data';
-      errorEl.style.display = 'block';
-    } finally {
-      loading.style.display = 'none';
-    }
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, '&#39;');
   }
 
-  function renderMain() {
-    const tableWrap = document.getElementById('rmcTableWrap');
-    const emptyEl = document.getElementById('rmcEmpty');
-    const tbody = document.getElementById('rmcTbody');
+  function findEntry(key) {
+    return _entries.find(function(e) { return rowKey(e) === key; });
+  }
 
-    if (!_entries.length) {
-      tableWrap.style.display = 'none';
-      emptyEl.style.display = 'block';
-      return;
-    }
-    tableWrap.style.display = '';
-    emptyEl.style.display = 'none';
-
-    tbody.innerHTML = '';
-    _entries.forEach(function(entry, idx) {
-      var key = rowKey(entry);
-      var exp = !!_expanded[key];
-
-      var tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--ti-border)';
-      var editTitle = canEdit ? 'Edit' : 'You do not have permission to edit corrections';
-      tr.innerHTML =
-        '<td style="font-weight:600">' + escapeHtml(entry.rawMaterial || '—') + '</td>' +
-        '<td>' + escapeHtml(entry.batch || '') + '</td>' +
-        '<td class="text-right">' + Number(entry.totalInwarded).toFixed(2) + '</td>' +
-        '<td class="text-right">' + Number(entry.rmGiven).toFixed(2) + '</td>' +
-        '<td class="text-right">' + Number(entry.rmRemaining).toFixed(2) + '</td>' +
-        '<td class="text-right">' + Number(entry.scrap).toFixed(2) + '</td>' +
-        '<td style="text-align:center;white-space:nowrap">' +
-          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-edit" data-idx="' + idx + '" ' +
-            (canEdit ? '' : 'disabled ') +
-            'style="font-size:11px;margin:0 2px" title="' + escapeHtml(editTitle) + '">✎</button>' +
-          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-detail" data-idx="' + idx + '" style="font-size:11px;margin:0 2px" title="Production Details">▤</button>' +
-          '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-history" data-idx="' + idx + '" style="font-size:11px;margin:0 2px" title="Correction History">📜</button>' +
-        '</td>';
-      tbody.appendChild(tr);
-
-      if (exp) {
-        var dtr = document.createElement('tr');
-        dtr.innerHTML = '<td colspan="7" style="background:var(--ti-surface-2);padding:8px 12px;vertical-align:top" id="rmc-detail-' + idx + '"></td>';
-        tbody.appendChild(dtr);
-        var cell = document.getElementById('rmc-detail-' + idx);
-        if (cell) loadBatchDetail(entry.batch, cell);
-      }
+  function buildGridRows() {
+    return _entries.map(function(entry) {
+      return {
+        rawMaterial: entry.rawMaterial,
+        batch: entry.batch,
+        totalInwarded: entry.totalInwarded,
+        rmGiven: entry.rmGiven,
+        rmRemaining: entry.rmRemaining,
+        scrap: entry.scrap,
+        rmid: entry.rmid,
+        _rowKey: rowKey(entry),
+        _entry: entry,
+      };
     });
   }
 
-  async function loadBatchDetail(batch, container) {
-    if (_batchCache[batch] && _batchCache[batch].entries) {
-      renderBatchDetail(container, _batchCache[batch].entries);
-      return;
+  function formatActions(_, row) {
+    const key = row._rowKey;
+    const editTitle = canEdit ? 'Edit' : 'You do not have permission to edit corrections';
+    const expCls = _expanded[key] ? ' is-expanded' : '';
+    return (
+      '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-edit" data-row-key="' + escapeAttr(key) + '" ' +
+        (canEdit ? '' : 'disabled ') +
+        'style="font-size:11px;margin:0 2px" title="' + escapeHtml(editTitle) + '">✎</button>' +
+      '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-detail' + expCls + '" data-row-key="' + escapeAttr(key) + '" ' +
+        'style="font-size:11px;margin:0 2px" title="Production Details">▤</button>' +
+      '<button type="button" class="ti-btn ti-btn-outline ti-btn-xs rmc-act-history" data-row-key="' + escapeAttr(key) + '" ' +
+        'style="font-size:11px;margin:0 2px" title="Correction History">📜</button>'
+    );
+  }
+
+  const columns = [
+    { key: 'rawMaterial', label: 'Raw Material', className: 'val-bold', width: 160 },
+    { key: 'batch', label: 'Batch', width: 110 },
+    { key: 'totalInwarded', label: 'Total Inwarded', align: 'right', format: function(v) { return Number(v).toFixed(2); } },
+    { key: 'rmGiven', label: 'RM Given', align: 'right', format: function(v) { return Number(v).toFixed(2); } },
+    { key: 'rmRemaining', label: 'Theo RM Remaining', align: 'right', format: function(v) { return Number(v).toFixed(2); } },
+    { key: 'scrap', label: 'Scrap', align: 'right', format: function(v) { return Number(v).toFixed(2); } },
+    { key: 'actions', label: 'Actions', align: 'center', sortable: false, width: 130, format: formatActions },
+  ];
+
+  function destroyGrid() {
+    if (_grid && _grid.destroy) {
+      _grid.destroy();
+      _grid = null;
     }
-    container.innerHTML = '<span style="color:var(--ti-text-muted);font-size:12px">Loading batch production details…</span>';
-    try {
-      var data = await apiFetch('/api/rm-correction/batch/' + encodeURIComponent(batch));
-      _batchCache[batch] = { entries: data.entries || [] };
-      renderBatchDetail(container, _batchCache[batch].entries);
-    } catch (err) {
-      container.innerHTML = '<div class="ti-alert ti-alert-error" style="margin:4px 0;font-size:12px">' + escapeHtml(err.message || 'Failed to load batch details') + '</div>';
+    gridEl.innerHTML = '';
+  }
+
+  function refreshGridRows(preserveSearch) {
+    if (!_grid) return;
+    const savedSearch = preserveSearch ? gridSearch.value : '';
+    _grid.setRows(buildGridRows());
+    if (preserveSearch && savedSearch) {
+      gridSearch.value = savedSearch;
+      gridSearch.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }
 
-  function renderBatchDetail(container, rows) {
+  function redrawGridBody() {
+    if (_grid && _grid.redrawBody) _grid.redrawBody();
+  }
+
+  function sgGridOptions() {
+    return {
+      layoutKey: SG_LAYOUT_KEY,
+      countElement: itemCount,
+      searchInputElement: gridSearch,
+      search: true,
+      resizable: true,
+      pinnable: true,
+      reorderable: true,
+      emptyText: 'No records found.',
+      countLabel: 'rows',
+      detailRowExpanded: function(row) { return !!_expanded[row._rowKey]; },
+      detailRowHtml: function(row) { return detailRowContent(row); },
+      onBodyRendered: function() { mountInlineDetails(); },
+    };
+  }
+
+  function batchDetailHtml(rows) {
     if (!rows.length) {
-      container.innerHTML = '<span style="color:var(--ti-text-dim);font-size:12px">No production rows found for this batch in selected date range.</span>';
-      return;
+      return '<span style="color:var(--ti-text-dim);font-size:12px">No production rows found for this batch in selected date range.</span>';
     }
-    var totals = { noOfComp:0, theoRmKg:0, calCompWt:0, theoScrap:0, sfRejNos:0, suWastageNos:0, scrapKg:0, partWtKg:0 };
+    const totals = { noOfComp:0, theoRmKg:0, calCompWt:0, theoScrap:0, sfRejNos:0, suWastageNos:0, scrapKg:0, partWtKg:0 };
     rows.forEach(function(r) {
       totals.noOfComp += Number(r.noOfComp) || 0;
       totals.theoRmKg += Number(r.theoRmKg) || 0;
@@ -214,7 +206,7 @@
       totals.partWtKg += Number(r.partWtKg) || 0;
     });
 
-    var html = '<div style="display:inline-block;margin-bottom:8px;padding:4px 10px;border-radius:6px;background:#1565c0;color:#fff;font-size:11px;font-weight:700">Production Details</div>';
+    let html = '<div style="display:inline-block;margin-bottom:8px;padding:4px 10px;border-radius:6px;background:#1565c0;color:#fff;font-size:11px;font-weight:700">Production Details</div>';
     html += '<table class="ti-table" style="width:100%;font-size:11px;table-layout:fixed;border:1px solid #1565c0;border-radius:6px"><thead><tr>';
     html += '<th>Production Date</th><th>Part No</th><th>Lot No</th><th>Tool</th>';
     html += '<th class="text-right">No Of Comp</th><th class="text-right">Theo RM(Kg)</th><th class="text-right">Cal Comp Wt (Kg)</th>';
@@ -222,8 +214,8 @@
     html += '<th class="text-right">Scrap(Kg)</th><th class="text-right">Part Wt(Kg)</th></tr></thead><tbody>';
 
     rows.forEach(function(r) {
-      var theo = Number(r.theoRmKg) || 0;
-      var cal = Number(r.calCompWt) || 0;
+      const theo = Number(r.theoRmKg) || 0;
+      const cal = Number(r.calCompWt) || 0;
       html += '<tr><td>' + escapeHtml(r.productionDate) + '</td><td>' + escapeHtml(r.partNo || '—') + '</td><td>' + escapeHtml(r.lotNo || '—') + '</td><td>' + escapeHtml(r.tool || '—') + '</td>';
       html += '<td class="text-right">' + r.noOfComp + '</td>';
       html += '<td class="text-right">' + theo.toFixed(4) + '</td>';
@@ -242,7 +234,105 @@
     html += '<td class="text-right">' + totals.sfRejNos + '</td><td class="text-right">' + totals.suWastageNos + '</td>';
     html += '<td class="text-right">' + totals.scrapKg.toFixed(2) + '</td><td class="text-right">' + totals.partWtKg.toFixed(2) + '</td>';
     html += '</tr></tbody></table>';
-    container.innerHTML = html;
+    return html;
+  }
+
+  function detailRowContent(row) {
+    const batch = row.batch;
+    if (_batchCache[batch] && _batchCache[batch].entries) {
+      return '<div class="rmc-detail-inline"><div class="rmc-detail-body" data-batch="' + escapeAttr(batch) + '">' + batchDetailHtml(_batchCache[batch].entries) + '</div></div>';
+    }
+    return '<div class="rmc-detail-inline"><div class="rmc-detail-body" data-batch="' + escapeAttr(batch) + '" data-needs-load="1"><span style="color:var(--ti-text-muted);font-size:12px">Loading batch production details…</span></div></div>';
+  }
+
+  function mountInlineDetails() {
+    gridEl.querySelectorAll('.rmc-detail-body[data-needs-load="1"]').forEach(function(el) {
+      el.removeAttribute('data-needs-load');
+      const batch = el.getAttribute('data-batch');
+      if (batch) loadBatchDetail(batch, el);
+    });
+  }
+
+  async function loadEntries() {
+    const loading = document.getElementById('rmcLoading');
+    const errorEl = document.getElementById('rmcError');
+    const emptyEl = document.getElementById('rmcEmpty');
+
+    loading.style.display = 'flex';
+    errorEl.style.display = 'none';
+    gridHost.classList.remove('is-visible');
+    emptyEl.style.display = 'none';
+    gridSearch.disabled = true;
+    gridSearch.value = '';
+    itemCount.textContent = '—';
+    destroyGrid();
+
+    try {
+      const startDate = dateInput.value;
+      const data = await apiFetch('/api/rm-correction/?startDate=' + encodeURIComponent(startDate));
+      _entries = data.entries || [];
+      _expanded = {};
+      _batchCache = {};
+      renderMain();
+    } catch (err) {
+      errorEl.textContent = err.message || 'Failed to load RM correction data';
+      errorEl.style.display = 'block';
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  function renderMain() {
+    const emptyEl = document.getElementById('rmcEmpty');
+
+    if (!_entries.length) {
+      gridHost.classList.remove('is-visible');
+      emptyEl.style.display = 'block';
+      destroyGrid();
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    gridHost.classList.add('is-visible');
+    gridSearch.disabled = false;
+
+    if (typeof SuperGrid === 'undefined' || typeof SuperGrid.create !== 'function') {
+      document.getElementById('rmcError').textContent = 'SuperGrid is not loaded.';
+      document.getElementById('rmcError').style.display = 'block';
+      return;
+    }
+
+    destroyGrid();
+    _grid = SuperGrid.create(gridEl, {
+      columns: columns,
+      rows: buildGridRows(),
+      omitToolbar: true,
+      options: sgGridOptions(),
+    });
+  }
+
+  function isBatchExpanded(batch) {
+    return _entries.some(function(e) {
+      return _expanded[rowKey(e)] && e.batch === batch;
+    });
+  }
+
+  async function loadBatchDetail(batch, container) {
+    if (_batchCache[batch] && _batchCache[batch].entries) {
+      container.innerHTML = batchDetailHtml(_batchCache[batch].entries);
+      return;
+    }
+    container.innerHTML = '<span style="color:var(--ti-text-muted);font-size:12px">Loading batch production details…</span>';
+    try {
+      const data = await apiFetch('/api/rm-correction/batch/' + encodeURIComponent(batch));
+      _batchCache[batch] = { entries: data.entries || [] };
+      if (container.isConnected) {
+        container.innerHTML = batchDetailHtml(_batchCache[batch].entries);
+      }
+      if (isBatchExpanded(batch)) redrawGridBody();
+    } catch (err) {
+      container.innerHTML = '<div class="ti-alert ti-alert-error" style="margin:4px 0;font-size:12px">' + escapeHtml(err.message || 'Failed to load batch details') + '</' + d + '>';
+    }
   }
 
   function openEdit(entry) {
@@ -255,8 +345,7 @@
     document.getElementById('rmcEditScrapRemarks').value = '';
     document.getElementById('rmcEditActualRm').disabled = (Number(entry.rmRemaining) === 0);
     document.getElementById('rmcEditRmRemarks').disabled = (Number(entry.rmRemaining) === 0);
-    var ov = document.getElementById('rmcEditOverlay');
-    ov.style.display = 'flex';
+    document.getElementById('rmcEditOverlay').style.display = 'flex';
   }
 
   function closeEdit() {
@@ -266,27 +355,27 @@
 
   async function submitEdit() {
     if (!_editEntry || _submitting) return;
-    var entry = _editEntry;
-    var rmStr = document.getElementById('rmcEditActualRm').value.trim();
-    var rmRem = document.getElementById('rmcEditRmRemarks').value.trim();
-    var scStr = document.getElementById('rmcEditActualScrap').value.trim();
-    var scRem = document.getElementById('rmcEditScrapRemarks').value.trim();
-    var rmEntered = rmStr !== '';
-    var scrapEntered = scStr !== '';
+    const entry = _editEntry;
+    const rmStr = document.getElementById('rmcEditActualRm').value.trim();
+    const rmRem = document.getElementById('rmcEditRmRemarks').value.trim();
+    const scStr = document.getElementById('rmcEditActualScrap').value.trim();
+    const scRem = document.getElementById('rmcEditScrapRemarks').value.trim();
+    const rmEntered = rmStr !== '';
+    const scrapEntered = scStr !== '';
 
     if (!rmEntered && !scrapEntered) {
       showSnackbar('Enter at least one Actual RM or Actual Scrap with remarks to submit.');
       return;
     }
 
-    var item = { batch: entry.batch, rmid: entry.rmid };
+    const item = { batch: entry.batch, rmid: entry.rmid };
 
     if (rmEntered) {
       if (Number(entry.rmRemaining) === 0) {
         showSnackbar('Actual RM cannot be entered when Theo RM Remaining is 0.');
         return;
       }
-      var rmVal = Number(rmStr);
+      const rmVal = Number(rmStr);
       if (isNaN(rmVal) || rmVal < 0) {
         showSnackbar('Actual RM must be a valid non-negative number.');
         return;
@@ -301,7 +390,7 @@
     }
 
     if (scrapEntered) {
-      var scVal = Number(scStr);
+      const scVal = Number(scStr);
       if (isNaN(scVal)) {
         showSnackbar('Actual Scrap must be a valid number.');
         return;
@@ -316,12 +405,12 @@
     }
 
     _submitting = true;
-    var btn = document.getElementById('rmcEditSubmit');
+    const btn = document.getElementById('rmcEditSubmit');
     btn.disabled = true;
     btn.textContent = 'Submitting…';
 
     try {
-      var result = await apiFetch('/api/rm-correction/submit', {
+      const result = await apiFetch('/api/rm-correction/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: [item] })
@@ -330,7 +419,7 @@
       if (scrapEntered) entry.scrap = Number(document.getElementById('rmcEditActualScrap').value);
       showSnackbar('Submitted successfully (' + result.inserted + ' row(s): RM ' + result.insertedRm + ', Scrap ' + result.insertedScrap + ')');
       closeEdit();
-      renderMain();
+      refreshGridRows(true);
     } catch (err) {
       showSnackbar(err.message || 'Failed to submit RM corrections');
     } finally {
@@ -341,26 +430,26 @@
   }
 
   async function openHistory(batch, rmid, rawMaterial) {
-    var overlay = document.getElementById('rmcHistoryOverlay');
-    var meta = document.getElementById('rmcHistoryMeta');
-    var body = document.getElementById('rmcHistoryBody');
+    const overlay = document.getElementById('rmcHistoryOverlay');
+    const meta = document.getElementById('rmcHistoryMeta');
+    const body = document.getElementById('rmcHistoryBody');
     meta.innerHTML = '<span>Raw Material: <strong>' + escapeHtml(rawMaterial || '—') + '</strong></span><span>Batch: <strong>' + escapeHtml(batch || '—') + '</strong></span>';
     body.innerHTML = '<div style="text-align:center;padding:24px"><div class="ti-spinner"></div></div>';
     overlay.style.display = 'flex';
 
     try {
-      var data = await apiFetch('/api/rm-correction/history/' + encodeURIComponent(rmid) + '/' + encodeURIComponent(batch));
-      var entries = data.entries || [];
+      const data = await apiFetch('/api/rm-correction/history/' + encodeURIComponent(rmid) + '/' + encodeURIComponent(batch));
+      const entries = data.entries || [];
       if (!entries.length) {
         body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--ti-text-dim);font-size:13px">No RM/Scrap correction history found for this Batch and RM.</div>';
         return;
       }
-      var html = '<table class="ti-table" style="width:100%;font-size:12px"><thead><tr>';
+      let html = '<table class="ti-table" style="width:100%;font-size:12px"><thead><tr>';
       html += '<th>Type</th><th class="text-right">Qty Before</th><th class="text-right">Actual Qty</th>';
       html += '<th>Remarks</th><th>Entry Time</th><th>User</th></tr></thead><tbody>';
       entries.forEach(function(item) {
-        var badge = item.type === 'RM' ? 'background:var(--ti-blue);color:#fff' : 'background:#e65100;color:#fff';
-        var actualQty = (Number(item.qtyBefore) - Number(item.correction)).toFixed(2);
+        const badge = item.type === 'RM' ? 'background:var(--ti-blue);color:#fff' : 'background:#e65100;color:#fff';
+        const actualQty = (Number(item.qtyBefore) - Number(item.correction)).toFixed(2);
         html += '<tr><td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;' + badge + '">' + escapeHtml(item.type) + '</span></td>';
         html += '<td class="text-right">' + Number(item.qtyBefore).toFixed(2) + '</td>';
         html += '<td class="text-right">' + actualQty + '</td>';
@@ -379,28 +468,29 @@
     document.getElementById('rmcHistoryOverlay').style.display = 'none';
   }
 
-  document.getElementById('rmcTbody').addEventListener('click', function(e) {
-    var editBtn = e.target.closest('.rmc-act-edit');
+  document.getElementById('rmcRoot').addEventListener('click', function(e) {
+    const editBtn = e.target.closest('.rmc-act-edit');
     if (editBtn && !editBtn.disabled) {
-      var ix = parseInt(editBtn.getAttribute('data-idx'), 10);
-      if (!isNaN(ix) && _entries[ix]) openEdit(_entries[ix]);
+      const key = editBtn.getAttribute('data-row-key');
+      const entry = key ? findEntry(key) : null;
+      if (entry) openEdit(entry);
       return;
     }
-    var detBtn = e.target.closest('.rmc-act-detail');
+
+    const detBtn = e.target.closest('.rmc-act-detail');
     if (detBtn) {
-      var dix = parseInt(detBtn.getAttribute('data-idx'), 10);
-      var de = _entries[dix];
-      if (!de) return;
-      var dk = rowKey(de);
-      _expanded[dk] = !_expanded[dk];
-      renderMain();
+      const key = detBtn.getAttribute('data-row-key');
+      if (!key) return;
+      _expanded[key] = !_expanded[key];
+      redrawGridBody();
       return;
     }
-    var histBtn = e.target.closest('.rmc-act-history');
+
+    const histBtn = e.target.closest('.rmc-act-history');
     if (histBtn) {
-      var hix = parseInt(histBtn.getAttribute('data-idx'), 10);
-      var he = _entries[hix];
-      if (he) openHistory(he.batch, he.rmid, he.rawMaterial);
+      const key = histBtn.getAttribute('data-row-key');
+      const entry = key ? findEntry(key) : null;
+      if (entry) openHistory(entry.batch, entry.rmid, entry.rawMaterial);
     }
   });
 

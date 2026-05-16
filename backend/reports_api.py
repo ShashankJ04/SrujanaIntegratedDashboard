@@ -5,10 +5,13 @@ Port of dashboards/backend/src/routes/reports.ts.
 
 from __future__ import annotations
 
+import re
 from io import BytesIO
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request, send_file
+
+_EXPORT_DT_FMT = "%d-%m-%Y, %H:%M:%S"
 
 from .auth import api_login_required
 from .rbac import require_access, require_plus_access
@@ -124,6 +127,58 @@ def delete_report(report_id):
         return jsonify({"message": str(e)}), 404
 
 
+def _pascal_case_param_name(name: str) -> str:
+    """Display param keys as PascalCase (e.g. start_date → StartDate, month → Month)."""
+    s = str(name).strip()
+    if not s:
+        return s
+    parts = [p for p in re.split(r"[_\s\-]+", s) if p]
+    if not parts:
+        return s
+    return "".join(p[:1].upper() + p[1:].lower() for p in parts)
+
+
+def _export_parameter_suffix(report: dict, variables: dict | None) -> str:
+    """Comma-separated name: value pairs for the export title line."""
+    variables = variables or {}
+    names = list(report.get("variables") or [])
+    seen: set[str] = set()
+    parts: list[str] = []
+
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        if name not in variables:
+            continue
+        val = variables[name]
+        if val is None or str(val).strip() == "":
+            continue
+        parts.append(f"{_pascal_case_param_name(name)}: {val}")
+
+    for name, val in sorted(variables.items()):
+        if name in seen:
+            continue
+        if val is None or str(val).strip() == "":
+            continue
+        parts.append(f"{_pascal_case_param_name(name)}: {val}")
+
+    if not parts:
+        return ""
+    return " — " + ", ".join(parts)
+
+
+def _export_title_line(
+    report_name: str,
+    report: dict,
+    variables: dict | None = None,
+    exported_at: datetime | None = None,
+) -> str:
+    when = exported_at or datetime.now()
+    base = f"{report_name} — Exported on {when.strftime(_EXPORT_DT_FMT)}"
+    return base + _export_parameter_suffix(report, variables)
+
+
 # ── Run report ──────────────────────────────────────────────────────────
 
 @reports_bp.route("/reports/<report_id>/run", methods=["POST"])
@@ -189,25 +244,41 @@ def export_report(report_id):
         return jsonify({"message": f"Query error: {str(e)}"}), 400
 
     columns = list(rows[0].keys()) if rows else []
+    col_count = max(len(columns), 1)
 
     wb = Workbook()
     ws = wb.active
     ws.title = report["name"][:31]
 
     header_font = Font(bold=True, color="FFFFFF", size=11)
+    title_font = Font(bold=True, size=13)
     header_fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
     thin_border = Border(
         left=Side(style="thin"), right=Side(style="thin"),
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
 
+    next_row = 1
+    title_cell = ws.cell(
+        row=next_row, column=1,
+        value=_export_title_line(report["name"], report, variables),
+    )
+    title_cell.font = title_font
+    if col_count > 1:
+        ws.merge_cells(
+            start_row=next_row, start_column=1,
+            end_row=next_row, end_column=col_count,
+        )
+    next_row += 2  # title row + blank row before table header
+
+    header_row = next_row
     for ci, col in enumerate(columns, 1):
-        cell = ws.cell(row=1, column=ci, value=col)
+        cell = ws.cell(row=header_row, column=ci, value=col)
         cell.font = header_font
         cell.fill = header_fill
         cell.border = thin_border
 
-    for ri, row in enumerate(rows, 2):
+    for ri, row in enumerate(rows, header_row + 1):
         for ci, col in enumerate(columns, 1):
             cell = ws.cell(row=ri, column=ci, value=row.get(col))
             cell.border = thin_border

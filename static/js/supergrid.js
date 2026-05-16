@@ -26,7 +26,11 @@ const SuperGrid = (() => {
    *     resizable?:boolean, pinnable?:boolean, reorderable?:boolean,
    *     layoutKey?:string,
    *     omitToolbar?:boolean (may also be set on the top-level config object),
-   *     countElement?:HTMLElement, searchInputElement?:HTMLElement }
+   *     countElement?:HTMLElement, searchInputElement?:HTMLElement,
+   *     detailRowExpanded?:(row,rowIdx)=>boolean,
+   *     detailRowHtml?:(row,rowIdx,colCount)=>string,
+   *     onBodyRendered?:(tbody,rows)=>void,
+   *     grandTotalRowFn?:(dataRows,columns)=>Object|null }
    * @returns {Object} API { setRows, getFilteredRows, destroy }
    */
   function create(container, config) {
@@ -48,6 +52,10 @@ const SuperGrid = (() => {
       layoutKey = null,
       countElement: countElementOption = null,
       searchInputElement: searchInputElementOption = null,
+      detailRowExpanded = null,
+      detailRowHtml = null,
+      onBodyRendered = null,
+      grandTotalRowFn = null,
     } = options;
 
     /* Support both SuperGrid.create(el, { options: { omitToolbar } }) and flat { omitToolbar } */
@@ -223,18 +231,34 @@ const SuperGrid = (() => {
       return [...pinned, ...unpinned];
     }
 
+    function _isSyntheticRow(row) {
+      return !!(row && (row.__sgStickyTop || row.__sgStickyBottom));
+    }
+
+    function _appendGrandTotalRow() {
+      filteredRows = filteredRows.filter(r => !r.__sgStickyBottom);
+      if (!grandTotalRowFn || !filteredRows.length) return;
+      const gt = grandTotalRowFn(filteredRows, _getOrderedCols());
+      if (gt) {
+        gt.__sgStickyBottom = true;
+        filteredRows.push(gt);
+      }
+    }
+
     // ── Filter ─────────────────────────────────────────────────
     function _filter() {
+      const sourceRows = allRows.filter(r => !_isSyntheticRow(r));
       if (!searchQuery) {
-        filteredRows = [...allRows];
+        filteredRows = [...sourceRows];
       } else {
-        filteredRows = allRows.filter(row =>
+        filteredRows = sourceRows.filter(row =>
           _cols.some(col => {
             const v = row[col.key];
             return v != null && String(v).toLowerCase().includes(searchQuery);
           })
         );
       }
+      _appendGrandTotalRow();
     }
 
     // ── Sort ───────────────────────────────────────────────────
@@ -245,6 +269,10 @@ const SuperGrid = (() => {
         const aStickyTop = !!(a && a.__sgStickyTop);
         const bStickyTop = !!(b && b.__sgStickyTop);
         if (aStickyTop !== bStickyTop) return aStickyTop ? -1 : 1;
+        // Optional sticky-bottom rows (e.g., column totals) stay last.
+        const aStickyBottom = !!(a && a.__sgStickyBottom);
+        const bStickyBottom = !!(b && b.__sgStickyBottom);
+        if (aStickyBottom !== bStickyBottom) return aStickyBottom ? 1 : -1;
 
         let va = a[sortKey], vb = b[sortKey];
         const na = Number(va), nb = Number(vb);
@@ -428,8 +456,9 @@ const SuperGrid = (() => {
       rows.forEach((row, i) => {
         const clickCls = onRowClick ? ' sg-clickable' : '';
         const stickyTopCls = row && row.__sgStickyTop ? ' sg-sticky-top-row' : '';
+        const stickyBottomCls = row && row.__sgStickyBottom ? ' sg-sticky-bottom-row' : '';
         const stickyTopAttr = row && row.__sgStickyTop ? ' data-sg-sticky-top="1"' : '';
-        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}"${stickyTopAttr}>`;
+        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}${stickyBottomCls}"${stickyTopAttr}>`;
         cols.forEach(col => {
           const raw = row[col.key];
           let display;
@@ -456,8 +485,18 @@ const SuperGrid = (() => {
           html += `<td data-key="${col.key}" class="${pinCls}${alignCls}${extraCls}"${style}>${display}</td>`;
         });
         html += '</tr>';
+        if (detailRowExpanded && detailRowHtml && detailRowExpanded(row, globalOffset + i)) {
+          const detailContent = detailRowHtml(row, globalOffset + i, cols.length);
+          const detailKey = row && (row._rowKey != null ? String(row._rowKey) : '');
+          const detailKeyAttr = detailKey
+            ? ` data-detail-key="${detailKey.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`
+            : '';
+          html += `<tr class="sg-detail-row" data-idx="${i}"${detailKeyAttr}><td colspan="${cols.length}" class="sg-detail-cell">${detailContent}</td></tr>`;
+        }
       });
       tbody.innerHTML = html;
+
+      if (onBodyRendered) onBodyRendered(tbody, rows);
 
       // Row click
       if (onRowClick) {
@@ -541,8 +580,8 @@ const SuperGrid = (() => {
 
     // ── Meta/count update ──────────────────────────────────────
     function _updateMeta() {
-      const total = allRows.length;
-      const filtered = filteredRows.length;
+      const total = allRows.filter(r => !_isSyntheticRow(r)).length;
+      const filtered = filteredRows.filter(r => !_isSyntheticRow(r)).length;
       if (countEl) {
         countEl.textContent = filtered === total
           ? `${total} ${countLabel}`
@@ -659,6 +698,8 @@ const SuperGrid = (() => {
       },
       /** Get current filtered (and sorted) rows */
       getFilteredRows() { return [...filteredRows]; },
+      /** Re-render tbody only (keeps sort, filter, search, column layout) */
+      redrawBody() { _renderBody(); },
       /** Cleanup listeners */
       destroy() {
         document.removeEventListener('mousemove', _onMouseMove);

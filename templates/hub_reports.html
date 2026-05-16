@@ -179,6 +179,49 @@
     return String(value);
   }
 
+  function isNumericForTotal(value, columnKey) {
+    if (columnKey && isPartNumberColumnName(columnKey)) return false;
+    if (value === null || value === undefined || value === '') return false;
+    const n = Number(value);
+    return !Number.isNaN(n) && String(value).trim() !== '';
+  }
+
+  /** Sum a column only when every non-empty cell is numeric (skips blanks). */
+  function columnIsSummable(columnKey, dataRows) {
+    if (isPartNumberColumnName(columnKey)) return false;
+    let nonEmpty = 0;
+    let numeric = 0;
+    dataRows.forEach(function(r) {
+      const v = r[columnKey];
+      if (v === null || v === undefined || String(v).trim() === '') return;
+      nonEmpty++;
+      if (isNumericForTotal(v, columnKey)) numeric++;
+    });
+    return nonEmpty > 0 && numeric === nonEmpty;
+  }
+
+  function buildReportsGrandTotalRow(dataRows, columns) {
+    const keys = (columns || []).map(function(c) { return c && c.key ? c.key : c; }).filter(Boolean);
+    if (!dataRows.length || !keys.length) return null;
+
+    const row = {};
+    let anySum = false;
+    keys.forEach(function(key, idx) {
+      if (columnIsSummable(key, dataRows)) {
+        let sum = 0;
+        dataRows.forEach(function(r) {
+          const v = r[key];
+          if (isNumericForTotal(v, key)) sum += Number(v);
+        });
+        row[key] = sum;
+        anySum = true;
+      } else {
+        row[key] = idx === 0 ? 'Grand Total' : '';
+      }
+    });
+    return anySum ? row : null;
+  }
+
   function reportVarControlHtml(v) {
     const id = 'runVar_' + v;
     const u = v.toUpperCase();
@@ -250,26 +293,36 @@
   }
 
   function withDrilldownFormatters(report, resultRows, columns) {
-    return columns.map(c => {
+    return columns.map(function(c) {
+      const summable = columnIsSummable(c, resultRows || []);
+      const align = summable ? 'right' : 'left';
       const drilldowns = getDrilldownsForColumn(report, c);
       if (!drilldowns.length) {
         return {
           key: c,
           label: c,
-          align: 'left',
+          align: align,
           sortable: true,
-          format: (value) => escapeHtml(formatIndianValue(value, c)),
+          format: function(value, row) {
+            if (row && row.__sgStickyBottom) {
+              return '<span class="sg-grand-total-cell">' + escapeHtml(formatIndianValue(value, c)) + '</span>';
+            }
+            return escapeHtml(formatIndianValue(value, c));
+          },
         };
       }
       return {
         key: c,
         label: c,
-        align: 'left',
+        align: align,
         sortable: true,
-        format: (value, row) => {
+        format: function(value, row) {
+          if (row && row.__sgStickyBottom) {
+            return '<span class="sg-grand-total-cell">' + escapeHtml(formatIndianValue(value, c)) + '</span>';
+          }
           if (value === null || value === undefined || value === '') return '';
-          const payload = encodeURIComponent(JSON.stringify({ col: c, row }));
-          return `<button type="button" class="rr-link-btn" data-drilldown="${payload}" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">${escapeHtml(formatIndianValue(value, c))}</button>`;
+          const payload = encodeURIComponent(JSON.stringify({ col: c, row: row }));
+          return '<button type="button" class="rr-link-btn" data-drilldown="' + payload + '" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">' + escapeHtml(formatIndianValue(value, c)) + '</button>';
         },
       };
     });
@@ -336,6 +389,7 @@
         countLabel: 'rows',
         exportBtn: false,
         resizable: true,
+        grandTotalRowFn: buildReportsGrandTotalRow,
       },
     });
     bindDrilldownClicks();
