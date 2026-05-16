@@ -133,26 +133,6 @@
       "pinned": false
     },
     {
-      "id": "03876a4b-6b74-4094-89a9-d88f1373f2dd",
-      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Distinct Parts",
-      "queryTemplate": "select cu_name as 'Parent Customer', CO_PARTNO as 'Part No', CO_PARTNAME as 'Part Name', mt_name as 'Material', CO_WEIGHT as Weight, CO_WIDTH as Width, CO_LENGTH as Length, CO_REVISION as Revision, gm_name as Grade ,pl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron from components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' );",
-      "variables": [],
-      "createdAt": "2026-03-22T08:53:46.605Z",
-      "updatedAt": "2026-05-02T07:35:54.278472+00:00",
-      "pinned": false
-    },
-    {
-      "id": "4e4f60b7-d572-4445-86ff-3677d9114ceb",
-      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Tools",
-      "queryTemplate": "select CT_TOOLNO as 'Tool No', co_partno as 'Part No', CO_PARTNAME as 'Part Name', MM_RawMtPartNo as 'Raw Material', CT_PITCH as Pitch, CT_NO_OF_CAVITY as Cavity from components_tool ct\n\t left join components on CT_COMPID=CO_ID\n     left join materialmaster on CT_RMID=mm_id    \n     left join controlprocess on ct_cpid = cp_id\n    where CT_ACTIVEYN='Y';",
-      "variables": [],
-      "createdAt": "2026-03-22T08:58:33.002Z",
-      "updatedAt": "2026-05-02T07:35:58.395024+00:00",
-      "pinned": false
-    },
-    {
       "id": "3b289936-891a-4770-b669-b8b724672431",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Distinct Customers",
@@ -165,11 +145,11 @@
     {
       "id": "166234db-0f06-41a8-9365-eb020906370a",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Customer Part Tools",
-      "queryTemplate": "select cu_name as Customer ,co_partno as 'Part No', CO_PARTNAME as 'Part Name' , t.tool_list as 'Tool No'\nfrom  components\n left join customer on cu_status ='R' and CO_CUSTID= cu_id\nleft join ( select CT_COMPID, count(ct_toolno) tcount,GROUP_CONCAT(ct_toolno ORDER BY ct_toolno SEPARATOR '::') AS tool_list,\nGROUP_CONCAT(ct_id ORDER BY ct_id SEPARATOR '::') AS toolid_list\n from components_tool where ct_activeyn='Y' group by CT_COMPID order by CT_COMPID) t on  t.ct_compid = CO_PARENTID\nwhere CO_ACTIVEYN='Y'\n order by cu_name,cu_id;",
+      "name": "Customer-Part-POPart-Tools",
+      "queryTemplate": "select cu_name as Customer ,co_partno as 'Part No', CO_PARTNAME as 'Part Name' ,CO_CUSTPOPARTNO `Customer PO Part No`, t.tool_list as 'Tool No'\nfrom  components\n left join customer on cu_status ='R' and CO_CUSTID= cu_id\nleft join ( select CT_COMPID, count(ct_toolno) tcount,GROUP_CONCAT(ct_toolno ORDER BY ct_toolno SEPARATOR '::') AS tool_list,\nGROUP_CONCAT(ct_id ORDER BY ct_id SEPARATOR '::') AS toolid_list\n from components_tool where ct_activeyn='Y' group by CT_COMPID order by CT_COMPID) t on  t.ct_compid = CO_PARENTID\nwhere CO_ACTIVEYN='Y'\n order by cu_name,cu_id;",
       "variables": [],
       "createdAt": "2026-03-22T09:05:12.215Z",
-      "updatedAt": "2026-05-04T04:54:33.420979+00:00",
+      "updatedAt": "2026-05-16T10:55:30.667705+00:00",
       "pinned": false
     },
     {
@@ -222,10 +202,10 @@
       "id": "ed95ec7b-1c11-4e58-8adb-524421ea224c",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Distinct Tools with PartNos",
-      "queryTemplate": "SELECT \n    ct_toolno AS Tool,group_concat( DISTINCT CT_PITCH ORDER BY CT_PITCH SEPARATOR ' ,') as 'Pitch',group_concat( distinct CT_NO_OF_CAVITY order by CT_NO_OF_CAVITY SEPARATOR  '  ,') as 'Cavity', \n    COUNT(*) AS 'Component Count',\n        COALESCE(MAX(CASE WHEN rn = 1 THEN CO_PARTNO END), '') AS Component1,\n\t\tCOALESCE(MAX(CASE WHEN rn = 2 THEN CO_PARTNO END), '') AS Component2,\n\t\tCOALESCE(MAX(CASE WHEN rn = 3 THEN CO_PARTNO END), '') AS Component3,\n        COALESCE(MAX(CASE WHEN rn = 4 THEN CO_PARTNO END), '') AS Component4\nFROM (\n    SELECT \n        ct_toolno,\n        CO_PARTNO,CT_PITCH,CT_NO_OF_CAVITY,\n        ROW_NUMBER() OVER (PARTITION BY ct_toolno ORDER BY CO_PARTNO) AS rn\n    FROM components_tool \n    LEFT JOIN components ON CT_COMPID = CO_ID\n    WHERE ct_activeyn = 'Y'\n) t\nGROUP BY ct_toolno\nORDER BY ct_toolno;",
+      "queryTemplate": "SELECT \n    ct_toolno AS Tool,\n    TL_spm AS SPM,\n    GROUP_CONCAT(DISTINCT CT_PITCH ORDER BY CT_PITCH SEPARATOR ' ,') AS 'Pitch',\n    GROUP_CONCAT(DISTINCT CT_NO_OF_CAVITY ORDER BY CT_NO_OF_CAVITY SEPARATOR '  ,') AS 'Cavity', \n    COUNT(*) AS 'Component Count',\n    COUNT(DISTINCT NULLIF(TRIM(MM_RawMtPartNo), '')) AS 'Raw Material Count',\n    COALESCE(MAX(CASE WHEN rn = 1 THEN CO_PARTNO END), '') AS Component1,\n    COALESCE(MAX(CASE WHEN rn = 2 THEN CO_PARTNO END), '') AS Component2,\n    COALESCE(MAX(CASE WHEN rn = 3 THEN CO_PARTNO END), '') AS Component3,\n    COALESCE(MAX(CASE WHEN rn = 4 THEN CO_PARTNO END), '') AS Component4,\n    COALESCE(MAX(CASE WHEN rn = 1 THEN MM_RawMtPartNo END), '') AS RawMaterial1,\n    COALESCE(MAX(CASE WHEN rn = 2 THEN MM_RawMtPartNo END), '') AS RawMaterial2,\n    COALESCE(MAX(CASE WHEN rn = 3 THEN MM_RawMtPartNo END), '') AS RawMaterial3,\n    COALESCE(MAX(CASE WHEN rn = 4 THEN MM_RawMtPartNo END), '') AS RawMaterial4\nFROM (\n    SELECT \n        ct_toolno,\n        CO_PARTNO,\n        CT_PITCH,\n        CT_NO_OF_CAVITY,\n        MM_RawMtPartNo,\nTL_spm ,\n        ROW_NUMBER() OVER (PARTITION BY ct_toolno ORDER BY CO_PARTNO) AS rn\n    FROM components_tool \n    LEFT JOIN components ON CT_COMPID = CO_ID\n    LEFT JOIN materialmaster ON CT_RMID = mm_id\n    LEFT JOIN tool_life on TL_tool_number = ct_toolno \n    WHERE ct_activeyn = 'Y'\n) t\nGROUP BY ct_toolno\nORDER BY ct_toolno;",
       "variables": [],
       "createdAt": "2026-03-25T12:13:51.363Z",
-      "updatedAt": "2026-05-04T04:57:44.172186+00:00",
+      "updatedAt": "2026-05-16T12:10:37.907758+00:00",
       "pinned": false
     },
     {
@@ -400,22 +380,12 @@
     {
       "id": "b7b03e78-c351-4cd1-a3aa-e323cf54148d",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Distinct Component Details Yield",
-      "queryTemplate": "select cu_name as 'Parent Customer', CO_PARTNO as 'Part_No', CO_PARTNAME as 'Part Name', mt_name as 'Material', \nround((1/t.conVal)*1000,2) as 'Total Wt',\nCO_WEIGHT as 'Component Weight',round(round((1/t.conVal)*1000,2)-CO_WEIGHT,3) as 'Comp Scrap',round((CO_WEIGHT/round((1/t.conVal)*1000,2))*100,2) as 'Comp Yield (%)', CO_WIDTH as Width, CO_LENGTH as Thickness, CO_REVISION as Revision, gm_name as Grade ,\npl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron \nfrom components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n\tleft join \n\t\t(SELECT CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0 ) t on CT_COMPID= CO_ID\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' )",
+      "name": "Distinct Component Details",
+      "queryTemplate": "select distinct cu_name as 'Parent Customer', CO_PARTNO as 'Part_No', CO_PARTNAME as 'Part Name',CO_NoOfOp 'No of Operations', mt_name as 'Material', \nround((1/t.conVal)*1000,2) as 'Total Wt',\nCO_WEIGHT as 'Component Weight',round(round((1/t.conVal)*1000,2)-CO_WEIGHT,3) as 'Comp Scrap',round((CO_WEIGHT/round((1/t.conVal)*1000,2))*100,2) as 'Comp Yield (%)', CO_WIDTH as Width, CO_LENGTH as Thickness, CO_REVISION as Revision, gm_name as Grade ,\npl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron \nfrom components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n\tleft join \n\t\t(SELECT CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0 ) t on CT_COMPID= CO_ID\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' )",
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-02T06:48:58.562404+00:00",
-      "updatedAt": "2026-05-04T04:55:49.986589+00:00"
-    },
-    {
-      "id": "511a6c85-6b79-4b32-8ffb-4b64809c464c",
-      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Component PO Part No",
-      "queryTemplate": "SELECT CU_Name `Customer`,CO_PARTNO `Part No`,CO_PARTNAME `Part Name`,CO_CUSTPOPARTNO `Customer PO Part No`\nFROM components left join customer on CO_CUSTID = CU_ID where CO_ACTIVEYN = 'Y' and CU_Status= 'R'\norder by CU_Name",
-      "variables": [],
-      "pinned": false,
-      "createdAt": "2026-05-02T07:38:47.967840+00:00",
-      "updatedAt": "2026-05-04T04:55:00.160597+00:00"
+      "updatedAt": "2026-05-16T12:00:00.490801+00:00"
     },
     {
       "id": "e55b426d-2d1a-4dba-84eb-54ab01158ef2",
@@ -471,8 +441,7 @@
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-04T05:12:45.505127+00:00",
-      "updatedAt": "2026-05-15T11:05:50.665131+00:00",
-      "drilldowns": []
+      "updatedAt": "2026-05-15T11:05:50.665131+00:00"
     },
     {
       "id": "32175985-fe7d-4b17-8bcf-8d2035f0c20e",

@@ -135,7 +135,7 @@ def create_app() -> Flask:
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "reports", "reports-manage",
-        "admin", "dpr", "dispatch-calendar", "executive",
+        "admin", "dpr", "dispatch-calendar", "production-calendar", "executive",
     }
 
     @app.route("/app")
@@ -189,6 +189,7 @@ def create_app() -> Flask:
             "reports": "rept",
             "dpr": "rept",  # View access via reports
             "dispatch-calendar": "rept",
+            "production-calendar": "rept",
             "executive": "executive",
         }
 

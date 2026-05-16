@@ -7,8 +7,10 @@
 
   const TOTAL_QTY = 'Total Scheduled Qty';
   const TOTAL_DISPATCHED_QTY = 'Total Dispatched Qty';
+  const REMAINING_PRODUCTION = 'Remaining Production';
   const DISPATCHED_PCT = 'Dispatched %';
   const SG_LAYOUT_KEY = 'dispatch_calendar_v5';
+  const DEFAULT_ENDPOINT = '/api/dispatch-calendar';
 
   let _dcSg = null;
   let _dcTipEl = null;
@@ -19,6 +21,9 @@
   let _dcWeekFilter = 'full';
   let _dcLegendFilter = '';
   let _dcVisibleRows = [];
+  let _dcEndpoint = DEFAULT_ENDPOINT;
+  let _dcLayoutKey = SG_LAYOUT_KEY;
+  let _dcLoadFn = null;
 
   function normalizePartKey(partNo) {
     return String(partNo || '')
@@ -90,6 +95,50 @@
     const scheduled = cell ? toNum(cell.scheduledQty) : 0;
     const dispatched = cell ? toNum(cell.dispatched) : 0;
     const eps = 1e-9;
+
+    if (_dcLayoutKey === 'production_calendar_v2') {
+      let conVal = 0.0;
+      let rmName = 'N/A';
+      let rmAvailable = 0.0;
+      let cumRmAvailable = 0.0;
+      if (payload.rows && payload.rowMeta) {
+        for (let i = 0; i < payload.rows.length; i++) {
+          if (partNoFromRow(payload.rows[i]) === pk) {
+            const meta = payload.rowMeta[i];
+            if (meta && meta.partInfo) {
+              conVal = toNum(meta.partInfo.conVal);
+              rmName = meta.partInfo.rmName || 'N/A';
+              rmAvailable = toNum(meta.partInfo.rmAvailable);
+            }
+            if (meta && meta.cumRmAvailable) {
+              cumRmAvailable = toNum(meta.cumRmAvailable[dayStr]);
+            }
+            break;
+          }
+        }
+      }
+      let rmRequired = '0';
+      if (conVal > 0) {
+        rmRequired = fmtNum(scheduled / conVal);
+      }
+      return (
+        '<div class="ti-dc-stock-tip-inner">' +
+        '<div class="ti-dc-stock-tip-head">RM Requirement</div>' +
+        '<div class="ti-dc-stock-tip-rows">' +
+        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM</span>' +
+        '<strong class="ti-dc-stock-tip-val">' + escapeHtml(rmName) + '</strong></div>' +
+        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Production Qty</span>' +
+        '<strong class="ti-dc-stock-tip-val">' + fmtNum(scheduled) + '</strong></div>' +
+        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM Required</span>' +
+        '<strong class="ti-dc-stock-tip-val">' + rmRequired + '</strong></div>' +
+        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Total RM Available</span>' +
+        '<strong class="ti-dc-stock-tip-val">' + fmtNum(rmAvailable) + '</strong></div>' +
+        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Cum RM Available</span>' +
+        '<strong class="ti-dc-stock-tip-val">' + fmtNum(cumRmAvailable) + '</strong></div>' +
+        '</div></div>'
+      );
+    }
+
     let pctLabel = '–';
     if (scheduled > eps) {
       pctLabel = `${((dispatched / scheduled) * 100).toFixed(1)}%`;
@@ -535,6 +584,33 @@
       } else if (name === TOTAL_DISPATCHED_QTY) {
         col.width = 168;
         col.format = (raw) => (raw != null && raw !== '' ? fmtNum(raw) : '');
+      } else if (name === REMAINING_PRODUCTION) {
+        col.width = 180;
+        col.className = (raw, row) => (row._dcRowMeta ? 'ti-dc-total-cell' : '');
+        col.format = (raw, row) => {
+          const text = raw != null && raw !== '' ? fmtNum(raw) : '';
+          const meta = row._dcRowMeta;
+          if (!meta) return text;
+          let fg = meta.stockFg;
+          let wip = meta.stockWip;
+          if (meta.isGrandTotal && meta.grandTotalStock) {
+            fg = meta.grandTotalStock.stockFg;
+            wip = meta.grandTotalStock.stockWip;
+          }
+          return (
+            '<span class="ti-dc-remaining-pill" data-dc-scheduled="' +
+            String(row[TOTAL_QTY]) +
+            '" data-dc-dispatched="' +
+            String(row[TOTAL_DISPATCHED_QTY]) +
+            '" data-dc-fg="' +
+            String(fg) +
+            '" data-dc-wip="' +
+            String(wip) +
+            '">' +
+            text +
+            '</span>'
+          );
+        };
       } else if (name === DISPATCHED_PCT) {
         col.width = 132;
         col.format = (raw) => {
@@ -544,7 +620,23 @@
         };
       } else if (name && /^part\s*no$/i.test(String(name).trim())) {
         col.width = 220;
-        col.format = (raw) => escapeHtml(String(raw ?? ''));
+        col.format = (raw, row) => {
+          const text = escapeHtml(String(raw ?? ''));
+          const meta = row._dcRowMeta;
+          const info = meta && meta.partInfo;
+          if (!info || meta.isGrandTotal) return text;
+          return (
+            '<span class="ti-dc-part-pill" data-dc-lead-time="' +
+            escapeHtml(String(info.leadTime ?? '')) +
+            '" data-dc-operations="' +
+            escapeHtml(String(info.noOfOperations ?? '')) +
+            '" data-dc-tools="' +
+            escapeHtml(String(info.tools ?? '')) +
+            '">' +
+            text +
+            '</span>'
+          );
+        };
       } else {
         col.format = (raw) => (raw != null && raw !== '' ? fmtNum(raw) : '');
       }
@@ -591,7 +683,7 @@
         search: true,
         countLabel: 'rows',
         emptyText: 'No schedule rows for this month',
-        layoutKey: SG_LAYOUT_KEY,
+        layoutKey: _dcLayoutKey,
         resizable: true,
         pinnable: true,
         reorderable: true,
@@ -719,22 +811,67 @@
       if (_dcDayTipEl && document.body.contains(_dcDayTipEl)) {
         _dcDayTipEl.hidden = true;
       }
-      const fg = pill.dataset.dcFg;
-      const wip = pill.dataset.dcWip;
-      tip.innerHTML =
-        '<div class="ti-dc-stock-tip-inner">' +
-        '<div class="ti-dc-stock-tip-head">Stock availability</div>' +
-        '<div class="ti-dc-stock-tip-rows">' +
-        '<div class="ti-dc-stock-tip-row">' +
-        '<span class="ti-dc-stock-tip-label">FG (Stock)</span>' +
-        '<strong class="ti-dc-stock-tip-val">' +
-        fmtNum(fg) +
-        '</strong></div>' +
-        '<div class="ti-dc-stock-tip-row">' +
-        '<span class="ti-dc-stock-tip-label">WIP (other stages)</span>' +
-        '<strong class="ti-dc-stock-tip-val">' +
-        fmtNum(wip) +
-        '</strong></div></div></div>';
+      if (pill.classList.contains('ti-dc-part-pill')) {
+        tip.innerHTML =
+          '<div class="ti-dc-stock-tip-inner">' +
+          '<div class="ti-dc-stock-tip-head">Part details</div>' +
+          '<div class="ti-dc-stock-tip-rows">' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">Lead Time</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          escapeHtml(pill.dataset.dcLeadTime || '-') +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">No of Operations</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          escapeHtml(pill.dataset.dcOperations || '-') +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">Tool(s)</span>' +
+          '<strong class="ti-dc-stock-tip-val ti-dc-stock-tip-val--wrap">' +
+          escapeHtml(pill.dataset.dcTools || '-') +
+          '</strong></div></div></div>';
+      } else if (pill.classList.contains('ti-dc-remaining-pill')) {
+        tip.innerHTML =
+          '<div class="ti-dc-stock-tip-inner">' +
+          '<div class="ti-dc-stock-tip-head">Remaining production</div>' +
+          '<div class="ti-dc-stock-tip-rows">' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">Total Scheduled</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcScheduled) +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">Total Dispatched</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcDispatched) +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">FG (Stock)</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcFg) +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">WIP (other stages)</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcWip) +
+          '</strong></div></div></div>';
+      } else {
+        tip.innerHTML =
+          '<div class="ti-dc-stock-tip-inner">' +
+          '<div class="ti-dc-stock-tip-head">Stock availability</div>' +
+          '<div class="ti-dc-stock-tip-rows">' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">FG (Stock)</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcFg) +
+          '</strong></div>' +
+          '<div class="ti-dc-stock-tip-row">' +
+          '<span class="ti-dc-stock-tip-label">WIP (other stages)</span>' +
+          '<strong class="ti-dc-stock-tip-val">' +
+          fmtNum(pill.dataset.dcWip) +
+          '</strong></div></div></div>';
+      }
       tip.hidden = false;
       requestAnimationFrame(() => positionDcTip(pill, tip));
     }
@@ -742,7 +879,7 @@
     root.addEventListener(
       'mouseover',
       (e) => {
-        const pill = e.target.closest && e.target.closest('.ti-dc-total-pill');
+        const pill = e.target.closest && e.target.closest('.ti-dc-total-pill, .ti-dc-remaining-pill, .ti-dc-part-pill');
         if (!pill || !root.contains(pill)) return;
         showTipForPill(pill);
       },
@@ -752,7 +889,7 @@
     root.addEventListener(
       'mouseout',
       (e) => {
-        const from = e.target.closest && e.target.closest('.ti-dc-total-pill');
+        const from = e.target.closest && e.target.closest('.ti-dc-total-pill, .ti-dc-remaining-pill, .ti-dc-part-pill');
         if (!from || !root.contains(from)) return;
         const to = e.relatedTarget;
         if (to && from.contains(to)) return;
@@ -765,7 +902,7 @@
     root.addEventListener(
       'mousemove',
       (e) => {
-        const pill = e.target.closest && e.target.closest('.ti-dc-total-pill');
+        const pill = e.target.closest && e.target.closest('.ti-dc-total-pill, .ti-dc-remaining-pill, .ti-dc-part-pill');
         if (!pill || tip.hidden) return;
         requestAnimationFrame(() => positionDcTip(pill, tip));
       },
@@ -806,7 +943,7 @@
   }
 
   async function fetchPayload() {
-    const res = await fetch('/api/dispatch-calendar', { credentials: 'same-origin' });
+    const res = await fetch(_dcEndpoint || DEFAULT_ENDPOINT, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.message || data.error || 'Failed to load Dispatch Calendar');
@@ -858,9 +995,12 @@
   }
 
   const DispatchCalendarPage = {
-    init() {
+    init(options = {}) {
+      _dcEndpoint = options.endpoint || DEFAULT_ENDPOINT;
+      _dcLayoutKey = options.layoutKey || SG_LAYOUT_KEY;
       const root = document.getElementById('dispatch-calendar-root');
       const subtitle = document.getElementById('dispatch-calendar-subtitle');
+      const refreshBtn = document.getElementById('dispatch-calendar-refresh');
       const exportBtn = document.getElementById('dispatch-calendar-export');
       if (!root) return;
       bindLegendFilter(root);
@@ -904,9 +1044,14 @@
         }
       };
 
+      if (refreshBtn) refreshBtn.addEventListener('click', () => load());
       if (exportBtn) exportBtn.addEventListener('click', () => exportCalendarExcel(_lastPayload));
 
+      _dcLoadFn = load;
       load();
+    },
+    refresh() {
+      if (typeof _dcLoadFn === 'function') _dcLoadFn();
     },
   };
 

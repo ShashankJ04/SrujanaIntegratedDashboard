@@ -455,7 +455,7 @@ body {
   .rr-toolbar,
   .ti-reports-manage__intro,
   #maint-tabs.ti-tabs--maint,
-  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one, #section-production-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
     position: sticky;
     top: 0;
     z-index: 20;
@@ -554,7 +554,7 @@ body {
   }
 
   /* Dispatch controls stack with full visibility */
-  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+  #section-dispatch-calendar .ti-dc-toolbar-kpi, #section-production-calendar .ti-dc-toolbar-kpi {
     padding-top: 8px;
     padding-bottom: 8px;
   }
@@ -4596,16 +4596,15 @@ body.dpr-col-resizing {
   min-height: 0;
 }
 
-/* Reports runner readability + left alignment (numeric cols use .sg-r). */
+/* Reports runner — all columns left-aligned (including numeric totals). */
 .reports-runner .sg-table td,
 .reports-runner .sg-table th,
-.reports-runner .sg-table .sg-c {
-  text-align: left !important;
-}
-
+.reports-runner .sg-table .sg-c,
 .reports-runner .sg-table td.sg-r,
-.reports-runner .sg-table th.sg-r {
-  text-align: right !important;
+.reports-runner .sg-table th.sg-r,
+.reports-runner .sg-table tr.sg-sticky-bottom-row td,
+.reports-runner .sg-table tr.sg-sticky-bottom-row td.sg-r {
+  text-align: left !important;
 }
 
 .reports-runner .sg-table tr.sg-sticky-bottom-row td {
@@ -4613,10 +4612,6 @@ body.dpr-col-resizing {
   background: var(--ti-surface-3);
   border-top: 2px solid var(--ti-border);
   color: var(--ti-text-bright);
-}
-
-.reports-runner .sg-table tr.sg-sticky-bottom-row td.sg-r {
-  text-align: right !important;
 }
 
 .reports-runner .sg-table td {
@@ -6018,7 +6013,7 @@ body.sg-resizing {
 }
 
 /* ═══ Dispatch Calendar (section dispatch-calendar) ═══ */
-#section-dispatch-calendar.ti-hub-section-fill {
+#section-dispatch-calendar.ti-hub-section-fill, #section-production-calendar.ti-hub-section-fill {
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -6113,22 +6108,22 @@ body.sg-resizing {
 }
 
 /* Dispatch Calendar — KPI: strong weight + high-contrast (avoid pale --ti-text-dim on labels) */
-#section-dispatch-calendar .ti-dc-kpi-inline-title {
+#section-dispatch-calendar .ti-dc-kpi-inline-title, #section-production-calendar .ti-dc-kpi-inline-title {
   font-size: 11px;
   font-weight: 800;
   color: var(--ti-text-bright);
   letter-spacing: 0.05em;
 }
 
-#section-dispatch-calendar .ti-dc-kpi-inline-label {
+#section-dispatch-calendar .ti-dc-kpi-inline-label, #section-production-calendar .ti-dc-kpi-inline-label {
   font-size: 10px;
   font-weight: 800;
   color: var(--ti-text);
   letter-spacing: 0.04em;
 }
 
-#section-dispatch-calendar .ti-dc-kpi-inline-value,
-#section-dispatch-calendar .ti-dc-kpi-inline-value--success {
+#section-dispatch-calendar .ti-dc-kpi-inline-value,, #section-production-calendar .ti-dc-kpi-inline-value,
+#section-dispatch-calendar .ti-dc-kpi-inline-value--success, #section-production-calendar .ti-dc-kpi-inline-value--success {
   font-weight: 800;
 }
 
@@ -6156,7 +6151,7 @@ body.sg-resizing {
   align-items: center;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -6199,12 +6194,12 @@ body.sg-resizing {
     align-items: flex-start;
   }
 
-  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+  #section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one, #section-production-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
     flex-wrap: wrap;
     align-items: stretch;
   }
 
-  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+  #section-dispatch-calendar .ti-dc-toolbar-kpi, #section-production-calendar .ti-dc-toolbar-kpi {
     border-left: none;
     border-right: none;
     padding: 10px 0;
@@ -6216,12 +6211,12 @@ body.sg-resizing {
     min-width: 0;
   }
 
-  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
     order: 1;
     flex: 1 1 auto;
   }
 
-  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
     order: 3;
     flex: 0 0 auto;
     width: 100%;
@@ -6270,7 +6265,7 @@ body.sg-resizing {
 }
 
 /* Dispatch Calendar toolbar: full-width row — KPI grows; search fixed width; KPI type scales (container) */
-#section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
+#section-dispatch-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one, #section-production-calendar .ti-dc-toolbar.ti-dc-toolbar--all-in-one {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -6283,7 +6278,7 @@ body.sg-resizing {
   overflow: visible;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-left {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -6291,30 +6286,30 @@ body.sg-resizing {
   flex-wrap: nowrap;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-icon {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-icon, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-icon {
   font-size: 22px;
   line-height: 1;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-title {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-title, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-title {
   font-size: 17px;
   line-height: 1.15;
   font-weight: 800;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-subtitle {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-subtitle, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-subtitle {
   font-size: 13px;
   margin-top: 1px;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-mid {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-mid, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-mid {
   flex: 0 0 auto;
   min-width: 0;
   overflow: visible;
 }
 
 /* Legend: 2×2 grid (fits narrow band beside title) */
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend--grid2.ti-dc-legend--inline {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend--grid2.ti-dc-legend--inline, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend--grid2.ti-dc-legend--inline {
   display: grid;
   grid-template-columns: repeat(2, max-content);
   grid-template-rows: repeat(2, auto);
@@ -6326,7 +6321,7 @@ body.sg-resizing {
   overflow: visible;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend-item {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend-item, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-legend-item {
   gap: 6px;
   padding: 3px 5px;
   font-size: 13px;
@@ -6335,12 +6330,12 @@ body.sg-resizing {
   flex-shrink: 0;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-swatch {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-swatch, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-swatch {
   width: 13px;
   height: 13px;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
@@ -6353,7 +6348,7 @@ body.sg-resizing {
   container-name: dc-kpi;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-head {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-head, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-head {
   margin-bottom: 0;
   gap: 3px;
   column-gap: 6px;
@@ -6361,19 +6356,19 @@ body.sg-resizing {
   width: 100%;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-title {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-title, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-title {
   font-size: 9px;
   font-size: clamp(8px, 0.75cqi + 6px, 10px);
   line-height: 1.1;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
   font-size: 8px;
   font-size: clamp(7px, 0.85cqi + 5px, 9px);
   line-height: 1.15;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metrics {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metrics, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px min(10px, 2.5cqi);
@@ -6382,15 +6377,15 @@ body.sg-resizing {
   justify-items: start;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
   min-width: 0;
   gap: 2px;
   align-items: flex-start;
   text-align: left;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
   font-size: 12px;
   font-size: clamp(10px, 2.85cqi + 5px, 18px);
   font-weight: 800;
@@ -6401,7 +6396,7 @@ body.sg-resizing {
   max-width: none;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right {
   display: flex;
   flex: 0 0 auto;
   flex-shrink: 0;
@@ -6413,17 +6408,17 @@ body.sg-resizing {
   justify-content: flex-end;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count {
   min-width: 4.25rem;
   text-align: right;
   white-space: nowrap;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-select {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-select, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-select {
   min-width: 105px;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-search {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-search, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-search {
   flex: 0 0 auto;
   width: 180px;
   min-width: 160px;
@@ -6432,13 +6427,13 @@ body.sg-resizing {
   font-size: 12px;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-filter,
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count,
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-filter,, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-week-filter,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count,, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-count,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export, #section-production-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
   flex-shrink: 0;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export, #section-production-calendar .ti-dc-toolbar--all-in-one #dispatch-calendar-export {
   padding: 6px 10px;
   font-size: 12px;
 }
@@ -6644,17 +6639,17 @@ body.sg-resizing {
 }
 
 /* Single-row SuperGrid headers (default sg-hdr layout); slightly comfortable body text */
-#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td,
-#section-dispatch-calendar .sg-table.ti-dc-sg-table thead th {
+#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td,, #section-production-calendar .sg-table.ti-dc-sg-table tbody td,
+#section-dispatch-calendar .sg-table.ti-dc-sg-table thead th, #section-production-calendar .sg-table.ti-dc-sg-table thead th {
   text-align: left;
 }
 
-#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td {
+#section-dispatch-calendar .sg-table.ti-dc-sg-table tbody td, #section-production-calendar .sg-table.ti-dc-sg-table tbody td {
   font-size: 14px;
 }
 
 /* Left-align even if a column still has .sg-r from an older build */
-#section-dispatch-calendar .sg-table.ti-dc-sg-table td.sg-r {
+#section-dispatch-calendar .sg-table.ti-dc-sg-table td.sg-r, #section-production-calendar .sg-table.ti-dc-sg-table td.sg-r {
   text-align: left;
 }
 
@@ -6824,8 +6819,8 @@ body.sg-resizing {
   }
 
   /* Dispatch calendar */
-  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right,
-  #section-dispatch-calendar .ti-dc-toolbar-actions {
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right,, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-right,
+  #section-dispatch-calendar .ti-dc-toolbar-actions, #section-production-calendar .ti-dc-toolbar-actions {
     width: 100%;
     justify-content: flex-start;
   }
@@ -7119,7 +7114,7 @@ body.sg-resizing {
   .rr-toolbar,
   .ti-hub-inventory__toolbar,
   #maint-tabs,
-  #section-dispatch-calendar .ti-dc-toolbar {
+  #section-dispatch-calendar .ti-dc-toolbar, #section-production-calendar .ti-dc-toolbar {
     position: sticky !important;
     top: 0;
     z-index: 30;
@@ -7251,15 +7246,15 @@ body.sg-resizing {
   }
 
   /* Dispatch calendar */
-  #section-dispatch-calendar .ti-dc-toolbar--all-in-one {
+  #section-dispatch-calendar .ti-dc-toolbar--all-in-one, #section-production-calendar .ti-dc-toolbar--all-in-one {
     gap: 8px !important;
   }
-  #section-dispatch-calendar .ti-dc-toolbar-kpi {
+  #section-dispatch-calendar .ti-dc-toolbar-kpi, #section-production-calendar .ti-dc-toolbar-kpi {
     width: 100% !important;
     min-width: 0 !important;
   }
-  #section-dispatch-calendar .ti-dc-toolbar-right,
-  #section-dispatch-calendar .ti-dc-toolbar-actions {
+  #section-dispatch-calendar .ti-dc-toolbar-right,, #section-production-calendar .ti-dc-toolbar-right,
+  #section-dispatch-calendar .ti-dc-toolbar-actions, #section-production-calendar .ti-dc-toolbar-actions {
     width: 100% !important;
     justify-content: flex-start !important;
   }

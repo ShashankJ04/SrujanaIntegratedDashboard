@@ -1,0 +1,56 @@
+<!-- Production Calendar — toolbar layout matches Dispatch Calendar -->
+<section class="ti-section ti-hub-section-fill" data-section="production-calendar" id="section-production-calendar">
+  <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one">
+    <div class="ti-dc-toolbar-left">
+      <span class="ti-dc-icon">🏗️</span>
+      <div class="ti-dc-title-block">
+        <h2 class="ti-dc-title">Production Calendar</h2>
+        <p class="ti-dc-subtitle" id="dispatch-calendar-subtitle">Loading…</p>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-mid">
+      <div class="ti-dc-legend ti-dc-legend--inline ti-dc-legend--grid2" aria-label="Coverage legend">
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="ok" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Covered</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="partial" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Partially covered</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="short" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Shortage</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="dispatched" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--dispatched"></span> Dispatched</button>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-kpi" aria-label="Dispatch month to date">
+      <div class="ti-dc-kpi-inline-head">
+        <span class="ti-dc-kpi-inline-title">Dispatch</span>
+      </div>
+      <div class="ti-dc-kpi-inline-metrics">
+        <div class="ti-dc-kpi-inline-metric">
+          <span class="ti-dc-kpi-inline-label">Scheduled</span>
+          <span class="ti-dc-kpi-inline-value" id="dc-kpi-dispatch-total-so">–</span>
+        </div>
+        <div class="ti-dc-kpi-inline-metric">
+          <span class="ti-dc-kpi-inline-label">Dispatched</span>
+          <span class="ti-dc-kpi-inline-value ti-dc-kpi-inline-value--success" id="dc-kpi-dispatch-qty">–</span>
+        </div>
+        <div class="ti-dc-kpi-inline-metric">
+          <span class="ti-dc-kpi-inline-label">Percentage</span>
+          <span class="ti-dc-kpi-inline-value" id="dc-kpi-dispatch-pct">–</span>
+        </div>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-right ti-dc-toolbar-actions">
+      <div class="ti-dc-week-filter" role="group" aria-label="Visible days">
+        <span class="ti-dc-week-filter-label" id="dispatch-calendar-week-lbl">Days</span>
+        <select id="dispatch-calendar-week" class="ti-select ti-select--compact ti-dc-week-select" aria-labelledby="dispatch-calendar-week-lbl">
+          <option value="full">Full month</option>
+          <option value="this_week">This week</option>
+          <option value="next_week">Next week</option>
+        </select>
+      </div>
+      <span id="dispatch-calendar-count" class="ti-dc-toolbar-count sg-count" aria-live="polite"></span>
+      <input type="search" id="dispatch-calendar-search" class="ti-input sg-search ti-dc-toolbar-search" placeholder="Search all columns…" autocomplete="off" />
+      <button type="button" id="dispatch-calendar-refresh" class="ti-btn ti-btn-outline ti-btn-sm" title="Reload current month">Refresh</button>
+    </div>
+  </div>
+
+  <div id="dispatch-calendar-root" class="ti-dc-scroll-wrap">
+    <div class="ti-dc-loading"><div class="ti-spinner"></div><span>Loading…</span></div>
+  </div>
+</section>

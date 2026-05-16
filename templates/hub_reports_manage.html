@@ -85,8 +85,31 @@
 
 <script>
 (function() {
+  const RPT_MANAGE_GROUP_KEY = 'hub_reports_manage_group_id';
   let groups = [], reports = [], allReports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
   let drilldownDraft = [];
+
+  function readStoredGroupId() {
+    try {
+      return localStorage.getItem(RPT_MANAGE_GROUP_KEY) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function persistSelectedGroupId(id) {
+    try {
+      if (id) localStorage.setItem(RPT_MANAGE_GROUP_KEY, id);
+      else localStorage.removeItem(RPT_MANAGE_GROUP_KEY);
+    } catch { /* private mode / quota */ }
+  }
+
+  function selectGroup(id) {
+    selectedGroupId = id || null;
+    persistSelectedGroupId(selectedGroupId);
+    renderGroups();
+    loadReports();
+  }
 
   function openModal(id) { document.getElementById(id).classList.add('open'); }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -109,8 +132,16 @@
   async function loadGroups() {
     groups = await apiFetch('/api/reports/groups');
     allReports = await apiFetch('/api/reports/reports');
+    if (selectedGroupId && !groups.some(g => g.id === selectedGroupId)) {
+      selectedGroupId = null;
+    }
+    if (!selectedGroupId) {
+      const stored = readStoredGroupId();
+      if (stored && groups.some(g => g.id === stored)) selectedGroupId = stored;
+      else if (groups.length) selectedGroupId = groups[0].id;
+    }
+    persistSelectedGroupId(selectedGroupId);
     renderGroups();
-    if (!selectedGroupId && groups.length) selectedGroupId = groups[0].id;
     if (selectedGroupId) await loadReports();
     if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
   }
@@ -123,7 +154,7 @@
       div.style.cssText = 'display:flex;align-items:center;padding:8px 12px;border-radius:8px;cursor:pointer;gap:8px;transition:background 0.15s';
       if (g.id === selectedGroupId) div.style.background = 'var(--ti-blue-soft)';
       div.innerHTML = `<span style="flex:1;font-size:13px;font-weight:${g.id === selectedGroupId ? '600' : '500'};color:${g.id === selectedGroupId ? 'var(--ti-blue)' : 'var(--ti-text)'}">${g.name}</span><button class="ti-btn-icon" title="Delete" style="font-size:12px;color:var(--ti-red)">🗑️</button>`;
-      div.querySelector('span').addEventListener('click', () => { selectedGroupId = g.id; renderGroups(); loadReports(); });
+      div.querySelector('span').addEventListener('click', () => selectGroup(g.id));
       div.querySelector('button').addEventListener('click', e => {
         e.stopPropagation();
         deleteAction = { type: 'group', id: g.id, name: g.name };
@@ -352,6 +383,7 @@
     try {
       const g = await apiPost('/api/reports/groups', { name });
       selectedGroupId = g.id;
+      persistSelectedGroupId(g.id);
       closeModal('rptGroupModal');
       loadGroups();
     } catch (e) { showSnackbar(e.message); }
@@ -405,7 +437,10 @@
     try {
       if (deleteAction.type === 'group') {
         await apiDelete('/api/reports/groups/' + deleteAction.id);
-        if (selectedGroupId === deleteAction.id) selectedGroupId = null;
+        if (selectedGroupId === deleteAction.id) {
+          selectedGroupId = null;
+          persistSelectedGroupId(null);
+        }
         loadGroups();
       } else {
         await apiDelete('/api/reports/reports/' + deleteAction.id);

@@ -156,6 +156,7 @@ const Hub = (() => {
     'rm-correction':{ title: 'RM Correction', icon: '✏️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
     'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
+    'production-calendar': { title: 'Production Calendar', icon: '🏗️' },
     executive:   { title: 'Executive View',  icon: '🎯' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
@@ -173,6 +174,7 @@ const Hub = (() => {
     if (section === 'production') return ACCESS.has('production');
     if (section === 'dpr') return ACCESS.has('rept');
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
+    if (section === 'production-calendar') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
@@ -507,6 +509,10 @@ const Hub = (() => {
 
       if (section === 'dispatch-calendar' && typeof window.DispatchCalendarPage?.init === 'function') {
         window.DispatchCalendarPage.init();
+      }
+
+      if (section === 'production-calendar' && typeof window.ProductionCalendarPage?.init === 'function') {
+        window.ProductionCalendarPage.init();
       }
 
       if (section === 'reports') {

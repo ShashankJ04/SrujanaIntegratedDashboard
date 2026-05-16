@@ -150,7 +150,7 @@
   }
 
   /**
-   * Identifiers like part numbers are often numeric strings; they must not use Indian grouping.
+   * Part No / Component identifier columns — often numeric strings; must not use Indian grouping.
    * Matches common report column names (labels + SQL-style keys).
    */
   function isPartNumberColumnName(columnKey) {
@@ -167,10 +167,47 @@
     return false;
   }
 
+  function isComponentIdentifierColumnName(columnKey) {
+    const raw = String(columnKey || '').trim();
+    if (!raw) return false;
+    const key = raw.toLowerCase();
+    const compact = key.replace(/\s+/g, '');
+    const under = key.replace(/\s+/g, '_');
+    if (/\bcomponent\s+count\b/i.test(key)) return false;
+    if (/\bcomponent\s+weight\b/i.test(key)) return false;
+    if (/\bno\s+of\s+comp\b/i.test(key)) return false;
+    if (compact === 'component') return true;
+    if (/^component\d+$/i.test(compact)) return true;
+    if (compact === 'compno' || under === 'comp_no' || under === 'co_compid') return true;
+    if (/^(co_)?comp(ponent)?_?id$/i.test(under)) return true;
+    if (/\bcomponent\s*no\.?\b/i.test(key)) return true;
+    if (/\bcomponent\s+number\b/i.test(key)) return true;
+    return false;
+  }
+
+  function isIdentifierColumnName(columnKey) {
+    return isPartNumberColumnName(columnKey) || isComponentIdentifierColumnName(columnKey);
+  }
+
+  /**
+   * Codes stored as numeric strings (e.g. 08124) must not pass through Number() —
+   * that drops leading zeros and Indian grouping shows 8,124 instead of 08124.
+   */
+  function isLiteralNumericIdentifier(value) {
+    if (value === null || value === undefined || value === '') return false;
+    const s = String(value).trim();
+    if (/^-?\d+$/.test(s) && s !== String(Number(s))) return true;
+    if (/^0\d/.test(s)) return true;
+    return false;
+  }
+
   function formatIndianValue(value, columnKey) {
     if (value === null || value === undefined || value === '') return '';
-    if (columnKey && isPartNumberColumnName(columnKey)) {
+    if (columnKey && isIdentifierColumnName(columnKey)) {
       return String(value);
+    }
+    if (isLiteralNumericIdentifier(value)) {
+      return String(value).trim();
     }
     const n = Number(value);
     if (!Number.isNaN(n) && String(value).trim() !== '') {
@@ -180,7 +217,8 @@
   }
 
   function isNumericForTotal(value, columnKey) {
-    if (columnKey && isPartNumberColumnName(columnKey)) return false;
+    if (columnKey && isIdentifierColumnName(columnKey)) return false;
+    if (isLiteralNumericIdentifier(value)) return false;
     if (value === null || value === undefined || value === '') return false;
     const n = Number(value);
     return !Number.isNaN(n) && String(value).trim() !== '';
@@ -188,7 +226,7 @@
 
   /** Sum a column only when every non-empty cell is numeric (skips blanks). */
   function columnIsSummable(columnKey, dataRows) {
-    if (isPartNumberColumnName(columnKey)) return false;
+    if (isIdentifierColumnName(columnKey)) return false;
     let nonEmpty = 0;
     let numeric = 0;
     dataRows.forEach(function(r) {
@@ -294,8 +332,7 @@
 
   function withDrilldownFormatters(report, resultRows, columns) {
     return columns.map(function(c) {
-      const summable = columnIsSummable(c, resultRows || []);
-      const align = summable ? 'right' : 'left';
+      const align = 'left';
       const drilldowns = getDrilldownsForColumn(report, c);
       if (!drilldowns.length) {
         return {

@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, g, jsonify, request, send_file, url_fo
 
 from .auth import api_login_required, is_dpr_editor
 from .dispatch_calendar import build_dispatch_calendar_payload
+from .production_calendar import build_production_calendar_payload
 from .rbac import require_access
 from .export import generate_excel_response
 from .db import execute, fetch_one
@@ -581,6 +582,24 @@ def api_dispatch_calendar() -> Any:
         year = t.year
     try:
         payload = build_dispatch_calendar_payload(month, year)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    return jsonify(payload)
+
+
+@api_bp.get("/production-calendar")
+@require_access("rept")
+def api_production_calendar() -> Any:
+    """Monthly production readiness calendar for the Hub section."""
+    t = date.today()
+    month = _parse_int("month", t.month)
+    year = _parse_int("year", t.year)
+    if month < 1 or month > 12:
+        month = t.month
+    if year < 1900 or year > 2100:
+        year = t.year
+    try:
+        payload = build_production_calendar_payload(month, year)
     except ValueError as e:
         return jsonify({"message": str(e)}), 400
     return jsonify(payload)
