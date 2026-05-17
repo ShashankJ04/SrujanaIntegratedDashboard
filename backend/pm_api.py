@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 import threading
 import time
 from typing import Optional
@@ -23,6 +23,21 @@ from . import pm_store
 pm_bp = Blueprint("pm_bp", __name__, url_prefix="/api/pm")
 _PM_STATUS_CACHE_LOCK = threading.Lock()
 _PM_STATUS_CACHE = {}
+
+
+def _parse_maintenance_date(raw: Optional[str], required: bool = False) -> Optional[date]:
+    value = (raw or "").strip()
+    if not value:
+        if required:
+            raise ValueError("maintenanceDate is required")
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as e:
+        raise ValueError("Invalid date format. Expected YYYY-MM-DD") from e
+    if parsed > datetime.utcnow().date():
+        raise ValueError("maintenanceDate cannot be in the future")
+    return parsed
 
 # ── Aggregated: one row per tool (tool_life + latest PM + MAX strokes across parts).
 # Core query matches git branch StableVersion1.7 backend/pm_api pm_status SQL.
@@ -478,7 +493,12 @@ def update_entry(tool_id):
 @require_access("preventive_maintenance")
 def stroke_info(tool_id):
     try:
-        info = pm_store.get_stroke_info(tool_id)
+        as_of = _parse_maintenance_date(request.args.get("date"))
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+
+    try:
+        info = pm_store.get_stroke_info(tool_id, as_of)
         return jsonify(info)
     except ValueError as e:
         return jsonify({"message": str(e)}), 404
@@ -496,6 +516,15 @@ def confirm_maintenance(tool_id):
     if next_stroke is None:
         return jsonify({"message": "nextStroke is required"}), 400
 
+    maintenance_raw = request.form.get("maintenanceDate")
+    if not maintenance_raw:
+        data = request.get_json(force=True, silent=True) or {}
+        maintenance_raw = data.get("maintenanceDate")
+    try:
+        maintenance_date = _parse_maintenance_date(maintenance_raw, required=True)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+
     attachment_name = None
     if "attachment" in request.files:
         f = request.files["attachment"]
@@ -507,7 +536,12 @@ def confirm_maintenance(tool_id):
             attachment_name = f"/api/pm/attachment/{safe_name}"
 
     try:
-        entry = pm_store.confirm_maintenance(tool_id, next_stroke, attachment_name)
+        entry = pm_store.confirm_maintenance(
+            tool_id,
+            next_stroke,
+            attachment_name,
+            maintenance_date=maintenance_date,
+        )
         _invalidate_pm_status_cache()
         return jsonify(entry)
     except ValueError as e:

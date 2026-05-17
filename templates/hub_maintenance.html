@@ -158,6 +158,7 @@
     <div class="ti-modal-header"><h3>Confirm Maintenance</h3></div>
     <div class="ti-modal-body">
       <p style="font-size:13px;color:var(--ti-text-muted)">Confirm maintenance for tool <strong id="pmConfirmToolNo"></strong></p>
+      <div><label class="ti-form-label">Maintenance Date</label><input type="date" class="ti-input" id="pmConfirmDate" required style="width:100%"></div>
       <div><label class="ti-form-label">Current Stroke</label><input type="text" class="ti-input" id="pmConfirmCurrent" disabled style="width:100%"></div>
       <div><label class="ti-form-label">Next PM Stroke</label><input type="number" class="ti-input" id="pmConfirmNext" style="width:100%"></div>
       <div><label class="ti-form-label">PM Sheet Attachment</label><input type="file" id="pmConfirmFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="color:var(--ti-text-muted);font-size:12px"></div>
@@ -415,6 +416,22 @@ var _pmSearchFilter='', _pmThresholdFilter='all';
 var _pmVisibleToolNos=[];
 var _pmSelectedAddTool=null, _pmEditToolId=null, _pmConfirmEntry=null, _pmDeleteToolId=null;
 
+function pmTodayIso() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+async function pmRefreshConfirmStroke(toolId, dateStr) {
+  try {
+    const qs = dateStr ? ('?date=' + encodeURIComponent(dateStr)) : '';
+    const info = await apiFetch('/api/pm/' + toolId + '/stroke-info' + qs);
+    document.getElementById('pmConfirmCurrent').value = formatIndianNumber(info.currentStroke);
+    document.getElementById('pmConfirmNext').value = info.suggestedNextStroke;
+  } catch {}
+}
+
 async function loadPmData() {
   document.getElementById('pmLoading').style.display='flex';
   try {
@@ -544,7 +561,16 @@ function renderPmTable() {
     } else if (btn.hasAttribute('data-delete')) {
       _pmDeleteToolId=parseInt(btn.getAttribute('data-delete')); const e=_pmEntries.find(x=>x.toolId===_pmDeleteToolId); document.getElementById('pmDeleteToolNo').textContent=e?e.toolNo:_pmDeleteToolId; openPmModal('pmDeleteModal');
     } else if (btn.hasAttribute('data-confirm')) {
-      const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value=''; openPmModal('pmConfirmModal'); try{const info=await apiFetch('/api/pm/'+id+'/stroke-info'); document.getElementById('pmConfirmCurrent').value=formatIndianNumber(info.currentStroke); document.getElementById('pmConfirmNext').value=info.suggestedNextStroke;}catch{}
+      const id=parseInt(btn.getAttribute('data-confirm')); const e=_pmEntries.find(x=>x.toolId===id); if(!e)return; _pmConfirmEntry=e; document.getElementById('pmConfirmToolNo').textContent=e.toolNo; document.getElementById('pmConfirmFile').value='';
+      const dateEl = document.getElementById('pmConfirmDate');
+      const today = pmTodayIso();
+      if (dateEl) {
+        dateEl.max = today;
+        dateEl.value = today;
+      }
+      openPmModal('pmConfirmModal');
+      const dateVal = dateEl ? dateEl.value : '';
+      await pmRefreshConfirmStroke(id, dateVal);
     } else if (btn.hasAttribute('data-configure')) {
       const toolNo = btn.getAttribute('data-configure');
       const tool = _pmAllTools.find(t => t.toolNo === toolNo);
@@ -578,7 +604,8 @@ document.getElementById('pmExportBtn').addEventListener('click',()=>{
 document.getElementById('pmAddPmStrokes').addEventListener('input',()=>{if(_pmSelectedAddTool){const cur=parseInt((document.getElementById('pmAddCurrent').value||'').replace(/,/g,''))||0;const ps=parseInt(document.getElementById('pmAddPmStrokes').value)||0;document.getElementById('pmAddNext').value=cur+ps;}});
 document.getElementById('pmAddSubmit').addEventListener('click',async()=>{if(!_pmSelectedAddTool)return;try{await apiPost('/api/pm/',{toolId:_pmSelectedAddTool.id,toolNo:_pmSelectedAddTool.toolNo,toolLife:parseInt(document.getElementById('pmAddLife').value),spm:parseInt(document.getElementById('pmAddSpm').value),pmStrokes:parseInt(document.getElementById('pmAddPmStrokes').value),nextStroke:parseInt(document.getElementById('pmAddNext').value)});closePmModal('pmAddModal');loadPmData();}catch(e){showSnackbar(e.message);}});
 document.getElementById('pmEditSubmit').addEventListener('click',async()=>{try{await apiPatch('/api/pm/'+_pmEditToolId,{toolLife:parseInt(document.getElementById('pmEditLife').value),spm:parseInt(document.getElementById('pmEditSpm').value),pmStrokes:parseInt(document.getElementById('pmEditPmStrokes').value)});closePmModal('pmEditModal');loadPmData();}catch(e){showSnackbar(e.message);}});
-document.getElementById('pmConfirmSubmit').addEventListener('click',async()=>{if(!_pmConfirmEntry)return;const fd=new FormData();fd.append('nextStroke',document.getElementById('pmConfirmNext').value);const f=document.getElementById('pmConfirmFile');if(f.files.length)fd.append('attachment',f.files[0]);try{await apiPostForm('/api/pm/'+_pmConfirmEntry.toolId+'/confirm',fd);closePmModal('pmConfirmModal');loadPmData();}catch(e){showSnackbar(e.message);}});
+document.getElementById('pmConfirmDate').addEventListener('change',async(e)=>{if(!_pmConfirmEntry)return;const v=e.target.value; if (!v) return; await pmRefreshConfirmStroke(_pmConfirmEntry.toolId, v);});
+document.getElementById('pmConfirmSubmit').addEventListener('click',async()=>{if(!_pmConfirmEntry)return;const dateVal=document.getElementById('pmConfirmDate').value; if(!dateVal){showSnackbar('Please select maintenance date');return;}const fd=new FormData();fd.append('maintenanceDate',dateVal);fd.append('nextStroke',document.getElementById('pmConfirmNext').value);const f=document.getElementById('pmConfirmFile');if(f.files.length)fd.append('attachment',f.files[0]);try{await apiPostForm('/api/pm/'+_pmConfirmEntry.toolId+'/confirm',fd);closePmModal('pmConfirmModal');loadPmData();}catch(e){showSnackbar(e.message);}});
 document.getElementById('pmDeleteSubmit').addEventListener('click',async()=>{try{await apiDelete('/api/pm/'+_pmDeleteToolId);closePmModal('pmDeleteModal');loadPmData();}catch(e){showSnackbar(e.message);}});
 
 // ══════════════════════════════════════════════════════════════════════

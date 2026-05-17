@@ -7,7 +7,7 @@ helpers (fetch_all, fetch_one, execute) with raw SQL.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, unquote
 
@@ -57,6 +57,26 @@ def _get_tool_strokes_by_tool_no(tool_no: str) -> int:
         ) comp
         """,
         (tool_no,),
+    )
+    return int(row["totalQty"]) if row else 0
+
+
+def _get_tool_strokes_by_tool_no_as_of(tool_no: str, as_of_date: date) -> int:
+    row = fetch_one(
+        """
+        SELECT COALESCE(MAX(comp.componentStrokes), 0) AS totalQty
+        FROM (
+            SELECT
+                ct.CT_COMPID,
+                SUM(pd.PD_PRODQTY / GREATEST(COALESCE(ct.CT_NO_OF_CAVITY, 1), 1)) AS componentStrokes
+            FROM production_details pd
+            INNER JOIN components_tool ct ON ct.CT_ID = pd.PD_TOOLID
+            WHERE ct.CT_TOOLNO = %s
+              AND DATE(pd.PD_DATE) <= %s
+            GROUP BY ct.CT_COMPID
+        ) comp
+        """,
+        (tool_no, as_of_date.isoformat()),
     )
     return int(row["totalQty"]) if row else 0
 
@@ -226,15 +246,17 @@ def update_entry(
     return entry
 
 
-def get_tool_strokes(tool_id: int) -> int:
+def get_tool_strokes(tool_id: int, as_of_date: Optional[date] = None) -> int:
     """Get total strokes for any tool from production_details."""
     tool_no = _resolve_tool_number(tool_id)
     if not tool_no:
         return 0
+    if as_of_date is not None:
+        return _get_tool_strokes_by_tool_no_as_of(tool_no, as_of_date)
     return _get_tool_strokes_by_tool_no(tool_no)
 
 
-def get_stroke_info(tool_id: int) -> Dict[str, int]:
+def get_stroke_info(tool_id: int, as_of_date: Optional[date] = None) -> Dict[str, int]:
     """Get current total strokes and suggested next PM stroke."""
     row = fetch_one(
         "SELECT * FROM tool_life WHERE TL_tool_id = %s",
@@ -243,7 +265,7 @@ def get_stroke_info(tool_id: int) -> Dict[str, int]:
     if not row:
         raise ValueError(f"Tool ID {tool_id} not found")
 
-    current_stroke = get_tool_strokes(tool_id)
+    current_stroke = get_tool_strokes(tool_id, as_of_date)
     suggested = current_stroke + int(row["TL_preventive_maintenance_strokes"])
     return {"currentStroke": current_stroke, "suggestedNextStroke": suggested}
 
@@ -252,6 +274,7 @@ def confirm_maintenance(
     tool_id: int,
     next_stroke: int,
     attachment: Optional[str] = None,
+    maintenance_date: Optional[date] = None,
 ) -> Dict[str, Any]:
     """Record a maintenance event."""
     row = fetch_one(
@@ -261,8 +284,16 @@ def confirm_maintenance(
     if not row:
         raise ValueError(f"Tool ID {tool_id} not found")
 
-    current_stroke = get_tool_strokes(tool_id)
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    if maintenance_date is None:
+        maintenance_date = datetime.now(timezone.utc).date()
+
+    current_stroke = get_tool_strokes(tool_id, maintenance_date)
+    now_str = datetime(
+        maintenance_date.year,
+        maintenance_date.month,
+        maintenance_date.day,
+        tzinfo=timezone.utc,
+    ).strftime("%Y-%m-%d %H:%M:%S")
 
     execute(
         """
