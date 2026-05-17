@@ -193,6 +193,8 @@
 
 <script>
 // ── Tab switching ─────────────────────────────────────────────────────
+window._pmLoaded = false;
+window._lifeLoaded = false;
 (function() {
   const access = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
   const tabAccessMap = { tools: 'tools', pm: 'preventive_maintenance', life: 'life_report' };
@@ -433,7 +435,8 @@ async function pmRefreshConfirmStroke(toolId, dateStr) {
 }
 
 async function loadPmData() {
-  document.getElementById('pmLoading').style.display='flex';
+  const loader = document.getElementById('pmLoading');
+  if (loader) loader.style.display='flex';
   try {
     [_pmEntries, _pmAllTools, _pmStatusAll] = await Promise.all([
       apiFetch('/api/pm/'),
@@ -441,8 +444,11 @@ async function loadPmData() {
       apiFetch('/api/pm/status?mode=all'),
     ]);
     renderPmTable();
-  } catch(err) { showSnackbar(err.message); }
-  document.getElementById('pmLoading').style.display='none';
+  } catch(err) {
+    showSnackbar(err.message || 'Failed to load PM data');
+  } finally {
+    if (loader) loader.style.display='none';
+  }
 }
 
 function getPmEntryByToolNo(toolNo) {
