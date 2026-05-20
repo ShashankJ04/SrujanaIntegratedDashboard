@@ -1719,6 +1719,19 @@ def fetch_dpr_machine_by_qr_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+# Synthetic DPR part numbers (not in components) for new-product lines.
+_DPR_NPD_PARTS: Tuple[Tuple[str, str], ...] = (
+    ("NPD-001", "New Product Development"),
+    ("NPD-002", "New Product Development"),
+    ("NPD-003", "New Product Development"),
+    ("NPD-004", "New Product Development"),
+)
+# Former NPD-XXX picklist slot (now NPD-004); keep name resolution for existing DPR rows.
+_DPR_NPD_LEGACY_PART_NAMES: Dict[str, str] = {
+    "NPD-XXX": "New Product Development",
+}
+
+
 def get_dpr_part_options(limit: int = 8000) -> List[Dict[str, str]]:
     """Distinct active components for Part No picklist."""
     sql = """
@@ -1738,10 +1751,12 @@ def get_dpr_part_options(limit: int = 8000) -> List[Dict[str, str]]:
         for r in rows
         if r.get("part_no")
     ]
-    npd_part = {"part_no": "NPD-XXX", "part_name": "New Product Development"}
-    if not any(str(x.get("part_no") or "").strip().lower() == "npd-xxx" for x in out):
-        out.append(npd_part)
-        out.sort(key=lambda x: str(x.get("part_no") or "").strip().lower())
+    existing = {str(x.get("part_no") or "").strip().lower() for x in out}
+    for part_no, part_name in _DPR_NPD_PARTS:
+        if part_no.lower() not in existing:
+            out.append({"part_no": part_no, "part_name": part_name})
+            existing.add(part_no.lower())
+    out.sort(key=lambda x: str(x.get("part_no") or "").strip().lower())
     return out
 
 
@@ -2029,7 +2044,10 @@ def _dpr_part_name_map(part_nos: Sequence[str]) -> Dict[str, str]:
     """
     rows = fetch_all(sql, tuple(uniq))
     out = {str(r["part_no"]).strip(): str(r["part_name"] or "").strip() for r in rows}
-    out.setdefault("NPD-XXX", "New Product Development")
+    for part_no, part_name in _DPR_NPD_PARTS:
+        out.setdefault(part_no, part_name)
+    for part_no, part_name in _DPR_NPD_LEGACY_PART_NAMES.items():
+        out.setdefault(part_no, part_name)
     return out
 
 
@@ -2048,6 +2066,42 @@ def _dpr_produced_percent(planned: float, produced: Optional[float]) -> Optional
     except (TypeError, ValueError):
         return None
     return round(100.0 * q / p, 2)
+
+
+def _dpr_iso_datetime(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _dpr_row_created_sort_key(created_at: Any, row_id: Any) -> Tuple[int, int]:
+    """Sort key for DPR lines: earliest created first; stable tie-break by id."""
+    ts = 0
+    if created_at is not None:
+        if isinstance(created_at, datetime):
+            ts = int(created_at.timestamp())
+        elif hasattr(created_at, "timestamp"):
+            ts = int(created_at.timestamp())
+        else:
+            raw = str(created_at).strip().replace("Z", "+00:00")
+            if raw:
+                try:
+                    ts = int(datetime.fromisoformat(raw[:26]).timestamp())
+                except (TypeError, ValueError):
+                    ts = 0
+    try:
+        rid = int(row_id or 0)
+    except (TypeError, ValueError):
+        rid = 0
+    if ts <= 0 and rid <= 0:
+        return (2_147_483_647, 0)
+    if ts <= 0:
+        return (rid, rid)
+    return (ts, rid)
 
 
 def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
@@ -2090,6 +2144,7 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
         produced_raw = r.get("produced_qty")
         produced_val = None if produced_raw is None else float(produced_raw)
         pct = _dpr_produced_percent(pq, produced_val)
+        created_raw = r.get("created_at")
         enriched.append(
             {
                 "id": r["id"],
@@ -2110,13 +2165,14 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
                 "strokesConsumed": derived.get("strokesConsumed"),
                 "pmDue": derived.get("pmDue"),
                 "remarks": r.get("remarks") or "",
+                "createdAt": _dpr_iso_datetime(created_raw),
             }
         )
     enriched.sort(
         key=lambda r: (
             str(r.get("machineLabel") or "").strip().lower(),
             str(r.get("machineId") or "").strip().lower(),
-            str(r.get("partNo") or "").strip().lower(),
+            _dpr_row_created_sort_key(r.get("createdAt"), r.get("id")),
         )
     )
     return enriched
@@ -2132,6 +2188,9 @@ def get_machine_dpr_payload(qr_token: str, review_date: str) -> Optional[Dict[st
     label = machines.get(mid, mid)
     all_rows = list_dpr_rows(review_date)
     machine_rows = [r for r in all_rows if str(r.get("machineId") or "") == mid]
+    machine_rows.sort(
+        key=lambda r: _dpr_row_created_sort_key(r.get("createdAt"), r.get("id"))
+    )
     out_rows: List[Dict[str, Any]] = []
     for r in machine_rows:
         out_rows.append(

@@ -477,6 +477,28 @@ window.DprPage = (() => {
     }
   }
 
+  /** Earliest created first within a machine; new unsaved lines last. */
+  function createdSortKey(row) {
+    const raw = row.createdAt || row.created_at || "";
+    if (raw) {
+      const t = Date.parse(String(raw).trim().replace(" ", "T"));
+      if (!Number.isNaN(t)) {
+        const id = Number(row.id);
+        return [t, Number.isFinite(id) ? id : 0];
+      }
+    }
+    const id = Number(row.id);
+    if (Number.isFinite(id) && id > 0) return [id, id];
+    return [Number.MAX_SAFE_INTEGER, 0];
+  }
+
+  function compareCreatedSort(a, b) {
+    const ca = createdSortKey(a);
+    const cb = createdSortKey(b);
+    if (ca[0] !== cb[0]) return ca[0] - cb[0];
+    return ca[1] - cb[1];
+  }
+
   function sortPendingRowsByMachine() {
     const labelById = new Map(machines.map((m) => [String(m.id), String(m.label || m.id)]));
     pendingRows.sort((a, b) => {
@@ -487,9 +509,7 @@ window.DprPage = (() => {
         .trim()
         .toLowerCase();
       if (al !== bl) return al.localeCompare(bl);
-      const ap = String(a.partNo || "").trim().toLowerCase();
-      const bp = String(b.partNo || "").trim().toLowerCase();
-      return ap.localeCompare(bp);
+      return compareCreatedSort(a, b);
     });
   }
 
@@ -557,7 +577,9 @@ window.DprPage = (() => {
         const sb = String(vb);
         if (sa !== sb) return dir * sa.localeCompare(sb);
       }
-      return sortValueForColumn(a, "machine").localeCompare(sortValueForColumn(b, "machine"));
+      const ma = sortValueForColumn(a, "machine").localeCompare(sortValueForColumn(b, "machine"));
+      if (ma !== 0) return ma;
+      return compareCreatedSort(a, b);
     });
   }
 
@@ -873,9 +895,7 @@ window.DprPage = (() => {
         .trim()
         .toLowerCase();
       if (al !== bl) return al.localeCompare(bl);
-      const ap = String(a.partNo || "").trim().toLowerCase();
-      const bp = String(b.partNo || "").trim().toLowerCase();
-      return ap.localeCompare(bp);
+      return compareCreatedSort(a, b);
     });
     return combined;
   }
