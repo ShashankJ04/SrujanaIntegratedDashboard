@@ -320,6 +320,18 @@ def _matches_global_search(
     return False
 
 
+def _dashboard_row_sort_key(val: Any) -> Tuple[int, Any]:
+    """Sort key for mixed-type dashboard cells: numbers, then text, then empty/null."""
+    if val is None or val == "":
+        return (2, "")
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return (0, float(val))
+    try:
+        return (0, float(val))
+    except (TypeError, ValueError):
+        return (1, str(val).lower())
+
+
 def get_rows(
     page: int,
     page_size: int,
@@ -613,17 +625,10 @@ def get_dashboard_base_rows(
         if sort_by in col_names:
             direction = -1 if (sort_dir or "").lower() == "desc" else 1
 
-            def sort_key(row: Dict[str, Any]) -> Any:
-                val = row.get(sort_by)
-                if val is None:
-                    return (1, None)
-                try:
-                    num = float(val)
-                    return (0, num)
-                except (TypeError, ValueError):
-                    return (0, str(val).lower())
-
-            working_rows.sort(key=sort_key, reverse=direction < 0)
+            working_rows.sort(
+                key=lambda row: _dashboard_row_sort_key(row.get(sort_by)),
+                reverse=direction < 0,
+            )
 
     total_count = len(working_rows)
 
@@ -841,17 +846,10 @@ def get_dashboard_rows_with_buffer(
         if sort_by in col_names:
             direction = -1 if (sort_dir or "").lower() == "desc" else 1
 
-            def sort_key(row: Dict[str, Any]) -> Any:
-                val = row.get(sort_by)
-                if val is None:
-                    return (1, None)
-                try:
-                    num = float(val)
-                    return (0, num)
-                except (TypeError, ValueError):
-                    return (0, str(val).lower())
-
-            enriched_rows.sort(key=sort_key, reverse=direction < 0)
+            enriched_rows.sort(
+                key=lambda row: _dashboard_row_sort_key(row.get(sort_by)),
+                reverse=direction < 0,
+            )
 
     total_count = len(enriched_rows)
 

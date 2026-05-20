@@ -27,6 +27,17 @@ data/Untitled*
 dashboards.code-workspace
 scripts/
 
+# PM date OCR / ML dev (feature branch — not in StableVersion git or PyInstaller exe)
+backend/pm_date_*.py
+models/
+notebooks/
+pm_date_training.zip
+tests/benchmark_*.py
+tests/train_pm_*.py
+tests/test_pm_ocr.py
+tests/pm_ocr_ground_truth.json
+tests/date_crops/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
