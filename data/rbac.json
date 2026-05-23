@@ -8,7 +8,6 @@
         "preventive_maintenance",
         "life_report",
         "rm_variance",
-        "executive",
         "rept"
       ],
       "plusAccess": [
@@ -17,7 +16,7 @@
         "edit_buffer",
         "rept_plus"
       ],
-      "updatedAt": "2026-05-16T11:55:11.624148+00:00"
+      "updatedAt": "2026-05-19T16:26:36.149139+00:00"
     },
     {
       "userId": 2,
@@ -31,10 +30,13 @@
       "login": "chetanas",
       "access": [
         "tools",
+        "preventive_maintenance",
+        "rept"
+      ],
+      "plusAccess": [
         "preventive_maintenance"
       ],
-      "plusAccess": [],
-      "updatedAt": "2026-04-18T21:01:24.384846+00:00"
+      "updatedAt": "2026-05-20T05:18:17.740663+00:00"
     },
     {
       "userId": 268,
@@ -42,8 +44,10 @@
       "access": [
         "rept"
       ],
-      "plusAccess": [],
-      "updatedAt": "2026-04-20T12:36:14.408091+00:00"
+      "plusAccess": [
+        "edit_dpr"
+      ],
+      "updatedAt": "2026-05-05T13:36:28.538328+00:00"
     },
     {
       "userId": 5,
@@ -51,18 +55,182 @@
       "access": [
         "rept"
       ],
+      "plusAccess": [
+        "edit_dpr"
+      ],
+      "updatedAt": "2026-05-12T04:40:57.372986+00:00"
+    },
+    {
+      "userId": 4,
+      "login": "rajanna",
+      "access": [
+        "tools",
+        "preventive_maintenance",
+        "life_report",
+        "rept"
+      ],
       "plusAccess": [],
-      "updatedAt": "2026-04-20T12:36:37.767352+00:00"
+      "updatedAt": "2026-05-17T15:58:01.456892+00:00"
     },
     {
       "userId": 233,
       "login": "Bharath",
       "access": [
+        "tools",
+        "life_report",
+        "rept"
+      ],
+      "plusAccess": [
+        "edit_dpr",
+        "edit_buffer"
+      ],
+      "updatedAt": "2026-05-07T04:08:02.610403+00:00"
+    },
+    {
+      "userId": 274,
+      "login": "siddesh ",
+      "access": [
         "rept"
       ],
       "plusAccess": [],
-      "updatedAt": "2026-04-26T15:08:33.361740+00:00"
+      "updatedAt": "2026-05-05T09:34:17.514073+00:00"
+    },
+    {
+      "userId": 156,
+      "login": "MARUTHISM",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-05T09:33:55.697399+00:00"
+    },
+    {
+      "userId": 158,
+      "login": "SUNILCM",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-05T09:34:35.777488+00:00"
+    },
+    {
+      "userId": 50,
+      "login": "krishna",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-05T09:34:46.231045+00:00"
+    },
+    {
+      "userId": 224,
+      "login": "nihar",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-05T09:34:53.670156+00:00"
+    },
+    {
+      "userId": 26,
+      "login": "shivaraju",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-09T06:27:29.480901+00:00"
+    },
+    {
+      "userId": 231,
+      "login": "poornimakn",
+      "access": [
+        "rm_variance",
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-19T16:22:26.439808+00:00"
+    },
+    {
+      "userId": 83,
+      "login": "ajithkumar",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [
+        "edit_dpr"
+      ],
+      "updatedAt": "2026-05-15T04:54:17.143991+00:00"
+    },
+    {
+      "userId": 37,
+      "login": "anand",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:54:55.549314+00:00"
+    },
+    {
+      "userId": 208,
+      "login": "basavaraj",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:55:00.614300+00:00"
+    },
+    {
+      "userId": 280,
+      "login": "HareeshK",
+      "access": [
+        "tools",
+        "preventive_maintenance",
+        "life_report",
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:55:10.287467+00:00"
+    },
+    {
+      "userId": 273,
+      "login": "prahora",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:55:36.662846+00:00"
+    },
+    {
+      "userId": 267,
+      "login": "prasannasr",
+      "access": [
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:55:45.773994+00:00"
+    },
+    {
+      "userId": 38,
+      "login": "santoshhegde",
+      "access": [
+        "tools",
+        "preventive_maintenance",
+        "life_report",
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-17T15:56:20.607208+00:00"
+    },
+    {
+      "userId": 284,
+      "login": "senthil",
+      "access": [
+        "tools",
+        "rept"
+      ],
+      "plusAccess": [],
+      "updatedAt": "2026-05-18T09:30:40.066978+00:00"
     }
   ],
-  "updatedAt": "2026-05-16T11:55:11.624148+00:00"
+  "updatedAt": "2026-05-20T05:18:17.740663+00:00"
 }

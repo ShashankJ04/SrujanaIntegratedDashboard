@@ -21,8 +21,6 @@
   let _dcWeekFilter = 'full';
   let _dcLegendFilter = '';
   let _dcVisibleRows = [];
-  let _dcEndpoint = DEFAULT_ENDPOINT;
-  let _dcLayoutKey = SG_LAYOUT_KEY;
   let _dcLoadFn = null;
 
   function normalizePartKey(partNo) {
@@ -95,49 +93,6 @@
     const scheduled = cell ? toNum(cell.scheduledQty) : 0;
     const dispatched = cell ? toNum(cell.dispatched) : 0;
     const eps = 1e-9;
-
-    if (_dcLayoutKey === 'production_calendar_v2') {
-      let conVal = 0.0;
-      let rmName = 'N/A';
-      let rmAvailable = 0.0;
-      let cumRmAvailable = 0.0;
-      if (payload.rows && payload.rowMeta) {
-        for (let i = 0; i < payload.rows.length; i++) {
-          if (partNoFromRow(payload.rows[i]) === pk) {
-            const meta = payload.rowMeta[i];
-            if (meta && meta.partInfo) {
-              conVal = toNum(meta.partInfo.conVal);
-              rmName = meta.partInfo.rmName || 'N/A';
-              rmAvailable = toNum(meta.partInfo.rmAvailable);
-            }
-            if (meta && meta.cumRmAvailable) {
-              cumRmAvailable = toNum(meta.cumRmAvailable[dayStr]);
-            }
-            break;
-          }
-        }
-      }
-      let rmRequired = '0';
-      if (conVal > 0) {
-        rmRequired = fmtNum(scheduled / conVal);
-      }
-      return (
-        '<div class="ti-dc-stock-tip-inner">' +
-        '<div class="ti-dc-stock-tip-head">RM Requirement</div>' +
-        '<div class="ti-dc-stock-tip-rows">' +
-        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM</span>' +
-        '<strong class="ti-dc-stock-tip-val">' + escapeHtml(rmName) + '</strong></div>' +
-        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Production Qty</span>' +
-        '<strong class="ti-dc-stock-tip-val">' + fmtNum(scheduled) + '</strong></div>' +
-        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM Required</span>' +
-        '<strong class="ti-dc-stock-tip-val">' + rmRequired + '</strong></div>' +
-        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Total RM Available</span>' +
-        '<strong class="ti-dc-stock-tip-val">' + fmtNum(rmAvailable) + '</strong></div>' +
-        '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Cum RM Available</span>' +
-        '<strong class="ti-dc-stock-tip-val">' + fmtNum(cumRmAvailable) + '</strong></div>' +
-        '</div></div>'
-      );
-    }
 
     let pctLabel = '–';
     if (scheduled > eps) {
@@ -683,7 +638,7 @@
         search: true,
         countLabel: 'rows',
         emptyText: 'No schedule rows for this month',
-        layoutKey: _dcLayoutKey,
+        layoutKey: SG_LAYOUT_KEY,
         resizable: true,
         pinnable: true,
         reorderable: true,
@@ -943,7 +898,7 @@
   }
 
   async function fetchPayload() {
-    const res = await fetch(_dcEndpoint || DEFAULT_ENDPOINT, { credentials: 'same-origin' });
+    const res = await fetch(DEFAULT_ENDPOINT, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.message || data.error || 'Failed to load Dispatch Calendar');
@@ -995,9 +950,7 @@
   }
 
   const DispatchCalendarPage = {
-    init(options = {}) {
-      _dcEndpoint = options.endpoint || DEFAULT_ENDPOINT;
-      _dcLayoutKey = options.layoutKey || SG_LAYOUT_KEY;
+    init() {
       const root = document.getElementById('dispatch-calendar-root');
       const subtitle = document.getElementById('dispatch-calendar-subtitle');
       const refreshBtn = document.getElementById('dispatch-calendar-refresh');

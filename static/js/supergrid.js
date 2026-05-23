@@ -235,10 +235,25 @@ const SuperGrid = (() => {
       return !!(row && (row.__sgStickyTop || row.__sgStickyBottom));
     }
 
+    function _splitRowGroups(rows) {
+      const stickyTop = [];
+      const stickyBottom = [];
+      const data = [];
+      rows.forEach((r) => {
+        if (!r) return;
+        if (r.__sgStickyTop) stickyTop.push(r);
+        else if (r.__sgStickyBottom) stickyBottom.push(r);
+        else data.push(r);
+      });
+      return { stickyTop, stickyBottom, data };
+    }
+
     function _appendGrandTotalRow() {
       filteredRows = filteredRows.filter(r => !r.__sgStickyBottom);
       if (!grandTotalRowFn || !filteredRows.length) return;
-      const gt = grandTotalRowFn(filteredRows, _getOrderedCols());
+      const dataOnly = filteredRows.filter((r) => !r.__sgStickyTop);
+      if (!dataOnly.length) return;
+      const gt = grandTotalRowFn(dataOnly, _getOrderedCols());
       if (gt) {
         gt.__sgStickyBottom = true;
         filteredRows.push(gt);
@@ -247,17 +262,18 @@ const SuperGrid = (() => {
 
     // ── Filter ─────────────────────────────────────────────────
     function _filter() {
-      const sourceRows = allRows.filter(r => !_isSyntheticRow(r));
-      if (!searchQuery) {
-        filteredRows = [...sourceRows];
-      } else {
-        filteredRows = sourceRows.filter(row =>
+      const { stickyTop, data } = _splitRowGroups(allRows);
+      let matched = data;
+      if (searchQuery) {
+        matched = data.filter(row =>
           _cols.some(col => {
             const v = row[col.key];
             return v != null && String(v).toLowerCase().includes(searchQuery);
           })
         );
       }
+      // Sticky-top rows (e.g. Dispatch Calendar Grand Total) stay visible above filtered data.
+      filteredRows = [...stickyTop, ...matched];
       _appendGrandTotalRow();
     }
 
@@ -636,11 +652,35 @@ const SuperGrid = (() => {
         if (!raw) return;
         const data = JSON.parse(raw);
         if (Array.isArray(data.order)) {
-          // Merge: keep saved order, append new columns, remove deleted ones
-          const validKeys = new Set(_cols.map(c => c.key));
-          const restored = data.order.filter(k => validKeys.has(k));
-          const remaining = _cols.map(c => c.key).filter(k => !restored.includes(k));
-          columnOrder = [...restored, ...remaining];
+          const defaultOrder = _cols.map((c) => c.key);
+          const validKeys = new Set(defaultOrder);
+          const saved = data.order.filter((k) => validKeys.has(k));
+          const newKeys = defaultOrder.filter((k) => !saved.includes(k));
+          let merged = saved.slice();
+          for (const k of newKeys) {
+            const targetIdx = defaultOrder.indexOf(k);
+            let insertAt = merged.length;
+            for (let i = targetIdx - 1; i >= 0; i--) {
+              const neighbor = defaultOrder[i];
+              const pos = merged.indexOf(neighbor);
+              if (pos >= 0) {
+                insertAt = pos + 1;
+                break;
+              }
+            }
+            if (insertAt === merged.length) {
+              for (let i = targetIdx + 1; i < defaultOrder.length; i++) {
+                const neighbor = defaultOrder[i];
+                const pos = merged.indexOf(neighbor);
+                if (pos >= 0) {
+                  insertAt = pos;
+                  break;
+                }
+              }
+            }
+            merged.splice(insertAt, 0, k);
+          }
+          columnOrder = merged;
         }
         if (Array.isArray(data.pinned)) pinnedKeys = new Set(data.pinned.filter(k => _cols.some(c => c.key === k)));
         if (data.widths && typeof data.widths === 'object') colWidths = { ...colWidths, ...data.widths };

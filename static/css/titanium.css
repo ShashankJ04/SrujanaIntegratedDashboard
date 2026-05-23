@@ -6362,7 +6362,7 @@ body.sg-resizing {
   line-height: 1.1;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
   font-size: 8px;
   font-size: clamp(7px, 0.85cqi + 5px, 9px);
   line-height: 1.15;
@@ -6377,15 +6377,62 @@ body.sg-resizing {
   justify-items: start;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
+/* Production calendar — 4 KPIs evenly fill the KPI bar */
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-toolbar-kpi {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: stretch;
+  padding: 6px 12px;
+  gap: 0;
+}
+
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: start;
+}
+
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
+  flex: none;
+  min-width: 0;
+  gap: 4px;
+  align-items: center;
+  text-align: center;
+}
+
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-label {
+  font-size: 11px;
+  width: 100%;
+  text-align: center;
+}
+
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
+#section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: 100%;
+  width: 100%;
+  text-align: center;
+}
+
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-metric {
   min-width: 0;
   gap: 2px;
   align-items: flex-start;
   text-align: left;
 }
 
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
-#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success, #section-production-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value,
+#section-dispatch-calendar .ti-dc-toolbar--all-in-one .ti-dc-kpi-inline-value--success {
   font-size: 12px;
   font-size: clamp(10px, 2.85cqi + 5px, 18px);
   font-weight: 800;

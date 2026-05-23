@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import calendar
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .db import fetch_all
 from .dispatch_calendar import (
     NO_OF_OPERATIONS_COL,
     PART_NO_COL,
-    TOTAL_DISPATCHED_QTY_COL,
     TOTAL_QTY_COL,
     build_dispatch_calendar_payload,
 )
 
-REMAINING_PRODUCTION_COL = "Remaining Production"
+PLANNED_QTY_COL = "Planned Qty"
+BALANCE_PRODUCTION_COL = "Balance Qty"
+PRODUCED_QTY_COL = "Produced Qty"
+OPENING_STOCK_COL = "Opening Stock"
+COMPLETION_PCT_COL = "% Completion"
+ESTIMATED_TIME_COL = "Estimated Time"
+
+WORK_HOURS_PER_DAY = 6
 
 
 def _to_float(value: Any) -> float:
@@ -30,11 +37,32 @@ def _normalize_part_key(part_no: Any) -> str:
     return str(part_no or "").strip().lower()
 
 
+def _day_col_regex() -> re.Pattern:
+    return re.compile(r"^\s*day\s+(\d+)\s*$", flags=re.IGNORECASE)
+
+
+def _parse_day_cols(columns: List[str]) -> List[Tuple[str, int]]:
+    """Return (colName, dayNumber) pairs sorted by day number."""
+    pat = _day_col_regex()
+    day_cols: List[Tuple[str, int]] = []
+    for col in columns:
+        m = pat.match(str(col or ""))
+        if m:
+            day_cols.append((col, int(m.group(1))))
+    day_cols.sort(key=lambda x: x[1])
+    return day_cols
+
+
+# ---------------------------------------------------------------------------
+# Data lookups
+# ---------------------------------------------------------------------------
+
 def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
+    """Component info keyed by normalized part_no: leadTime, tools, SPM, cavity, RM."""
     rows = fetch_all(
         """
         SELECT
-            c.CO_PARTNO AS partNo,
+            c.CO_PARTNO       AS partNo,
             MAX(c.CO_LEADTIME) AS leadTime,
             GROUP_CONCAT(DISTINCT ct.CT_TOOLNO ORDER BY ct.CT_TOOLNO SEPARATOR ', ') AS tools
         FROM components c
@@ -51,13 +79,15 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
     rm_rows = fetch_all(
         """
         SELECT
-            c.CO_PARTNO AS partNo,
-            m.MM_RawMtPartNo AS rmName,
-            m.MM_Id AS rmId,
-            ((1 / ((mt.MT_Density * m.MM_Thickness) * m.MM_StripWidth)) * ((1000 * ct.CT_NO_OF_CAVITY) / ct.CT_Pitch)) AS conVal
+            c.CO_PARTNO                     AS partNo,
+            m.MM_RawMtPartNo                AS rmName,
+            m.MM_Id                         AS rmId,
+            ct.CT_NO_OF_CAVITY              AS cavity,
+            ((1 / ((mt.MT_Density * m.MM_Thickness) * m.MM_StripWidth))
+              * ((1000 * ct.CT_NO_OF_CAVITY) / ct.CT_Pitch)) AS conVal
         FROM components c
         INNER JOIN components_tool ct ON ct.CT_COMPID = c.CO_ID
-        INNER JOIN materialmaster m ON ct.CT_RMID = m.MM_Id
+        INNER JOIN materialmaster m   ON ct.CT_RMID = m.MM_Id
         INNER JOIN materialtypemaster mt ON m.MM_MTID = mt.MT_Id
         WHERE ct.CT_ActiveYN = 'Y'
           AND ct.CT_PPC = 'Y'
@@ -66,6 +96,22 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
         """,
         (),
     )
+
+    spm_rows = fetch_all(
+        """
+        SELECT
+            tl.TL_tool_number AS toolNo,
+            MAX(tl.TL_spm)    AS spm
+        FROM tool_life tl
+        GROUP BY tl.TL_tool_number
+        """,
+        (),
+    )
+    spm_by_tool: Dict[str, float] = {}
+    for sr in spm_rows:
+        tn = str(sr.get("toolNo") or "").strip()
+        if tn:
+            spm_by_tool[tn.lower()] = _to_float(sr.get("spm"))
 
     avail_rows = fetch_all(
         """
@@ -81,7 +127,7 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
     )
     avail_lookup = {r.get("rmId"): _to_float(r.get("available")) for r in avail_rows}
 
-    rm_lookup = {}
+    rm_lookup: Dict[str, Dict[str, Any]] = {}
     for r in rm_rows:
         pk = _normalize_part_key(r.get("partNo"))
         if pk and pk not in rm_lookup:
@@ -91,6 +137,7 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
                 "rmName": r.get("rmName"),
                 "conVal": _to_float(r.get("conVal")),
                 "rmAvailable": avail_lookup.get(rm_id, 0.0),
+                "cavity": _to_float(r.get("cavity")),
             }
 
     out: Dict[str, Dict[str, Any]] = {}
@@ -99,63 +146,231 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
         if not key:
             continue
         rd = rm_lookup.get(key, {})
+        tool_str = str(row.get("tools") or "")
+        first_tool = tool_str.split(",")[0].strip().lower() if tool_str else ""
+        spm = spm_by_tool.get(first_tool, 0.0)
         out[key] = {
             "leadTime": row.get("leadTime"),
-            "tools": row.get("tools") or "",
+            "tools": tool_str,
             "rmId": rd.get("rmId"),
             "rmName": rd.get("rmName"),
             "conVal": rd.get("conVal"),
             "rmAvailable": rd.get("rmAvailable"),
+            "cavity": rd.get("cavity", 0.0),
+            "spm": spm,
         }
     return out
 
 
-def _insert_remaining_production_column(payload: Dict[str, Any]) -> None:
-    columns = list(payload.get("columns") or [])
-    if not columns:
-        return
+def _completion_pct_from_balance_produced(produced: float, balance: float) -> Optional[float]:
+    """Completion % = produced qty / balance qty."""
+    if balance <= 0:
+        return None
+    return round((produced / balance) * 100.0, 2)
 
-    if REMAINING_PRODUCTION_COL not in columns:
-        try:
-            insert_at = columns.index(TOTAL_DISPATCHED_QTY_COL) + 1
-        except ValueError:
-            insert_at = len(columns)
-        columns.insert(insert_at, REMAINING_PRODUCTION_COL)
-        payload["columns"] = columns
 
+def _monthly_produced_from_daily(daily_map: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+    """Sum daily production to monthly totals per part."""
+    return {pk: round(sum(days.values()), 4) for pk, days in daily_map.items()}
+
+
+def _fetch_opening_stock_map(month: int, year: int) -> Dict[str, float]:
+    """Opening stock per part from comp_stockhistory (month opening snapshot)."""
+    rows = fetch_all(
+        """
+        SELECT
+            c.CO_PARTNO AS partNo,
+            SUM(ch.CH_QTY) AS openingQty
+        FROM comp_stockhistory ch
+        INNER JOIN components c
+            ON c.CO_ID = ch.CH_COMPID
+        WHERE ch.CH_QTY > 0
+          AND ch.CH_YEAR = %s
+          AND ch.CH_MONTH = %s
+          AND ch.CH_WEEK = 0
+          AND c.CO_ACTIVEYN = 'Y'
+        GROUP BY c.CO_PARTNO
+        """,
+        (year, month),
+    )
+    out: Dict[str, float] = {}
+    for row in rows:
+        pk = _normalize_part_key(row.get("partNo"))
+        if pk:
+            out[pk] = _to_float(row.get("openingQty"))
+    return out
+
+
+def _fetch_daily_production_map(month: int, year: int) -> Dict[str, Dict[str, float]]:
+    """Daily produced qty per part (Date-wise Monthly Production report source)."""
+    rows = fetch_all(
+        """
+        SELECT
+            TRIM(c.CO_PARTNO) AS partNo,
+            DAY(pd.PD_DATE) AS prodDay,
+            SUM(pd.PD_PRODQTY) AS producedQty
+        FROM production_details pd
+        INNER JOIN scheduled_production sp ON pd.PD_PSID = sp.PS_ID
+        INNER JOIN components c ON sp.PS_PARENTCOMPID = c.CO_ID
+        WHERE MONTH(pd.PD_DATE) = %s
+          AND YEAR(pd.PD_DATE) = %s
+        GROUP BY TRIM(c.CO_PARTNO), DAY(pd.PD_DATE)
+        """,
+        (month, year),
+    )
+    out: Dict[str, Dict[str, float]] = {}
+    for row in rows:
+        pk = _normalize_part_key(row.get("partNo"))
+        day_num = row.get("prodDay")
+        if not pk or day_num is None:
+            continue
+        day_key = str(int(day_num))
+        bucket = out.setdefault(pk, {})
+        bucket[day_key] = round(_to_float(row.get("producedQty")), 4)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Payload transformations
+# ---------------------------------------------------------------------------
+
+def _insert_production_summary_columns(
+    payload: Dict[str, Any],
+    opening_stock_map: Dict[str, float],
+    monthly_produced_map: Dict[str, float],
+) -> Dict[str, float]:
+    """Insert Planned Qty, Opening Stock, Balance Qty, Produced Qty, and % Completion."""
+    rows = payload.get("rows") or []
     row_meta = payload.get("rowMeta") or []
-    for idx, row in enumerate(payload.get("rows") or []):
+
+    grand_planned = 0.0
+    grand_balance = 0.0
+    grand_opening = 0.0
+    grand_produced = 0.0
+
+    for idx, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
-
         meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
-        stock_fg = _to_float(meta.get("stockFg"))
-        stock_wip = _to_float(meta.get("stockWip"))
         if meta.get("isGrandTotal"):
-            grand_stock = meta.get("grandTotalStock") or {}
-            stock_fg = _to_float(grand_stock.get("stockFg"))
-            stock_wip = _to_float(grand_stock.get("stockWip"))
+            continue
 
-        total_scheduled = _to_float(row.get(TOTAL_QTY_COL))
-        total_dispatched = _to_float(row.get(TOTAL_DISPATCHED_QTY_COL))
-        raw_remaining = total_scheduled - total_dispatched - stock_fg - stock_wip
-        row[REMAINING_PRODUCTION_COL] = max(0.0, round(raw_remaining, 4))
+        pk = _normalize_part_key(row.get(PART_NO_COL))
+        planned = _to_float(row.get(TOTAL_QTY_COL))
+        opening = _to_float(opening_stock_map.get(pk))
+        produced = _to_float(monthly_produced_map.get(pk))
+        balance = max(0.0, round(planned - opening, 4))
+        completion_pct = _completion_pct_from_balance_produced(produced, balance)
+
+        row[PLANNED_QTY_COL] = round(planned, 4) if planned > 0 else 0.0
+        row[OPENING_STOCK_COL] = round(opening, 4) if opening > 0 else 0.0
+        row[BALANCE_PRODUCTION_COL] = balance
+        row[PRODUCED_QTY_COL] = round(produced, 4) if produced > 0 else 0.0
+        row[COMPLETION_PCT_COL] = completion_pct
+
+        grand_planned += planned
+        grand_balance += balance
+        grand_opening += opening
+        grand_produced += produced
+
+    grand_completion: Optional[float] = _completion_pct_from_balance_produced(
+        grand_produced, grand_balance
+    )
+
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            row[PLANNED_QTY_COL] = round(grand_planned, 4)
+            row[OPENING_STOCK_COL] = round(grand_opening, 4)
+            row[BALANCE_PRODUCTION_COL] = round(grand_balance, 4)
+            row[PRODUCED_QTY_COL] = round(grand_produced, 4)
+            row[COMPLETION_PCT_COL] = grand_completion
+            break
+
+    return {
+        "planned": round(grand_planned, 4),
+        "openingStock": round(grand_opening, 4),
+        "balance": round(grand_balance, 4),
+        "produced": round(grand_produced, 4),
+        "pct": grand_completion,
+    }
+
+
+def _insert_estimated_time_column(
+    payload: Dict[str, Any],
+    part_info: Dict[str, Dict[str, Any]],
+) -> None:
+    """Estimated time (days) = Balance Qty / (SPM * cavity * 60 * WORK_HOURS_PER_DAY).
+
+    Grand Total shows the sum of individual estimated days (total machine-days).
+    """
+    rows = payload.get("rows") or []
+    row_meta = payload.get("rowMeta") or []
+
+    grand_est_days = 0.0
+
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            continue
+
+        balance = max(0.0, _to_float(row.get(BALANCE_PRODUCTION_COL)))
+        pk = _normalize_part_key(row.get(PART_NO_COL))
+        info = part_info.get(pk, {})
+        spm = _to_float(info.get("spm"))
+        cavity = _to_float(info.get("cavity"))
+        rate = spm * cavity
+
+        if balance > 0 and rate > 0:
+            days = balance / (rate * WORK_HOURS_PER_DAY * 60)
+            row[ESTIMATED_TIME_COL] = round(days, 2)
+            grand_est_days += days
+        else:
+            row[ESTIMATED_TIME_COL] = None
+
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            row[ESTIMATED_TIME_COL] = round(grand_est_days, 2) if grand_est_days > 0 else None
+            break
 
 
 def _set_visible_production_columns(payload: Dict[str, Any]) -> None:
+    """Filter and reorder columns for the production calendar view."""
     columns = list(payload.get("columns") or [])
-    day_cols = [
-        col
-        for col in columns
-        if re.match(r"^\s*day\s+\d+\s*$", str(col or ""), flags=re.IGNORECASE)
-    ]
-    day_cols.sort(key=lambda col: int(re.search(r"\d+", str(col)).group(0)))
 
-    visible = [PART_NO_COL, REMAINING_PRODUCTION_COL] + day_cols
+    for col_name in (
+        PLANNED_QTY_COL,
+        BALANCE_PRODUCTION_COL,
+        PRODUCED_QTY_COL,
+        COMPLETION_PCT_COL,
+        OPENING_STOCK_COL,
+        ESTIMATED_TIME_COL,
+    ):
+        if col_name not in columns:
+            columns.append(col_name)
+
+    day_cols = _parse_day_cols(columns)
+    day_col_names = [c for c, _ in day_cols]
+
+    visible = [
+        PART_NO_COL,
+        BALANCE_PRODUCTION_COL,
+        PRODUCED_QTY_COL,
+        COMPLETION_PCT_COL,
+        ESTIMATED_TIME_COL,
+    ] + day_col_names
     payload["columns"] = [col for col in visible if col in columns]
 
 
 def _attach_part_info(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Attach per-part metadata (lead time, tools, RM, SPM, cavity) to rowMeta."""
     part_info = _fetch_part_info()
     row_meta = payload.get("rowMeta")
     if not isinstance(row_meta, list):
@@ -184,22 +399,26 @@ def _attach_part_info(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             "rmName": info.get("rmName") or "",
             "conVal": info.get("conVal") or 0.0,
             "rmAvailable": info.get("rmAvailable") or 0.0,
+            "spm": info.get("spm") or 0.0,
+            "cavity": info.get("cavity") or 0.0,
         }
     return part_info
 
 
-def _shift_production_days_by_lead_time(payload: Dict[str, Any], part_info: Dict[str, Dict[str, Any]]) -> None:
-    columns = list(payload.get("columns") or [])
-    day_cols: List[Tuple[str, int]] = []
-    for col in columns:
-        m = re.match(r"^\s*day\s+(\d+)\s*$", str(col or ""), flags=re.IGNORECASE)
-        if m:
-            day_cols.append((col, int(m.group(1))))
+def _shift_production_days_by_lead_time(
+    payload: Dict[str, Any],
+    part_info: Dict[str, Dict[str, Any]],
+) -> None:
+    """Shift day quantities earlier by CO_LEADTIME from dispatch schedule.
 
+    Uses the full scheduled dispatch qty for every day (ignores dispatched/legend
+    status). Opening stock is then applied in dispatch-day order so earlier
+    schedules consume opening balance before later ones.
+    """
+    columns = list(payload.get("columns") or [])
+    day_cols = _parse_day_cols(columns)
     if not day_cols:
         return
-
-    day_cols.sort(key=lambda x: x[1])
 
     rows = payload.get("rows") or []
     row_meta = payload.get("rowMeta") or []
@@ -219,55 +438,58 @@ def _shift_production_days_by_lead_time(payload: Dict[str, Any], part_info: Dict
         info = part_info.get(part_no, {})
         lead_time = int(_to_float(info.get("leadTime")))
 
+        current_pdd = part_day_dispatch.get(part_no) or {}
         current_qtys = {d: _to_float(row.get(c)) for c, d in day_cols}
+        current_status = meta.get("dayStatus") or {}
 
-        if lead_time > 0:
-            current_status = meta.get("dayStatus") or {}
-            current_pdd = part_day_dispatch.get(part_no) or {}
+        for c, _ in day_cols:
+            row[c] = None
+        meta["dayStatus"] = {}
+        shifted_pdd: Dict[str, Any] = {}
 
-            for c, d in day_cols:
-                row[c] = None
-            meta["dayStatus"] = {}
-            shifted_pdd: Dict[str, Any] = {}
+        opening_remaining = _to_float(row.get(OPENING_STOCK_COL))
 
-            for c, d in day_cols:
-                qty = current_qtys.get(d, 0.0)
-                st = current_status.get(str(d))
-                pdd = current_pdd.get(str(d))
+        for c, d in day_cols:
+            scheduled = current_qtys.get(d, 0.0)
+            if scheduled <= 0:
+                continue
 
-                if qty <= 0 and not st and not pdd:
-                    continue
+            if opening_remaining >= scheduled:
+                opening_remaining -= scheduled
+                continue
 
-                target_day = d - lead_time
-                if target_day < 1:
-                    target_day = 1
+            net = round(scheduled - opening_remaining, 4)
+            opening_remaining = 0.0
+            if net <= 0:
+                continue
 
-                target_col = None
-                for tc, td in day_cols:
-                    if td == target_day:
-                        target_col = tc
-                        break
+            target_day = max(1, d - lead_time) if lead_time > 0 else d
 
-                t_day_str = str(target_day)
+            target_col: Optional[str] = None
+            for tc, td in day_cols:
+                if td == target_day:
+                    target_col = tc
+                    break
+            t_day_str = str(target_day)
 
-                if target_col:
-                    existing = _to_float(row.get(target_col))
-                    row[target_col] = round(existing + qty, 4) if (existing + qty) > 0 else None
+            if target_col:
+                existing = _to_float(row.get(target_col))
+                row[target_col] = round(existing + net, 4)
 
-                if st:
-                    meta["dayStatus"][t_day_str] = st
+            st = current_status.get(str(d))
+            if st:
+                meta["dayStatus"][t_day_str] = st
 
-                if pdd:
-                    existing_pdd = shifted_pdd.get(t_day_str, {"scheduledQty": 0.0, "dispatched": 0.0})
-                    existing_pdd["scheduledQty"] += _to_float(pdd.get("scheduledQty"))
-                    existing_pdd["dispatched"] += _to_float(pdd.get("dispatched"))
-                    shifted_pdd[t_day_str] = existing_pdd
+            pdd_cell = current_pdd.get(str(d)) or {"scheduledQty": scheduled, "dispatched": 0.0}
+            existing_pdd = shifted_pdd.get(t_day_str, {"scheduledQty": 0.0, "dispatched": 0.0})
+            existing_pdd["scheduledQty"] += net
+            existing_pdd["dispatched"] = _to_float(pdd_cell.get("dispatched"))
+            shifted_pdd[t_day_str] = existing_pdd
 
-            part_day_dispatch[part_no] = shifted_pdd
-            current_qtys = {d: _to_float(row.get(c)) for c, d in day_cols}
+        part_day_dispatch[part_no] = shifted_pdd
 
         for _, d in day_cols:
-            qty = current_qtys.get(d, 0.0)
+            qty = _to_float(row.get(f"day {d}"))
             if qty > 0:
                 shifted_grand_scheduled[d] += qty
 
@@ -283,19 +505,18 @@ def _shift_production_days_by_lead_time(payload: Dict[str, Any], part_info: Dict
 
 
 def _compute_cumulative_rm(payload: Dict[str, Any], part_info: Dict[str, Dict[str, Any]]) -> None:
-    columns = list(payload.get("columns") or [])
-    day_cols: List[Tuple[str, int]] = []
-    for col in columns:
-        m = re.match(r"^\s*day\s+(\d+)\s*$", str(col or ""), flags=re.IGNORECASE)
-        if m:
-            day_cols.append((col, int(m.group(1))))
+    """Walk day columns left-to-right, tracking running RM balances per raw material.
 
+    Within each day, components sharing the same RM are processed in ascending
+    order of their RM requirement so that the component needing the least RM
+    gets the highest cumRmAvailable reading (priority to min requirement).
+    """
+    columns = list(payload.get("columns") or [])
+    day_cols = _parse_day_cols(columns)
     if not day_cols:
         return
 
-    day_cols.sort(key=lambda x: x[1])
-
-    current_rm = {}
+    current_rm: Dict[Any, float] = {}
     for pk, info in part_info.items():
         rm_id = info.get("rmId")
         if rm_id and rm_id not in current_rm:
@@ -304,7 +525,14 @@ def _compute_cumulative_rm(payload: Dict[str, Any], part_info: Dict[str, Dict[st
     rows = payload.get("rows") or []
     row_meta = payload.get("rowMeta") or []
 
+    for idx, row in enumerate(rows):
+        if isinstance(row, dict):
+            meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+            if "cumRmAvailable" not in meta:
+                meta["cumRmAvailable"] = {}
+
     for c, d in day_cols:
+        day_entries: List[Tuple[float, int]] = []
         for idx, row in enumerate(rows):
             if not isinstance(row, dict):
                 continue
@@ -317,23 +545,46 @@ def _compute_cumulative_rm(payload: Dict[str, Any], part_info: Dict[str, Dict[st
             rm_id = p_info.get("rmId")
             con_val = _to_float(p_info.get("conVal"))
 
-            if qty > 0 and rm_id and con_val > 0:
-                req_rm = qty / con_val
-                current_rm[rm_id] -= req_rm
+            rm_req = (qty / con_val) if (qty > 0 and rm_id and con_val > 0) else 0.0
+            day_entries.append((rm_req, idx))
 
-            if "cumRmAvailable" not in meta:
-                meta["cumRmAvailable"] = {}
+        day_entries.sort(key=lambda e: e[0])
+
+        for rm_req, idx in day_entries:
+            meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+            p_info = meta.get("partInfo") or {}
+            rm_id = p_info.get("rmId")
+
+            if rm_req > 0 and rm_id:
+                current_rm[rm_id] -= rm_req
 
             if rm_id:
-                meta["cumRmAvailable"][str(d)] = current_rm.get(rm_id, 0.0)
+                meta["cumRmAvailable"][str(d)] = round(current_rm.get(rm_id, 0.0), 4)
 
+
+# ---------------------------------------------------------------------------
+# Main entry
+# ---------------------------------------------------------------------------
 
 def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
-    """Return production calendar payload with remaining production quantity."""
+    """Return production calendar payload with planned/opening stock columns and day schedule."""
     payload = build_dispatch_calendar_payload(month, year)
-    _insert_remaining_production_column(payload)
-    _set_visible_production_columns(payload)
+
     part_info = _attach_part_info(payload)
+
+    opening_stock_map = _fetch_opening_stock_map(month, year)
+    daily_production = _fetch_daily_production_map(month, year)
+    monthly_produced = _monthly_produced_from_daily(daily_production)
+    production_kpi = _insert_production_summary_columns(
+        payload, opening_stock_map, monthly_produced
+    )
+    _insert_estimated_time_column(payload, part_info)
+
     _shift_production_days_by_lead_time(payload, part_info)
     _compute_cumulative_rm(payload, part_info)
+
+    _set_visible_production_columns(payload)
+    payload["productionKpi"] = production_kpi
+    payload["partDailyProduction"] = daily_production
+    payload["daysInMonth"] = payload.get("daysInMonth") or calendar.monthrange(year, month)[1]
     return payload

@@ -1,37 +1,38 @@
-<!-- Production Calendar — toolbar layout matches Dispatch Calendar -->
+<!-- Production Calendar — toolbar layout matches Dispatch Calendar (shared JS selectors) -->
 <section class="ti-section ti-hub-section-fill" data-section="production-calendar" id="section-production-calendar">
   <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one">
     <div class="ti-dc-toolbar-left">
-      <span class="ti-dc-icon">🏗️</span>
+      <span class="ti-dc-icon">🏭</span>
       <div class="ti-dc-title-block">
         <h2 class="ti-dc-title">Production Calendar</h2>
         <p class="ti-dc-subtitle" id="dispatch-calendar-subtitle">Loading…</p>
       </div>
     </div>
     <div class="ti-dc-toolbar-mid">
-      <div class="ti-dc-legend ti-dc-legend--inline ti-dc-legend--grid2" aria-label="Coverage legend">
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="ok" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Covered</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="partial" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Partially covered</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="short" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Shortage</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="dispatched" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--dispatched"></span> Dispatched</button>
+      <div class="ti-dc-legend ti-dc-legend--inline ti-dc-legend--grid2" aria-label="Production status legend">
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="over" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--dispatched"></span> Over-produced</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="exact" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Produced</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="under" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Under-produced</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="none" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Not produced</button>
       </div>
     </div>
-    <div class="ti-dc-toolbar-kpi" aria-label="Dispatch month to date">
-      <div class="ti-dc-kpi-inline-head">
-        <span class="ti-dc-kpi-inline-title">Dispatch</span>
-      </div>
+    <div class="ti-dc-toolbar-kpi" aria-label="Production month to date">
       <div class="ti-dc-kpi-inline-metrics">
         <div class="ti-dc-kpi-inline-metric">
-          <span class="ti-dc-kpi-inline-label">Scheduled</span>
+          <span class="ti-dc-kpi-inline-label">Planned</span>
           <span class="ti-dc-kpi-inline-value" id="dc-kpi-dispatch-total-so">–</span>
         </div>
         <div class="ti-dc-kpi-inline-metric">
-          <span class="ti-dc-kpi-inline-label">Dispatched</span>
+          <span class="ti-dc-kpi-inline-label">Opening Stock</span>
           <span class="ti-dc-kpi-inline-value ti-dc-kpi-inline-value--success" id="dc-kpi-dispatch-qty">–</span>
         </div>
         <div class="ti-dc-kpi-inline-metric">
           <span class="ti-dc-kpi-inline-label">Percentage</span>
           <span class="ti-dc-kpi-inline-value" id="dc-kpi-dispatch-pct">–</span>
+        </div>
+        <div class="ti-dc-kpi-inline-metric">
+          <span class="ti-dc-kpi-inline-label">Balance</span>
+          <span class="ti-dc-kpi-inline-value" id="dc-kpi-production-balance">–</span>
         </div>
       </div>
     </div>
@@ -45,7 +46,7 @@
         </select>
       </div>
       <span id="dispatch-calendar-count" class="ti-dc-toolbar-count sg-count" aria-live="polite"></span>
-      <input type="search" id="dispatch-calendar-search" class="ti-input sg-search ti-dc-toolbar-search" placeholder="Search all columns…" autocomplete="off" />
+      <input type="search" id="dispatch-calendar-search" class="ti-input sg-search ti-dc-toolbar-search" placeholder="Search parts…" autocomplete="off" />
       <button type="button" id="dispatch-calendar-refresh" class="ti-btn ti-btn-outline ti-btn-sm" title="Reload current month">Refresh</button>
     </div>
   </div>

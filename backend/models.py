@@ -964,6 +964,7 @@ def get_report_summary() -> Dict[str, Any]:
     total_so = 0.0
     total_produced_qty = 0.0
     total_production_requirement = 0.0
+    total_production_pending = 0.0
     total_pending = 0.0
     total_excess = 0.0
     total_parts = 0
@@ -975,10 +976,12 @@ def get_report_summary() -> Dict[str, Any]:
         produced = float(row.get("produced_qty") or 0)
         buffer_qty = float(row.get("buffer_qty") or 0)
         balance = float(row.get("balance_production_qty") or 0)
-        
+        production_pending = float(row.get("production_pending") or 0)
+
         total_so += req
         total_produced_qty += max(0.0, produced)
         total_production_requirement += max(0.0, req + buffer_qty)
+        total_production_pending += max(0.0, production_pending)
         
         if balance > 0:
             total_pending += balance
@@ -1026,7 +1029,9 @@ def get_report_summary() -> Dict[str, Any]:
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
         "total_production_requirement": total_production_requirement,
+        "total_production_pending": total_production_pending,
         "total_pending_qty": total_pending,
+        "total_positive_balance_production": total_pending,
         "total_excess_qty": total_excess,
         "parts_total": total_parts,
         "parts_completed": parts_completed,
