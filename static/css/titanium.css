@@ -5584,7 +5584,8 @@ body.dpr-col-resizing {
 /* Maintenance hub: tab panels fill remaining height (Tools grid + PM/Life SuperGrid) */
 #panel-tools.ti-tab-panel.active,
 #panel-pm.ti-tab-panel.active,
-#panel-life.ti-tab-panel.active {
+#panel-life.ti-tab-panel.active,
+#panel-breakdown.ti-tab-panel.active {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -5593,6 +5594,20 @@ body.dpr-col-resizing {
 
 #panel-tools.ti-tab-panel.active {
   overflow: hidden;
+}
+
+.ti-breakdown-tabs {
+  margin-bottom: 12px;
+}
+
+.ti-breakdown-panel {
+  display: none;
+}
+
+.ti-breakdown-panel.active {
+  display: block;
+  flex: 1;
+  min-height: 0;
 }
 
 .ti-maint-toolbar {

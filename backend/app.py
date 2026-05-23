@@ -39,6 +39,7 @@ def create_app() -> Flask:
     # ── Dashboards blueprints ───────────────────────────────────────
     from .pm_api import pm_bp
     from .tools_api import tools_bp
+    from .tool_breakdowns_api import tool_breakdowns_bp
     from .production_api import production_bp
     from .rm_variance_api import rm_variance_bp
     from .rm_correction_api import rm_correction_bp
@@ -51,6 +52,7 @@ def create_app() -> Flask:
 
     app.register_blueprint(pm_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(tool_breakdowns_bp)
     app.register_blueprint(production_bp)
     app.register_blueprint(rm_variance_bp)
     app.register_blueprint(rm_correction_bp)
