@@ -132,6 +132,48 @@
   </div>
 </div>
 
+<!-- Tool Breakdown Modal -->
+<div class="ti-modal-overlay" id="dpr-breakdown-modal">
+  <div class="ti-modal">
+    <div class="ti-modal-header"><h3 id="dpr-breakdown-title">Raise Tool Breakdown</h3></div>
+    <div class="ti-modal-body">
+      <div id="dpr-breakdown-form" style="display:flex;flex-direction:column;gap:14px">
+        <div><label class="ti-form-label">Machine</label><input type="text" class="ti-input" id="dpr-breakdown-machine" disabled style="width:100%"></div>
+        <div><label class="ti-form-label">Part No</label><input type="text" class="ti-input" id="dpr-breakdown-partno" disabled style="width:100%"></div>
+        <div><label class="ti-form-label">Part Name</label><input type="text" class="ti-input" id="dpr-breakdown-partname" disabled style="width:100%"></div>
+        <div><label class="ti-form-label">Tool No</label><input type="text" class="ti-input" id="dpr-breakdown-toolno" disabled style="width:100%"></div>
+        <div><label class="ti-form-label">Downtime Time</label><input type="text" class="ti-input" id="dpr-breakdown-downtime" disabled style="width:100%"></div>
+        <div><label class="ti-form-label">Produced Qty (today)</label><input type="text" class="ti-input" id="dpr-breakdown-produced" disabled style="width:100%"></div>
+        <div>
+          <label class="ti-form-label">Issue / Problem</label>
+          <textarea class="ti-input" id="dpr-breakdown-issue" rows="3" style="width:100%;resize:vertical" placeholder="Describe the issue"></textarea>
+        </div>
+        <div>
+          <label class="ti-form-label">Priority</label>
+          <select class="ti-input" id="dpr-breakdown-priority" style="width:100%">
+            <option value="Immediate">Immediate</option>
+            <option value="Next Day">Next Day</option>
+            <option value="Delayed">Delayed</option>
+          </select>
+        </div>
+        <div>
+          <label class="ti-form-label">Operator</label>
+          <input type="text" class="ti-input" id="dpr-breakdown-operator" list="dpr-breakdown-operators" placeholder="Start typing to filter..." style="width:100%">
+          <datalist id="dpr-breakdown-operators"></datalist>
+        </div>
+        <div id="dpr-breakdown-warning" style="margin-top:8px;font-size:12px;color:var(--ti-red);display:none"></div>
+      </div>
+      <div id="dpr-breakdown-success" style="display:none;font-size:13px;color:var(--ti-text-muted)">
+        Request raised successfully.
+      </div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" id="dpr-breakdown-cancel">Cancel</button>
+      <button class="ti-btn ti-btn-primary" id="dpr-breakdown-submit">Raise Breakdown</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   var t = document.getElementById("dpr-table");

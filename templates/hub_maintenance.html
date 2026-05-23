@@ -7,6 +7,7 @@
     <button class="ti-tab active" data-tab="tools">🔧 Tools Today</button>
     <button class="ti-tab" data-tab="pm">🛠️ Preventive Maintenance</button>
     <button class="ti-tab" data-tab="life">📊 Life Report</button>
+    <button class="ti-tab" data-tab="breakdown">🧯 Breakdown</button>
   </div>
   <div class="ti-tabs__inline ti-tabs__inline--pm" id="maint-inline-pm" hidden>
     <span id="pmStatusCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
@@ -110,6 +111,36 @@
   <div id="lifeGrid" class="ti-hub-section-fill__grid" style="display:none"></div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════════════
+     TAB 4: BREAKDOWN
+     ════════════════════════════════════════════════════════════════════ -->
+<div class="ti-tab-panel" id="panel-breakdown">
+  <div class="ti-tabs ti-tabs--maint ti-breakdown-tabs" id="breakdown-tabs">
+    <div class="ti-tabs__nav">
+      <button class="ti-tab active" data-breakdown-tab="active">Active</button>
+      <button class="ti-tab" data-breakdown-tab="closed">Closed</button>
+    </div>
+  </div>
+
+  <div id="breakdownLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
+
+  <div id="breakdownActivePanel" class="ti-breakdown-panel active">
+    <div id="breakdownActiveGrid" class="ti-hub-section-fill__grid"></div>
+    <div id="breakdownActiveEmpty" class="ti-empty" style="display:none">
+      <div class="ti-empty-icon">🧯</div>
+      <div class="ti-empty-text">No active breakdowns</div>
+    </div>
+  </div>
+
+  <div id="breakdownClosedPanel" class="ti-breakdown-panel">
+    <div id="breakdownClosedGrid" class="ti-hub-section-fill__grid"></div>
+    <div id="breakdownClosedEmpty" class="ti-empty" style="display:none">
+      <div class="ti-empty-icon">✅</div>
+      <div class="ti-empty-text">No closed breakdowns</div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /.ti-hub-section-fill -->
 
 <!-- ════════════════════════════════════════════════════════════════════
@@ -191,13 +222,50 @@
   </div>
 </div>
 
+<!-- Breakdown Edit Modal -->
+<div class="ti-modal-overlay" id="breakdownEditModal">
+  <div class="ti-modal ti-modal-lg">
+    <div class="ti-modal-header"><h3>Edit Breakdown</h3></div>
+    <div class="ti-modal-body">
+      <div><label class="ti-form-label">Root Cause</label><textarea class="ti-input" id="breakdownEditRootCause" rows="3" style="width:100%;resize:vertical" placeholder="Describe the root cause"></textarea></div>
+      <div style="margin-top:10px"><label class="ti-form-label">Action Taken</label><textarea class="ti-input" id="breakdownEditAction" rows="3" style="width:100%;resize:vertical" placeholder="Describe the action taken"></textarea></div>
+      <div style="margin-top:10px"><label class="ti-form-label">Remarks</label><textarea class="ti-input" id="breakdownEditRemarks" rows="3" style="width:100%;resize:vertical" placeholder="Add optional remarks"></textarea></div>
+      <div style="margin-top:10px"><label class="ti-form-label">Spare Consumed</label><textarea class="ti-input" id="breakdownEditSpareConsumed" rows="3" style="width:100%;resize:vertical" placeholder="Add optional spare details"></textarea></div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closeBreakdownModal('breakdownEditModal')">Cancel</button>
+      <button class="ti-btn ti-btn-primary" id="breakdownEditSubmit">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Breakdown Complete Modal -->
+<div class="ti-modal-overlay" id="breakdownCompleteModal">
+  <div class="ti-modal ti-modal-sm">
+    <div class="ti-modal-header"><h3>Complete Breakdown</h3></div>
+    <div class="ti-modal-body">
+      <p style="font-size:13px;color:var(--ti-text-muted)">Select the person completing maintenance.</p>
+      <div>
+        <label class="ti-form-label">Completed By</label>
+        <input type="text" class="ti-input" id="breakdownCompleteUser" list="breakdown-complete-operators-list" placeholder="Start typing to filter..." style="width:100%">
+        <datalist id="breakdown-complete-operators-list"></datalist>
+      </div>
+    </div>
+    <div class="ti-modal-footer">
+      <button class="ti-btn ti-btn-outline" onclick="closeBreakdownModal('breakdownCompleteModal')">Cancel</button>
+      <button class="ti-btn ti-btn-success" id="breakdownCompleteSubmit">✓ Sign off</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Tab switching ─────────────────────────────────────────────────────
 window._pmLoaded = false;
 window._lifeLoaded = false;
+window._breakdownLoaded = false;
 (function() {
   const access = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.access) || []);
-  const tabAccessMap = { tools: 'tools', pm: 'preventive_maintenance', life: 'life_report' };
+  const tabAccessMap = { tools: 'tools', pm: 'preventive_maintenance', life: 'life_report', breakdown: 'preventive_maintenance' };
 
   function setMaintInlineTools(tabName) {
     const pm = document.getElementById('maint-inline-pm');
@@ -234,6 +302,7 @@ window._lifeLoaded = false;
       // Lazy-load tabs
       if (tab.dataset.tab === 'pm' && !window._pmLoaded) { window._pmLoaded = true; loadPmData(); }
       if (tab.dataset.tab === 'life' && !window._lifeLoaded) { window._lifeLoaded = true; loadLifeData(); }
+      if (tab.dataset.tab === 'breakdown' && !window._breakdownLoaded) { window._breakdownLoaded = true; loadBreakdownData(); }
     });
   });
 
@@ -246,11 +315,14 @@ window._lifeLoaded = false;
   setMaintInlineTools(firstTab.dataset.tab || 'tools');
   if (firstTab.dataset.tab === 'pm' && !window._pmLoaded) { window._pmLoaded = true; loadPmData(); }
   if (firstTab.dataset.tab === 'life' && !window._lifeLoaded) { window._lifeLoaded = true; loadLifeData(); }
+  if (firstTab.dataset.tab === 'breakdown' && !window._breakdownLoaded) { window._breakdownLoaded = true; loadBreakdownData(); }
 })();
 
 // ── Modal helpers ─────────────────────────────────────────────────────
 function closePmModal(id) { document.getElementById(id).classList.remove('open'); }
 function openPmModal(id) { document.getElementById(id).classList.add('open'); }
+function closeBreakdownModal(id) { document.getElementById(id).classList.remove('open'); }
+function openBreakdownModal(id) { document.getElementById(id).classList.add('open'); }
 
 // ══════════════════════════════════════════════════════════════════════
 // TOOLS TODAY TAB
@@ -695,5 +767,276 @@ function renderLifeGrid() {
 document.getElementById('lifeSearch').addEventListener('input', (e) => {
   _lifeSearchFilter = e.target.value.trim();
   if (_lifePmAll) renderLifeGrid();
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// BREAKDOWN TAB
+// ══════════════════════════════════════════════════════════════════════
+var _breakdownOperators = [];
+var _breakdownOperatorByLabel = new Map();
+var _breakdownCompleteOperators = [];
+var _breakdownCompleteByLabel = new Map();
+var _breakdownActive = [];
+var _breakdownClosed = [];
+var _breakdownEditId = null;
+var _breakdownCompleteId = null;
+var _breakdownCanEdit = ((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.plusAccess) || []).includes('preventive_maintenance');
+
+function breakdownEscape(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function breakdownTrunc(value, maxLen) {
+  const raw = String(value || '');
+  if (!raw) return '<span style="color:var(--ti-text-dim)">—</span>';
+  const clean = breakdownEscape(raw);
+  if (clean.length <= maxLen) return clean;
+  return `<span title="${clean}">${clean.slice(0, maxLen - 1)}…</span>`;
+}
+
+function breakdownFormatTime(value) {
+  if (!value) return '<span style="color:var(--ti-text-dim)">—</span>';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return breakdownEscape(value);
+  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function breakdownFormatQty(value) {
+  if (value === null || value === undefined || value === '') {
+    return '<span style="color:var(--ti-text-dim)">—</span>';
+  }
+  const n = Number(value);
+  if (Number.isFinite(n)) {
+    return n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  return breakdownEscape(value);
+}
+
+function breakdownUserLabel(user) {
+  const label = (user && user.label) ? String(user.label) : '';
+  if (label) return label;
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return name ? `${name} (${user.login || ''})`.trim() : (user.login || '');
+}
+
+function refreshBreakdownOperatorDatalist() {
+  const dl = document.getElementById('breakdown-operators-list');
+  if (!dl) return;
+  dl.innerHTML = '';
+  _breakdownOperatorByLabel = new Map();
+  (_breakdownOperators || []).forEach(u => {
+    const label = breakdownUserLabel(u);
+    if (!label) return;
+    _breakdownOperatorByLabel.set(label, u);
+    const opt = document.createElement('option');
+    opt.value = label;
+    dl.appendChild(opt);
+  });
+}
+
+function refreshBreakdownCompleteDatalist() {
+  const dl = document.getElementById('breakdown-complete-operators-list');
+  if (!dl) return;
+  dl.innerHTML = '';
+  _breakdownCompleteByLabel = new Map();
+  (_breakdownCompleteOperators || []).forEach(u => {
+    const label = breakdownUserLabel(u);
+    if (!label) return;
+    _breakdownCompleteByLabel.set(label, u);
+    const opt = document.createElement('option');
+    opt.value = label;
+    dl.appendChild(opt);
+  });
+}
+
+async function loadBreakdownOperators() {
+  if (_breakdownOperators.length) return _breakdownOperators;
+  _breakdownOperators = await apiFetch('/api/tool-breakdowns/operators');
+  refreshBreakdownOperatorDatalist();
+  return _breakdownOperators;
+}
+
+async function loadBreakdownCompleteOperators() {
+  if (_breakdownCompleteOperators.length) return _breakdownCompleteOperators;
+  _breakdownCompleteOperators = await apiFetch('/api/tool-breakdowns/operators/dpr');
+  refreshBreakdownCompleteDatalist();
+  return _breakdownCompleteOperators;
+}
+
+function breakdownActiveColumns() {
+  return [
+    { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:120 },
+    { key:'priority', label:'Priority', width:120, format:v=>breakdownEscape(v||'Immediate') },
+    { key:'partNo', label:'Part No', width:140, format:v=>breakdownEscape(v||'—') },
+    { key:'partName', label:'Part Name', width:180, format:v=>breakdownEscape(v||'—') },
+    { key:'machineName', label:'Machine', width:140, format:(v,r)=>breakdownEscape(v || r.machineId || '—') },
+    { key:'downtimeAt', label:'Downtime', width:170, format:v=>breakdownFormatTime(v) },
+    { key:'dprProducedQty', label:'Produced Qty', width:120, format:v=>breakdownFormatQty(v) },
+    { key:'issue', label:'Issue / Problem', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'operatorName', label:'Operator', width:150, format:(v,r)=>breakdownEscape(v || r.operatorLogin || '—') },
+    { key:'rootCause', label:'Root Cause', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'actionTaken', label:'Action Taken', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'remarks', label:'Remarks', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'spareConsumed', label:'Spare Consumed', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'actions', label:'Actions', width:120, format:(v,r)=>r.actionsHtml }
+  ];
+}
+
+function breakdownClosedColumns() {
+  return [
+    { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:120 },
+    { key:'priority', label:'Priority', width:120, format:v=>breakdownEscape(v||'Immediate') },
+    { key:'partNo', label:'Part No', width:140, format:v=>breakdownEscape(v||'—') },
+    { key:'partName', label:'Part Name', width:180, format:v=>breakdownEscape(v||'—') },
+    { key:'machineName', label:'Machine', width:140, format:(v,r)=>breakdownEscape(v || r.machineId || '—') },
+    { key:'downtimeAt', label:'Downtime', width:170, format:v=>breakdownFormatTime(v) },
+    { key:'dprProducedQty', label:'Produced Qty', width:120, format:v=>breakdownFormatQty(v) },
+    { key:'issue', label:'Issue / Problem', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'operatorName', label:'Operator', width:150, format:(v,r)=>breakdownEscape(v || r.operatorLogin || '—') },
+    { key:'rootCause', label:'Root Cause', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'actionTaken', label:'Action Taken', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'remarks', label:'Remarks', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'spareConsumed', label:'Spare Consumed', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'completedByName', label:'Completed By', width:160, format:(v,r)=>breakdownEscape(v || r.completedByLogin || '—') },
+    { key:'completedAt', label:'Completed At', width:170, format:v=>breakdownFormatTime(v) }
+  ];
+}
+
+function renderBreakdownGrids() {
+  const activeRows = (_breakdownActive || []).map(r => {
+    const canComplete = String(r.rootCause || '').trim() && String(r.actionTaken || '').trim();
+    const disabledAttr = canComplete ? '' : 'disabled';
+    const completeStyle = canComplete ? 'color:var(--ti-emerald)' : 'color:var(--ti-text-dim);opacity:.45;cursor:not-allowed';
+    const actionsHtml = _breakdownCanEdit
+      ? `<button class="ti-btn-icon" title="Edit" data-edit="${r.id}">✏️</button>` +
+        `<button class="ti-btn-icon" title="Complete" data-complete="${r.id}" ${disabledAttr} style="${completeStyle}">✅</button>`
+      : '<span style="color:var(--ti-text-dim)">—</span>';
+    return { ...r, actionsHtml };
+  });
+
+  const activeGridHost = document.getElementById('breakdownActiveGrid');
+  const activeEmpty = document.getElementById('breakdownActiveEmpty');
+  if (!activeRows.length) {
+    if (activeGridHost) activeGridHost.style.display = 'none';
+    if (activeEmpty) activeEmpty.style.display = 'block';
+  } else {
+    if (activeEmpty) activeEmpty.style.display = 'none';
+    if (activeGridHost) activeGridHost.style.display = 'flex';
+  }
+  if (activeGridHost) {
+    if (window._breakdownActiveGrid) window._breakdownActiveGrid.destroy();
+    window._breakdownActiveGrid = SuperGrid.create(activeGridHost, {
+      columns: breakdownActiveColumns(),
+      rows: activeRows,
+      options: { search: false, exportBtn: false, omitToolbar: true }
+    });
+    activeGridHost.onclick = function(e) {
+      const btn = e.target.closest('button[data-edit], button[data-complete]');
+      if (!btn || btn.disabled) return;
+      if (btn.hasAttribute('data-edit')) {
+        _breakdownEditId = parseInt(btn.getAttribute('data-edit'));
+        const rec = _breakdownActive.find(x => x.id === _breakdownEditId);
+        if (!rec) return;
+        document.getElementById('breakdownEditRootCause').value = rec.rootCause || '';
+        document.getElementById('breakdownEditAction').value = rec.actionTaken || '';
+        document.getElementById('breakdownEditRemarks').value = rec.remarks || '';
+        document.getElementById('breakdownEditSpareConsumed').value = rec.spareConsumed || '';
+        openBreakdownModal('breakdownEditModal');
+      } else if (btn.hasAttribute('data-complete')) {
+        _breakdownCompleteId = parseInt(btn.getAttribute('data-complete'));
+        const rec = _breakdownActive.find(x => x.id === _breakdownCompleteId);
+        if (!rec || !String(rec.rootCause || '').trim() || !String(rec.actionTaken || '').trim()) return;
+        document.getElementById('breakdownCompleteUser').value = '';
+        openBreakdownModal('breakdownCompleteModal');
+      }
+    };
+  }
+
+  const closedGridHost = document.getElementById('breakdownClosedGrid');
+  const closedEmpty = document.getElementById('breakdownClosedEmpty');
+  if (!_breakdownClosed.length) {
+    if (closedGridHost) closedGridHost.style.display = 'none';
+    if (closedEmpty) closedEmpty.style.display = 'block';
+  } else {
+    if (closedEmpty) closedEmpty.style.display = 'none';
+    if (closedGridHost) closedGridHost.style.display = 'flex';
+  }
+  if (closedGridHost) {
+    if (window._breakdownClosedGrid) window._breakdownClosedGrid.destroy();
+    window._breakdownClosedGrid = SuperGrid.create(closedGridHost, {
+      columns: breakdownClosedColumns(),
+      rows: _breakdownClosed,
+      options: { search: false, exportBtn: false, omitToolbar: true }
+    });
+  }
+}
+
+async function loadBreakdownData() {
+  const loader = document.getElementById('breakdownLoading');
+  if (loader) loader.style.display = 'flex';
+  try {
+    await Promise.all([loadBreakdownOperators(), loadBreakdownCompleteOperators()]);
+    [_breakdownActive, _breakdownClosed] = await Promise.all([
+      apiFetch('/api/tool-breakdowns?status=active'),
+      apiFetch('/api/tool-breakdowns?status=closed'),
+    ]);
+    renderBreakdownGrids();
+  } catch (err) {
+    showSnackbar(err.message || 'Failed to load breakdowns');
+  } finally {
+    if (loader) loader.style.display = 'none';
+  }
+}
+
+function setBreakdownTab(name) {
+  document.querySelectorAll('#breakdown-tabs .ti-tab').forEach(t => t.classList.remove('active'));
+  const btn = document.querySelector(`#breakdown-tabs .ti-tab[data-breakdown-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  document.getElementById('breakdownActivePanel').classList.toggle('active', name === 'active');
+  document.getElementById('breakdownClosedPanel').classList.toggle('active', name === 'closed');
+}
+
+document.querySelectorAll('#breakdown-tabs .ti-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    setBreakdownTab(tab.dataset.breakdownTab || 'active');
+  });
+});
+
+document.getElementById('breakdownEditSubmit').addEventListener('click', async () => {
+  if (!_breakdownEditId) return;
+  try {
+    await apiPatch('/api/tool-breakdowns/' + _breakdownEditId, {
+      rootCause: document.getElementById('breakdownEditRootCause').value,
+      actionTaken: document.getElementById('breakdownEditAction').value,
+      remarks: document.getElementById('breakdownEditRemarks').value,
+      spareConsumed: document.getElementById('breakdownEditSpareConsumed').value,
+    });
+    closeBreakdownModal('breakdownEditModal');
+    loadBreakdownData();
+  } catch (e) {
+    showSnackbar(e.message || 'Failed to update breakdown');
+  }
+});
+
+document.getElementById('breakdownCompleteSubmit').addEventListener('click', async () => {
+  if (!_breakdownCompleteId) return;
+  const label = document.getElementById('breakdownCompleteUser').value.trim();
+  const user = _breakdownCompleteByLabel.get(label);
+  if (!user) {
+    showSnackbar('Please select a valid user');
+    return;
+  }
+  try {
+    await apiPost('/api/tool-breakdowns/' + _breakdownCompleteId + '/complete', { completedById: user.id });
+    closeBreakdownModal('breakdownCompleteModal');
+    loadBreakdownData();
+  } catch (e) {
+    showSnackbar(e.message || 'Failed to complete breakdown');
+  }
 });
 </script>

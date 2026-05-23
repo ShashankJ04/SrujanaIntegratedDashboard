@@ -334,7 +334,7 @@ _LIST_SQL_TEMPLATE = """
         SELECT
             RD_BATCHNO AS batch,
             rd_rmid,
-            ROUND(SUM(CASE WHEN ri_movement = 'I' AND RI_MOVEMENTTYPE = 1 THEN rd_acceptedqty ELSE 0 END), 2) AS totalInwarded
+            ROUND(SUM(CASE WHEN ri_movement = 'I' AND (RI_MOVEMENTTYPE = 1 OR RI_MOVEMENTTYPE = 2) THEN rd_acceptedqty ELSE 0 END), 2) AS totalInwarded
         FROM rm_inwarddetails
         JOIN rm_inwardmaster ON rd_riid = ri_id
         GROUP BY RD_BATCHNO, rd_rmid

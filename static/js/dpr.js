@@ -20,9 +20,15 @@ window.DprPage = (() => {
   let dprPollTimer = null;
   let dprFullscreenMode = false;
   let dprFullscreenKeyHandlerBound = false;
+  let breakdownOperators = [];
+  let breakdownOperatorByLabel = new Map();
+  let breakdownModalState = null;
   const DPR_POLL_MS = Number(
     window.DPR_POLL_INTERVAL_MS != null ? window.DPR_POLL_INTERVAL_MS : DPR_POLL_FALLBACK_MS
   );
+  const breakdownAccess = Array.isArray(window.CURRENT_PERMISSIONS?.plusAccess)
+    ? window.CURRENT_PERMISSIONS.plusAccess.includes("edit_dpr")
+    : false;
   let suppressRealtimeReloadUntil = 0;
   let lastVersionToken = null;
   const rowAutoSaveTimers = new WeakMap();
@@ -124,6 +130,14 @@ window.DprPage = (() => {
       }),
     version: (date) => apiFetch(`${BASE}/dpr/version?${qs({ date })}`),
     qrList: () => apiFetch(`${BASE}/dpr/qr-list`),
+    breakdownOperators: () => apiFetch(`${BASE}/tool-breakdowns/operators/dpr`),
+    breakdownList: (params) => apiFetch(`${BASE}/tool-breakdowns?${qs(params || {})}`),
+    breakdownCreate: (payload) =>
+      apiFetch(`${BASE}/tool-breakdowns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
   };
 
   function openQrModal(info) {
@@ -183,6 +197,164 @@ window.DprPage = (() => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 4,
     });
+  }
+
+  function notify(msg, isError) {
+    if (typeof window.showSnackbar === "function") {
+      window.showSnackbar(msg || (isError ? "Something went wrong" : "Done"));
+    } else if (msg) {
+      console.log(msg);
+    }
+  }
+
+  function formatDateTimeLocal(d) {
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function breakdownUserLabel(user) {
+    if (!user) return "";
+    const label = String(user.label || "").trim();
+    if (label) return label;
+    const first = String(user.firstName || "").trim();
+    const last = String(user.lastName || "").trim();
+    const name = [first, last].filter(Boolean).join(" ").trim();
+    const login = String(user.login || "").trim();
+    if (name && login && name.toLowerCase() !== login.toLowerCase()) {
+      return `${name} (${login})`;
+    }
+    return name || login;
+  }
+
+  function refreshBreakdownOperators() {
+    const dl = document.getElementById("dpr-breakdown-operators");
+    if (!dl) return;
+    dl.innerHTML = "";
+    breakdownOperatorByLabel = new Map();
+    (breakdownOperators || []).forEach((u) => {
+      const label = breakdownUserLabel(u);
+      if (!label) return;
+      breakdownOperatorByLabel.set(label, u);
+      const opt = document.createElement("option");
+      opt.value = label;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function loadBreakdownOperators() {
+    try {
+      breakdownOperators = await Api.breakdownOperators();
+    } catch (e) {
+      console.warn("Failed to load breakdown operators:", e);
+      breakdownOperators = [];
+    }
+    refreshBreakdownOperators();
+  }
+
+  function setBreakdownWarning(text) {
+    const warn = document.getElementById("dpr-breakdown-warning");
+    if (!warn) return;
+    if (text) {
+      warn.textContent = text;
+      warn.style.display = "block";
+    } else {
+      warn.textContent = "";
+      warn.style.display = "none";
+    }
+  }
+
+  function setBreakdownModalSuccess(isSuccess) {
+    const title = document.getElementById("dpr-breakdown-title");
+    const form = document.getElementById("dpr-breakdown-form");
+    const success = document.getElementById("dpr-breakdown-success");
+    const cancelBtn = document.getElementById("dpr-breakdown-cancel");
+    const submitBtn = document.getElementById("dpr-breakdown-submit");
+    if (title) title.textContent = isSuccess ? "Request Raised Successfully" : "Raise Tool Breakdown";
+    if (form) form.style.display = isSuccess ? "none" : "flex";
+    if (success) success.style.display = "none";
+    if (cancelBtn) cancelBtn.textContent = isSuccess ? "Close" : "Cancel";
+    if (submitBtn) submitBtn.style.display = isSuccess ? "none" : "";
+  }
+
+  async function checkOpenBreakdown(toolNo) {
+    if (!toolNo) return false;
+    try {
+      const rows = await Api.breakdownList({ status: "active", toolNo, limit: 1 });
+      return Array.isArray(rows) && rows.length > 0;
+    } catch (e) {
+      console.warn("Breakdown check failed:", e);
+      return false;
+    }
+  }
+
+  function closeBreakdownModal() {
+    const modal = document.getElementById("dpr-breakdown-modal");
+    if (modal) modal.classList.remove("open");
+    breakdownModalState = null;
+    setBreakdownWarning("");
+  }
+
+  async function openBreakdownModal(row) {
+    const modal = document.getElementById("dpr-breakdown-modal");
+    if (!modal) return;
+    const toolNo = String(row?.toolNo || "").trim();
+    if (!toolNo) {
+      notify("Tool number is missing for this line.", true);
+      return;
+    }
+    const machineLabel = row?.machineLabel || labelByMachineId(row?.machineId) || row?.machineId || "";
+    const partNo = row?.partNo || "";
+    const partName = row?.partName || "";
+    const issueInput = document.getElementById("dpr-breakdown-issue");
+    const priorityInput = document.getElementById("dpr-breakdown-priority");
+    const operatorInput = document.getElementById("dpr-breakdown-operator");
+    const submitBtn = document.getElementById("dpr-breakdown-submit");
+    const now = new Date();
+
+    setBreakdownModalSuccess(false);
+    const machineEl = document.getElementById("dpr-breakdown-machine");
+    const partNoEl = document.getElementById("dpr-breakdown-partno");
+    const partNameEl = document.getElementById("dpr-breakdown-partname");
+    const toolNoEl = document.getElementById("dpr-breakdown-toolno");
+    const downtimeEl = document.getElementById("dpr-breakdown-downtime");
+    const producedEl = document.getElementById("dpr-breakdown-produced");
+    if (machineEl) machineEl.value = String(machineLabel || "");
+    if (partNoEl) partNoEl.value = String(partNo || "");
+    if (partNameEl) partNameEl.value = String(partName || "");
+    if (toolNoEl) toolNoEl.value = String(toolNo || "");
+    if (downtimeEl) downtimeEl.value = formatDateTimeLocal(now);
+    if (producedEl) producedEl.value = formatCellNumber(row?.producedQty);
+    if (issueInput) issueInput.value = "";
+    if (priorityInput) priorityInput.value = "Immediate";
+    if (operatorInput) operatorInput.value = "";
+    if (submitBtn) submitBtn.disabled = true;
+    setBreakdownWarning("Checking for existing open breakdowns...");
+
+    breakdownModalState = {
+      row,
+      toolNo,
+      partNo,
+      partName,
+      machineId: row?.machineId || "",
+      machineName: machineLabel,
+      dprRowId: row?.id || null,
+      dprProducedQty: row?.producedQty ?? null,
+    };
+
+    modal.classList.add("open");
+
+    const hasOpen = await checkOpenBreakdown(toolNo);
+    if (submitBtn) submitBtn.disabled = hasOpen;
+    setBreakdownWarning(
+      hasOpen ? "An open breakdown already exists for this tool." : ""
+    );
+    if (submitBtn && !hasOpen) submitBtn.disabled = false;
   }
 
   function formatKpiQty(value) {
@@ -1157,6 +1329,14 @@ window.DprPage = (() => {
         const actionCell = document.createElement("td");
         actionCell.dataset.colName = "actions";
         actionCell.className = "dpr-col-actions";
+        if (breakdownAccess) {
+          const brBtn = document.createElement("button");
+          brBtn.type = "button";
+          brBtn.className = "ti-btn ti-btn--xs ti-btn--ghost";
+          brBtn.textContent = "Breakdown";
+          brBtn.addEventListener("click", () => openBreakdownModal(row));
+          actionCell.appendChild(brBtn);
+        }
         const delBtn = document.createElement("button");
         delBtn.type = "button";
         delBtn.className = "ti-btn ti-btn--xs ti-btn--ghost";
@@ -1373,6 +1553,9 @@ window.DprPage = (() => {
       console.error(e);
       setStatus("Could not load picklists.", true);
     }
+    if (breakdownAccess) {
+      await loadBreakdownOperators();
+    }
 
     dateInput.addEventListener("change", () => {
       lastVersionToken = null;
@@ -1428,6 +1611,56 @@ window.DprPage = (() => {
     const qrBackdrop = document.getElementById("dpr-qr-modal-backdrop");
     if (qrClose) qrClose.addEventListener("click", closeQrModal);
     if (qrBackdrop) qrBackdrop.addEventListener("click", closeQrModal);
+
+    if (breakdownAccess) {
+      const brCancel = document.getElementById("dpr-breakdown-cancel");
+      if (brCancel) brCancel.addEventListener("click", closeBreakdownModal);
+      const brSubmit = document.getElementById("dpr-breakdown-submit");
+      if (brSubmit) {
+        brSubmit.addEventListener("click", async () => {
+          if (!breakdownModalState) return;
+          const issueInput = document.getElementById("dpr-breakdown-issue");
+          const priorityInput = document.getElementById("dpr-breakdown-priority");
+          const operatorInput = document.getElementById("dpr-breakdown-operator");
+          const issue = String(issueInput?.value || "").trim();
+          if (!issue) {
+            notify("Please enter the issue/problem.", true);
+            return;
+          }
+          const priority = String(priorityInput?.value || "Immediate").trim();
+          const operatorLabel = String(operatorInput?.value || "").trim();
+          const operator = breakdownOperatorByLabel.get(operatorLabel);
+          if (!operator) {
+            notify("Please select a valid operator.", true);
+            return;
+          }
+          brSubmit.disabled = true;
+          try {
+            const dateVal = document.getElementById("dpr-date")?.value || "";
+            await Api.breakdownCreate({
+              toolNo: breakdownModalState.toolNo,
+              partNo: breakdownModalState.partNo,
+              partName: breakdownModalState.partName,
+              machineId: breakdownModalState.machineId,
+              machineName: breakdownModalState.machineName,
+              issue,
+              priority,
+              operatorId: operator.id,
+              dprRowId: breakdownModalState.dprRowId,
+              dprProducedQty: breakdownModalState.dprProducedQty,
+              dprReviewDate: dateVal || null,
+            });
+            breakdownModalState = null;
+            setBreakdownWarning("");
+            setBreakdownModalSuccess(true);
+          } catch (e) {
+            console.error(e);
+            notify(e.message || "Failed to raise breakdown.", true);
+            brSubmit.disabled = false;
+          }
+        });
+      }
+    }
   }
 
   return { init, loadRows };
