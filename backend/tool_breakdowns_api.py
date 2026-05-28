@@ -12,6 +12,7 @@ from .auth import api_login_required
 from . import rbac
 from .db import execute, fetch_all, fetch_one
 from .pm_api import _norm_tool_no
+from . import pm_store
 
 tool_breakdowns_bp = Blueprint("tool_breakdowns_bp", __name__, url_prefix="/api/tool-breakdowns")
 
@@ -143,6 +144,27 @@ def _fetch_active_operator(operator_id: Any) -> Optional[Dict[str, Any]]:
         (oid,),
     )
     return row
+
+
+def _resolve_tool_id_for_strokes(tool_no: str) -> Optional[int]:
+    norm = _norm_tool_no(tool_no).strip()
+    if not norm:
+        return None
+    row = fetch_one(
+        """
+        SELECT TL_tool_id AS toolId
+        FROM tool_life
+        WHERE TL_tool_number = %s
+        LIMIT 1
+        """,
+        (norm,),
+    )
+    if row and row.get("toolId") is not None:
+        try:
+            return int(row.get("toolId"))
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def _breakdown_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -475,7 +497,7 @@ def complete_breakdown(breakdown_id: int):
 
     row = fetch_one(
         """
-        SELECT id, root_cause, action_taken, completed_at
+        SELECT id, tool_no, root_cause, action_taken, completed_at
         FROM tool_breakdowns
         WHERE id = %s
         """,
@@ -491,6 +513,16 @@ def complete_breakdown(breakdown_id: int):
     if not root_cause or not action_taken:
         return jsonify({"error": "Root cause and action taken are required"}), 400
 
+    tool_no = str(row.get("tool_no") or "").strip()
+    tool_id = _resolve_tool_id_for_strokes(tool_no)
+    if not tool_id:
+        return jsonify({"error": "Tool not found for stroke info"}), 404
+
+    try:
+        stroke_info = pm_store.get_stroke_info(tool_id, date.today())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
     execute(
         """
         UPDATE tool_breakdowns
@@ -499,7 +531,9 @@ def complete_breakdown(breakdown_id: int):
             completed_by_id = %s,
             completed_by_login = %s,
             completed_by_name = %s,
-            updated_by = %s
+            updated_by = %s,
+            current_stroke = %s,
+            next_stroke = %s
         WHERE id = %s
         """,
         (
@@ -507,6 +541,8 @@ def complete_breakdown(breakdown_id: int):
             operator_row.get("ecno"),
             operator_row.get("name"),
             str(g.current_user.get("login") or ""),
+            stroke_info.get("currentStroke"),
+            stroke_info.get("suggestedNextStroke"),
             breakdown_id,
         ),
     )
