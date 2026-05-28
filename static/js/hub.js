@@ -154,6 +154,7 @@ const Hub = (() => {
     maintenance: { title: 'Maintenance',     icon: '🔧' },
     'rm-variance':{ title: 'RM Variance',    icon: '📈' },
     'rm-correction':{ title: 'RM Correction', icon: '✏️' },
+    'rm-calculator': { title: 'RM Calculator', icon: '⚖️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
     'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
     'production-calendar': { title: 'Production Calendar', icon: '🏗️' },
@@ -176,6 +177,7 @@ const Hub = (() => {
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'production-calendar') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
+    if (section === 'rm-calculator') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
     if (section === 'executive') return ACCESS.has('executive');
@@ -558,55 +560,20 @@ const Hub = (() => {
     utils.$('.ti-mobile-overlay')?.classList.add('open');
   }
 
-  // ── System Pulse (LED + Ticker) ──────────────────────────────────
-  async function updatePulse() {
-    // 1. Update Status Indicator (LED)
+  // ── Sidebar status LED (PM tool health) ───────────────────────────
+  async function updatePulseBar() {
     const bar = utils.$('.ti-pulse-bar');
-    if (bar) {
-      try {
-        const pmData = await api.get('/api/pm/status?threshold=80&mode=above');
-        if (Array.isArray(pmData)) {
-          const critical = pmData.filter(d => d.pmPercentage >= 100).length;
-          const warning = pmData.filter(d => d.pmPercentage >= 80 && d.pmPercentage < 100).length;
-          if (critical > 0) bar.className = 'ti-pulse-bar critical';
-          else if (warning > 0) bar.className = 'ti-pulse-bar warning';
-          else bar.className = 'ti-pulse-bar';
-        }
-      } catch (err) { /* silent */ }
-    }
-
-    // 2. Update Pulse Ticker (Text) — ERP production + DPR snapshot (see /api/hub/pulse)
-    const tickerA = document.getElementById('pulse-ticker-a');
-    const tickerB = document.getElementById('pulse-ticker-b');
-    const tickerTrack = document.getElementById('pulse-ticker-track');
-    if (tickerA && tickerB && tickerTrack) {
-      let line = '';
-      try {
-        const data = await api.get('/api/hub/pulse');
-        if (Array.isArray(data) && data.length > 0) {
-          line = data.map(d => `• ${d.text}`).join('   |   ');
-        } else {
-          line =
-            '• No recent ticker items — production/DPR data will appear here as activity is logged.';
-        }
-      } catch (err) {
-        line = '• Pulse feed unavailable — check connection and try refreshing.';
+    if (!bar) return;
+    try {
+      const pmData = await api.get('/api/pm/status?threshold=80&mode=above');
+      if (Array.isArray(pmData)) {
+        const critical = pmData.filter(d => d.pmPercentage >= 100).length;
+        const warning = pmData.filter(d => d.pmPercentage >= 80 && d.pmPercentage < 100).length;
+        if (critical > 0) bar.className = 'ti-pulse-bar critical';
+        else if (warning > 0) bar.className = 'ti-pulse-bar warning';
+        else bar.className = 'ti-pulse-bar';
       }
-      tickerA.textContent = line;
-      tickerB.textContent = line;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const half = tickerTrack.scrollWidth / 2;
-          if (!half || !Number.isFinite(half)) return;
-          const pxPerSec = 42;
-          const sec = Math.max(18, Math.min(140, half / pxPerSec));
-          tickerTrack.style.setProperty('--ti-pulse-dur', `${sec}s`);
-          tickerTrack.classList.remove('ti-pulse-ticker-track--run');
-          void tickerTrack.offsetWidth;
-          tickerTrack.classList.add('ti-pulse-ticker-track--run');
-        });
-      });
-    }
+    } catch (err) { /* silent */ }
   }
 
   // ── Command Palette (Ctrl+K) ──────────────────────────────────────
@@ -786,9 +753,9 @@ const Hub = (() => {
     const section = getInitialSection();
     navigate(section, { rowFilter: initRowFilter || undefined });
 
-    // Pulse bar update
-    updatePulse();
-    setInterval(updatePulse, 60000); // every 60s
+    // Sidebar PM status LED
+    updatePulseBar();
+    setInterval(updatePulseBar, 60000); // every 60s
 
     // Theme toggle
     initTheme();
@@ -825,7 +792,7 @@ const Hub = (() => {
     api,
     utils,
     navigate,
-    updatePulse,
+    updatePulseBar,
     SECTIONS,
     getTheme: () => currentTheme,
     refreshReportsNav: loadReportsSidebarTree,

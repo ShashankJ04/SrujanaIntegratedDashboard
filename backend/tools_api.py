@@ -7,12 +7,15 @@ scheduled_production → PS_ prefix, components_tool → CT_ prefix.
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from datetime import date as dt_date, timedelta
+
+from flask import Blueprint, current_app, jsonify, request
 
 from .auth import api_login_required
 from .rbac import require_access, require_any_access
 from .db import fetch_all, fetch_one
 from .pm_api import _norm_tool_no
+from .tool_schedule import get_tools_for_date_from_production_calendar
 
 tools_bp = Blueprint("tools_bp", __name__, url_prefix="/api/tools")
 
@@ -95,20 +98,21 @@ def search_tools():
     return jsonify(result)
 
 
-# ── Tools for date helper ───────────────────────────────────────────────
+# ── Tools for date helpers ──────────────────────────────────────────────
 
-def _get_tools_for_date(mode: str = "today", base_date: str | None = None, offset: int = 0):
-    """Get tools scheduled for a given date.
-
-    Matches the original tools.ts getToolsForDate() exactly:
-    - Uses CURDATE() / DATE_ADD() in SQL (not Python date)
-    - Groups by toolId (PS_TOOLID), not toolNo
-    - Returns distinct tool count, machineCount, totalScheduledQty, totalScheduledStrokes
-    """
-
-    # Build the date SQL expression to match the original exactly
+def _resolve_target_date(base_date: str | None, offset: int) -> dt_date:
     if base_date:
-        # base_date is a validated YYYY-MM-DD string
+        return dt_date.fromisoformat(base_date) + timedelta(days=offset)
+    return dt_date.today() + timedelta(days=offset)
+
+
+def _get_tools_for_date_from_scheduled_production(
+    base_date: str | None = None,
+    offset: int = 0,
+):
+    """Legacy: tools from scheduled_production for a given date."""
+
+    if base_date:
         date_expr = f"DATE_ADD(%s, INTERVAL {int(offset)} DAY)"
         params = (base_date,)
     elif offset > 0:
@@ -143,7 +147,6 @@ def _get_tools_for_date(mode: str = "today", base_date: str | None = None, offse
 
     rows = fetch_all(sql, params if params else None)
 
-    # Group by toolId (integer), matching the original exactly
     tools_map = {}
     for r in rows:
         tid = r["toolId"]
@@ -177,28 +180,32 @@ def _get_tools_for_date(mode: str = "today", base_date: str | None = None, offse
         tools_map[tid]["totalScheduledQty"] += scheduled_qty
         tools_map[tid]["totalScheduledStrokes"] += scheduled_strokes
 
-    # Compute machineCount per tool (distinct machine IDs)
     for tool in tools_map.values():
         tool["machineCount"] = len(set(m["machineId"] for m in tool["machines"]))
 
     tools_list = list(tools_map.values())
 
-    # Fallback date for the response
-    from datetime import date as dt_date, timedelta
     if rows:
         date_str = rows[0]["date"]
-    elif base_date:
-        d = dt_date.fromisoformat(base_date) + timedelta(days=offset)
-        date_str = d.isoformat()
     else:
-        d = dt_date.today() + timedelta(days=offset)
-        date_str = d.isoformat()
+        date_str = _resolve_target_date(base_date, offset).isoformat()
 
     return {
         "date": date_str,
-        "count": len(tools_map),  # distinct tool count, matching original
+        "count": len(tools_map),
         "tools": tools_list,
     }
+
+
+def _get_tools_for_date(mode: str = "today", base_date: str | None = None, offset: int = 0):
+    """Get tools scheduled for a given date (source controlled by TOOL_SCHEDULE_SOURCE)."""
+    target_date = _resolve_target_date(base_date, offset)
+    source = str(
+        current_app.config.get("TOOL_SCHEDULE_SOURCE") or "scheduled_production"
+    ).strip().lower()
+    if source == "production_calendar":
+        return get_tools_for_date_from_production_calendar(target_date)
+    return _get_tools_for_date_from_scheduled_production(base_date, offset)
 
 
 def _is_valid_date(s: str | None) -> bool:

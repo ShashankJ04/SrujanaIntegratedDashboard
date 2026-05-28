@@ -41,7 +41,6 @@ from .models import (
     get_dpr_summary,
     get_dpr_version,
     upsert_dpr_snapshot,
-    get_hub_pulse_feed,
 )
 
 
@@ -242,13 +241,8 @@ def dashboard_rm_charts() -> Any:
 
 @api_bp.get("/hub/pulse")
 def hub_pulse() -> Any:
-    """Hub top-bar ticker: recent ERP production + today's DPR line count (no warehouse DB)."""
-    try:
-        items = get_hub_pulse_feed()
-        return jsonify(items)
-    except Exception as e:
-        current_app.logger.warning("hub_pulse: %s", e)
-        return jsonify([])
+    """Pulse ticker disabled — UI not shown; avoid heavy ERP polling."""
+    return jsonify([])
 
 
 # ── DPR — Daily Production Review ─────────────────────────────────────

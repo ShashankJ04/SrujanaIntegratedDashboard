@@ -32,6 +32,7 @@ _FONT_DEFAULT = Font(color="0E2039")
 
 # Thousands separator for numeric cells (Excel display)
 _EXCEL_NUMERIC_FORMAT = "#,##0.00"
+_EXCEL_RM_CONVAL_FORMAT = "#,##0." + ("0" * 10)
 
 
 def _numeric_value_for_excel(val: Any) -> Any:
@@ -99,7 +100,11 @@ def generate_excel_response(
                 num = _numeric_value_for_excel(val)
                 if num is not None:
                     cell.value = num
-                    cell.number_format = _EXCEL_NUMERIC_FORMAT
+                    cell.number_format = (
+                        _EXCEL_RM_CONVAL_FORMAT
+                        if col.name == "rm_conval"
+                        else _EXCEL_NUMERIC_FORMAT
+                    )
                 else:
                     cell.value = val
             else:

@@ -232,6 +232,23 @@ window.DprPage = (() => {
     return name || login;
   }
 
+  function hasDprProducedQty(row) {
+    const q = row?.producedQty;
+    if (q === null || q === undefined || q === "") return false;
+    return Number.isFinite(Number(q));
+  }
+
+  function syncBreakdownButton(tr, row) {
+    if (!tr || !breakdownAccess) return;
+    const brBtn = tr.querySelector(".dpr-breakdown-btn");
+    if (!brBtn) return;
+    const ok = hasDprProducedQty(row);
+    brBtn.disabled = !ok;
+    brBtn.title = ok
+      ? "Raise tool breakdown"
+      : "Enter Produced Qty on this line first (0 is allowed)";
+  }
+
   function refreshBreakdownOperators() {
     const dl = document.getElementById("dpr-breakdown-operators");
     if (!dl) return;
@@ -303,6 +320,20 @@ window.DprPage = (() => {
   async function openBreakdownModal(row) {
     const modal = document.getElementById("dpr-breakdown-modal");
     if (!modal) return;
+    if (!hasDprProducedQty(row)) {
+      notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+      return;
+    }
+    const rowIdx = pendingRows.indexOf(row);
+    const dateVal = document.getElementById("dpr-date")?.value || "";
+    if (rowIdx >= 0 && dateVal) {
+      await saveRow(rowIdx, dateVal, { silent: true });
+      row = pendingRows[rowIdx];
+      if (!hasDprProducedQty(row)) {
+        notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+        return;
+      }
+    }
     const toolNo = String(row?.toolNo || "").trim();
     if (!toolNo) {
       notify("Tool number is missing for this line.", true);
@@ -1296,6 +1327,7 @@ window.DprPage = (() => {
             const calcPct = Number.isFinite(p) && p > 0 && Number.isFinite(q) ? (100 * q) / p : null;
             pctCell.classList.toggle("dpr-produced-pct-low", Number.isFinite(calcPct) && calcPct < 70);
             pctCell.classList.toggle("dpr-produced-pct-good", Number.isFinite(calcPct) && calcPct >= 70);
+            syncBreakdownButton(tr, pendingRows[idx]);
             updateKpiStrip();
           });
           inpP.addEventListener("change", () => scheduleRowAutoSave(row, dateVal, 120));
@@ -1332,9 +1364,10 @@ window.DprPage = (() => {
         if (breakdownAccess) {
           const brBtn = document.createElement("button");
           brBtn.type = "button";
-          brBtn.className = "ti-btn ti-btn--xs ti-btn--ghost";
+          brBtn.className = "ti-btn ti-btn--xs ti-btn--ghost dpr-breakdown-btn";
           brBtn.textContent = "Breakdown";
-          brBtn.addEventListener("click", () => openBreakdownModal(row));
+          brBtn.addEventListener("click", () => openBreakdownModal(pendingRows[idx]));
+          syncBreakdownButton(tr, row);
           actionCell.appendChild(brBtn);
         }
         const delBtn = document.createElement("button");
@@ -1619,6 +1652,13 @@ window.DprPage = (() => {
       if (brSubmit) {
         brSubmit.addEventListener("click", async () => {
           if (!breakdownModalState) return;
+          const liveRow =
+            pendingRows.find((r) => r.id && r.id === breakdownModalState.dprRowId) ||
+            breakdownModalState.row;
+          if (!hasDprProducedQty(liveRow)) {
+            notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+            return;
+          }
           const issueInput = document.getElementById("dpr-breakdown-issue");
           const priorityInput = document.getElementById("dpr-breakdown-priority");
           const operatorInput = document.getElementById("dpr-breakdown-operator");
@@ -1647,7 +1687,7 @@ window.DprPage = (() => {
               priority,
               operatorId: operator.id,
               dprRowId: breakdownModalState.dprRowId,
-              dprProducedQty: breakdownModalState.dprProducedQty,
+              dprProducedQty: liveRow.producedQty,
               dprReviewDate: dateVal || null,
             });
             breakdownModalState = null;

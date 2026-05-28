@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from functools import wraps
+import math
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request, g
@@ -146,6 +147,90 @@ def _fetch_active_operator(operator_id: Any) -> Optional[Dict[str, Any]]:
     return row
 
 
+def _strokes_from_produced_qty(part_no: Optional[str], produced_qty: Any) -> int:
+    """Strokes for a produced qty on a part line (same formula as DPR / production_details)."""
+    try:
+        qty = float(produced_qty or 0)
+    except (TypeError, ValueError):
+        return 0
+    if qty <= 0:
+        return 0
+    p = str(part_no or "").strip()
+    if not p:
+        return 0
+    row = fetch_one(
+        """
+        SELECT ct.CT_NO_OF_CAVITY AS cavity
+        FROM components_tool ct
+        INNER JOIN components c ON ct.CT_COMPID = c.CO_ID
+        WHERE ct.CT_ACTIVEYN = 'Y'
+          AND c.CO_ACTIVEYN = 'Y'
+          AND TRIM(c.CO_PARTNO) = %s
+        ORDER BY ct.CT_ID DESC
+        LIMIT 1
+        """,
+        (p,),
+    )
+    cavity = max(1, int(row.get("cavity") or 1)) if row else 1
+    return int(round(qty / cavity))
+
+
+def _as_of_date(value: Any) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError:
+            pass
+    return date.today()
+
+
+def _breakdown_completion_strokes(row: Dict[str, Any]) -> Dict[str, int]:
+    """Current/next stroke at sign-off including DPR produced qty at and after breakdown."""
+    tool_no = str(row.get("tool_no") or "").strip()
+    tool_id = _resolve_tool_id_for_strokes(tool_no)
+    if not tool_id:
+        raise ValueError("Tool not found for stroke info")
+
+    tl_row = fetch_one(
+        "SELECT TL_preventive_maintenance_strokes FROM tool_life WHERE TL_tool_id = %s",
+        (tool_id,),
+    )
+    if not tl_row:
+        raise ValueError(f"Tool ID {tool_id} not found")
+    pm_strokes = int(tl_row.get("TL_preventive_maintenance_strokes") or 0)
+
+    as_of = _as_of_date(row.get("downtime_at"))
+    erp_strokes = pm_store.get_tool_strokes(tool_id, as_of)
+
+    part_no = str(row.get("part_no") or "").strip() or None
+    dpr_strokes = 0
+    q_at_breakdown = float(row.get("dpr_produced_qty") or 0)
+    if part_no:
+        dpr_strokes += _strokes_from_produced_qty(part_no, q_at_breakdown)
+        dpr_row_id = row.get("dpr_row_id")
+        if dpr_row_id is not None:
+            try:
+                dpr_id = int(dpr_row_id)
+            except (TypeError, ValueError):
+                dpr_id = None
+            if dpr_id:
+                dpr_row = fetch_one(
+                    "SELECT produced_qty FROM dpr_daily_review WHERE id = %s",
+                    (dpr_id,),
+                )
+                if dpr_row:
+                    q_now = float(dpr_row.get("produced_qty") or 0)
+                    delta = max(0.0, q_now - q_at_breakdown)
+                    dpr_strokes += _strokes_from_produced_qty(part_no, delta)
+
+    current = int(erp_strokes) + int(dpr_strokes)
+    return {"currentStroke": current, "suggestedNextStroke": current + pm_strokes}
+
+
 def _resolve_tool_id_for_strokes(tool_no: str) -> Optional[int]:
     norm = _norm_tool_no(tool_no).strip()
     if not norm:
@@ -186,6 +271,7 @@ def _breakdown_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "downtimeAt": _iso_dt(row.get("downtime_at")),
         "rootCause": row.get("root_cause"),
         "rootCauseAt": _iso_dt(row.get("root_cause_at")),
+        "analysis": row.get("analysis") or "",
         "actionTaken": row.get("action_taken"),
         "actionTakenAt": _iso_dt(row.get("action_taken_at")),
         "remarks": row.get("remarks") or "",
@@ -194,6 +280,9 @@ def _breakdown_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "completedById": row.get("completed_by_id"),
         "completedByLogin": row.get("completed_by_login"),
         "completedByName": row.get("completed_by_name"),
+        "hoursSpentToConsume": row.get("hours_spent"),
+        "currentStroke": row.get("current_stroke"),
+        "nextStroke": row.get("next_stroke"),
         "createdBy": row.get("created_by"),
         "updatedBy": row.get("updated_by"),
         "createdAt": _iso_dt(row.get("created_at")),
@@ -319,6 +408,23 @@ def create_breakdown():
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid dprProducedQty"}), 400
 
+    if dpr_row_id is not None:
+        dpr_row = fetch_one(
+            "SELECT id, produced_qty FROM dpr_daily_review WHERE id = %s",
+            (dpr_row_id,),
+        )
+        if not dpr_row:
+            return jsonify({"error": "DPR row not found"}), 404
+        if dpr_row.get("produced_qty") is None:
+            return jsonify({
+                "error": "Enter Produced Qty on the DPR line before raising a breakdown (0 is allowed).",
+            }), 400
+        if dpr_produced_qty is None or not math.isfinite(dpr_produced_qty):
+            return jsonify({
+                "error": "Enter Produced Qty on the DPR line before raising a breakdown (0 is allowed).",
+            }), 400
+        dpr_produced_qty = float(dpr_row.get("produced_qty"))
+
     user_login = str(g.current_user.get("login") or "")
     execute(
         """
@@ -389,8 +495,9 @@ def list_breakdowns():
             id, tool_no, part_no, part_name, machine_id, machine_name,
             dpr_row_id, dpr_review_date, dpr_produced_qty,
             issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
-            root_cause, root_cause_at, action_taken, action_taken_at, remarks, spare_consumed,
+            root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,
             completed_at, completed_by_id, completed_by_login, completed_by_name,
+            hours_spent, current_stroke, next_stroke,
             created_by, updated_by, created_at, updated_at
         FROM tool_breakdowns
         WHERE {where_sql}
@@ -407,6 +514,7 @@ def update_breakdown(breakdown_id: int):
     payload = request.get_json(silent=True) or {}
     if (
         "rootCause" not in payload
+        and "analysis" not in payload
         and "actionTaken" not in payload
         and "remarks" not in payload
         and "spareConsumed" not in payload
@@ -434,6 +542,14 @@ def update_breakdown(breakdown_id: int):
         else:
             set_parts.append("root_cause = NULL")
             set_parts.append("root_cause_at = NULL")
+
+    if "analysis" in payload:
+        analysis = str(payload.get("analysis") or "").strip()
+        if analysis:
+            set_parts.append("analysis = %s")
+            params.append(analysis)
+        else:
+            set_parts.append("analysis = NULL")
 
     if "actionTaken" in payload:
         action_taken = str(payload.get("actionTaken") or "").strip()
@@ -475,8 +591,9 @@ def update_breakdown(breakdown_id: int):
             id, tool_no, part_no, part_name, machine_id, machine_name,
             dpr_row_id, dpr_review_date, dpr_produced_qty,
             issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
-            root_cause, root_cause_at, action_taken, action_taken_at, remarks, spare_consumed,
+            root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,
             completed_at, completed_by_id, completed_by_login, completed_by_name,
+            hours_spent, current_stroke, next_stroke,
             created_by, updated_by, created_at, updated_at
         FROM tool_breakdowns
         WHERE id = %s
@@ -497,7 +614,9 @@ def complete_breakdown(breakdown_id: int):
 
     row = fetch_one(
         """
-        SELECT id, tool_no, root_cause, action_taken, completed_at
+        SELECT
+            id, tool_no, part_no, dpr_row_id, dpr_produced_qty, downtime_at,
+            root_cause, action_taken, completed_at
         FROM tool_breakdowns
         WHERE id = %s
         """,
@@ -513,13 +632,18 @@ def complete_breakdown(breakdown_id: int):
     if not root_cause or not action_taken:
         return jsonify({"error": "Root cause and action taken are required"}), 400
 
-    tool_no = str(row.get("tool_no") or "").strip()
-    tool_id = _resolve_tool_id_for_strokes(tool_no)
-    if not tool_id:
-        return jsonify({"error": "Tool not found for stroke info"}), 404
+    hours_raw = payload.get("hoursSpentToConsume")
+    if hours_raw in (None, ""):
+        return jsonify({"error": "Hours spent is required"}), 400
+    try:
+        hours_spent = float(hours_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid hours spent"}), 400
+    if hours_spent < 0:
+        return jsonify({"error": "Hours spent cannot be negative"}), 400
 
     try:
-        stroke_info = pm_store.get_stroke_info(tool_id, date.today())
+        stroke_info = _breakdown_completion_strokes(row)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 
@@ -531,6 +655,7 @@ def complete_breakdown(breakdown_id: int):
             completed_by_id = %s,
             completed_by_login = %s,
             completed_by_name = %s,
+            hours_spent = %s,
             updated_by = %s,
             current_stroke = %s,
             next_stroke = %s
@@ -540,6 +665,7 @@ def complete_breakdown(breakdown_id: int):
             operator_row.get("id"),
             operator_row.get("ecno"),
             operator_row.get("name"),
+            hours_spent,
             str(g.current_user.get("login") or ""),
             stroke_info.get("currentStroke"),
             stroke_info.get("suggestedNextStroke"),

@@ -4,7 +4,7 @@ Endpoints (all require API auth + rm_correction or rm_variance):
   GET  /api/rm-correction           — list stock adjustment candidates
   GET  /api/rm-correction/batch/<batch>
   GET  /api/rm-correction/history/<batch>/<rmid>
-  POST /api/rm-correction/submit   — append rm_prodcorrection / rm_scrapcorrection rows
+  POST /api/rm-correction/submit   — append rm_prodcorrection / rm_scrapcorrection rows (requires rm_correction_plus)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from flask import Blueprint, g, jsonify, request
 
 from .auth import api_login_required
-from .rbac import require_any_access
+from .rbac import require_any_access, require_plus_access
 from .db import execute, fetch_all
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ def _item_has_finite_actual(item: Dict[str, Any]) -> bool:
 
 @rm_correction_bp.route("/submit", methods=["POST"])
 @require_any_access(["rm_correction", "rm_variance"])
+@require_plus_access("rm_correction_plus")
 def submit_corrections() -> Any:
     user = g.current_user
     user_id = int(user.get("userId") or 0)

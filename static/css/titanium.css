@@ -2717,13 +2717,30 @@ body.dpr-fullscreen-mode .ti-content {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   MONITOR / PROGRESS MEGA CARDS (Quantity + Parts Progress)
+   MONITOR / PROGRESS MEGA CARDS (Quantity, Dispatch, Parts Progress)
    ══════════════════════════════════════════════════════════════ */
 .ti-monitor-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+  align-items: stretch;
+}
+
+.ti-monitor-row > .ti-monitor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-monitor-row > .ti-monitor .ti-monitor-progress {
+  margin-top: auto;
+}
+
+@media (max-width: 1100px) {
+  .ti-monitor-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -4594,6 +4611,15 @@ body.dpr-col-resizing {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  --rr-grand-total-bg: #1e2433;
+  --rr-grand-total-fg: #e2e8f0;
+  --rr-grand-total-border: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] .reports-runner {
+  --rr-grand-total-bg: #eef0f2;
+  --rr-grand-total-fg: #1a202c;
+  --rr-grand-total-border: #e2e5ea;
 }
 
 /* Reports runner — all columns left-aligned (including numeric totals). */
@@ -4603,15 +4629,51 @@ body.dpr-col-resizing {
 .reports-runner .sg-table td.sg-r,
 .reports-runner .sg-table th.sg-r,
 .reports-runner .sg-table tr.sg-sticky-bottom-row td,
-.reports-runner .sg-table tr.sg-sticky-bottom-row td.sg-r {
+.reports-runner .sg-table tr.sg-sticky-bottom-row td.sg-r,
+.reports-runner .sg-table tr.sg-sticky-top-row td,
+.reports-runner .sg-table tr.sg-sticky-top-row td.sg-r {
   text-align: left !important;
 }
 
 .reports-runner .sg-table tr.sg-sticky-bottom-row td {
   font-weight: 700;
-  background: var(--ti-surface-3);
-  border-top: 2px solid var(--ti-border);
-  color: var(--ti-text-bright);
+  background-color: var(--rr-grand-total-bg) !important;
+  border-top: 1px solid var(--rr-grand-total-border);
+  color: var(--rr-grand-total-fg);
+}
+
+.reports-runner .sg-table tr.sg-sticky-top-row td {
+  position: sticky;
+  top: var(--sg-head-h, 42px);
+  z-index: 45;
+  font-weight: 700;
+  background-color: var(--rr-grand-total-bg) !important;
+  border-bottom: 1px solid var(--rr-grand-total-border);
+  color: var(--rr-grand-total-fg);
+  overflow: visible;
+}
+
+/* Cover sub-pixel gap between sticky header and Grand Total while scrolling */
+.reports-runner .sg-table tr.sg-sticky-top-row td::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 4px;
+  background-color: var(--rr-grand-total-bg);
+  pointer-events: none;
+}
+
+.reports-runner .sg-table tr.sg-sticky-top-row td.sg-pinned,
+.reports-runner .sg-table tr.sg-sticky-bottom-row td.sg-pinned {
+  z-index: 55;
+  background-color: var(--rr-grand-total-bg) !important;
+  color: var(--rr-grand-total-fg);
+}
+
+.reports-runner .sg-table tr.sg-sticky-top-row td.sg-pinned::before {
+  z-index: -1;
 }
 
 .reports-runner .sg-table td {
@@ -4619,7 +4681,8 @@ body.dpr-col-resizing {
   font-weight: 500;
 }
 
-.reports-runner .sg-table tr.sg-sticky-bottom-row td {
+.reports-runner .sg-table tr.sg-sticky-bottom-row td,
+.reports-runner .sg-table tr.sg-sticky-top-row td {
   font-weight: 700;
 }
 

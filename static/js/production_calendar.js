@@ -156,15 +156,16 @@
   }
 
   function partRowProductionStatus(row, dayNum, payload, raw) {
-    const required = toNum(raw);
-    if (required <= QTY_EPS) return '';
+    const scheduled = toNum(raw);
+    if (scheduled <= QTY_EPS) return '';
     const pk = partNoFromRow(row);
     if (!pk || !payload) return '';
-    const produced = producedQtyForScheduleWindow(payload, pk, dayNum);
-    if (produced <= QTY_EPS) return 'none';
-    if (Math.abs(produced - required) <= QTY_EPS) return 'exact';
-    if (produced > required + QTY_EPS) return 'over';
-    return 'under';
+    const prodBal = prodBalToDate(payload, pk, dayNum);
+    if (prodBal < -QTY_EPS) return 'over';
+    if (Math.abs(prodBal) <= QTY_EPS) return 'exact';
+    if (prodBal >= scheduled - QTY_EPS) return 'none';
+    if (prodBal > QTY_EPS) return 'under';
+    return '';
   }
 
   function productionStatusClass(status) {
@@ -508,7 +509,7 @@
     if (!Number.isFinite(current) || current < 1) return 0;
     const cumReq = cumulativeProductionRequired(payload, pk, current);
     const cumProduced = cumulativeProductionProduced(payload, pk, current);
-    return Math.max(0, cumReq - cumProduced);
+    return cumReq - cumProduced;
   }
 
   function prodBalToDate(payload, pk, currentDay) {
@@ -534,7 +535,7 @@
     const produced = producedQtyForScheduleWindow(payload, pk, dayStr);
     const producedToDate = cumulativeProductionProduced(payload, pk, dayStr);
     const prodBal = prodBalToDate(payload, pk, dayStr);
-    const rmRequired = conVal > 0 ? fmtNum(prodBal / conVal) : '0';
+    const rmRequired = conVal > 0 ? fmtNum(Math.max(0, prodBal / conVal)) : '0';
     return (
       '<div class="ti-dc-stock-tip-inner">' +
       '<div class="ti-dc-stock-tip-head">RM Requirement</div>' +
@@ -721,7 +722,7 @@
 
   function updateProductionKpi(payload) {
     const plannedEl = document.getElementById('dc-kpi-dispatch-total-so');
-    const openingEl = document.getElementById('dc-kpi-dispatch-qty');
+    const producedEl = document.getElementById('dc-kpi-dispatch-qty');
     const pctEl = document.getElementById('dc-kpi-dispatch-pct');
     const balanceEl = document.getElementById('dc-kpi-production-balance');
     if (!plannedEl || typeof window.Hub === 'undefined' || !window.Hub.utils) return;
@@ -730,14 +731,11 @@
     const fmt = window.Hub.utils.formatIndian;
     if (kpi) {
       const planned = Number(kpi.planned) || 0;
-      const opening = Number(kpi.openingStock) || 0;
-      const balance = Number(kpi.balance) || 0;
       const produced = Number(kpi.produced) || 0;
-      const pct = kpi.pct != null
-        ? Number(kpi.pct)
-        : (balance > 0 ? (produced / balance) * 100 : 0);
+      const balance = Number(kpi.balance) || 0;
+      const pct = planned > 0 ? (produced / planned) * 100 : 0;
       plannedEl.textContent = fmt(planned);
-      if (openingEl) openingEl.textContent = fmt(opening);
+      if (producedEl) producedEl.textContent = fmt(produced);
       if (pctEl) pctEl.textContent = (Number.isFinite(pct) ? pct.toFixed(1) : '0') + '%';
       if (balanceEl) balanceEl.textContent = fmt(balance);
       return;
@@ -750,12 +748,11 @@
       if (rowMeta[i] && rowMeta[i].isGrandTotal) {
         const row = rows[i];
         const planned = toNum(row[PLANNED_QTY]);
-        const opening = toNum(row[OPENING_STOCK]);
-        const balance = toNum(row[BALANCE_PRODUCTION]);
         const produced = toNum(row[PRODUCED_QTY]);
-        const pct = balance > 0 ? (produced / balance) * 100 : 0;
+        const balance = planned - produced;
+        const pct = planned > 0 ? (produced / planned) * 100 : 0;
         plannedEl.textContent = fmt(planned);
-        if (openingEl) openingEl.textContent = fmt(opening);
+        if (producedEl) producedEl.textContent = fmt(produced);
         if (pctEl) pctEl.textContent = (Number.isFinite(pct) ? pct.toFixed(1) : '0') + '%';
         if (balanceEl) balanceEl.textContent = fmt(balance);
         break;

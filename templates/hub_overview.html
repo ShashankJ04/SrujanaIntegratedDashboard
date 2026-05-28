@@ -10,11 +10,11 @@
     </div>
     <div class="ti-monitor-metrics">
       <div>
-        <div class="ti-monitor-metric-label">Total SO Qty</div>
+        <div class="ti-monitor-metric-label">Planned</div>
         <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
       </div>
       <div>
-        <div class="ti-monitor-metric-label">In Stock Qty</div>
+        <div class="ti-monitor-metric-label">Produced</div>
         <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
       </div>
       <div>
@@ -25,7 +25,32 @@
     <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-qty-bar" style="width:0%"></div>
     </div>
-    <div class="ti-monitor-footnote">0% = red (all pending), 100% = green (fully covered with stock/production)</div>
+  </div>
+
+  <!-- Dispatch (MTD) -->
+  <div class="ti-monitor">
+    <div class="ti-monitor-top">
+      <span class="ti-monitor-title">Dispatch (MTD)</span>
+      <span class="ti-monitor-pct" id="mon-dispatch-pct">–%</span>
+    </div>
+    <div class="ti-monitor-metrics">
+      <div>
+        <div class="ti-monitor-metric-label">Total Scheduled</div>
+        <div class="ti-monitor-metric-value" id="mon-dispatch-scheduled">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Dispatched Qty</div>
+        <div class="ti-monitor-metric-value success" id="mon-dispatch-qty">–</div>
+      </div>
+      <div>
+        <div class="ti-monitor-metric-label">Balance Dispatch Qty</div>
+        <div class="ti-monitor-metric-value alert" id="mon-dispatch-balance">–</div>
+      </div>
+    </div>
+    <div class="ti-monitor-progress">
+      <div class="ti-monitor-bar" id="mon-dispatch-bar" style="width:0%"></div>
+    </div>
+    <div class="ti-monitor-footnote" id="mon-dispatch-footnote">Month-to-date dispatch vs total scheduled quantity</div>
   </div>
 
   <!-- Parts Progress -->
@@ -53,7 +78,6 @@
     <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-parts-bar" style="width:0%"></div>
     </div>
-    <div class="ti-monitor-footnote">Completion is counted per part: balance production quantity ≤ zero</div>
   </div>
 </div>
 
@@ -68,24 +92,6 @@
     <div class="ti-kpi-label">PM Status</div>
     <div class="ti-kpi-value" id="kpi-pm-status">–</div>
     <div class="ti-kpi-sub" id="kpi-pm-sub">Safe / Warning / Critical</div>
-  </div>
-  <div class="ti-kpi ti-kpi--green">
-    <div class="ti-kpi-label">Dispatch (MTD)</div>
-    <div class="ti-monitor-metrics">
-      <div>
-        <div class="ti-monitor-metric-label">Total scheduled</div>
-        <div class="ti-monitor-metric-value" id="kpi-dispatch-total-so">–</div>
-      </div>
-      <div>
-        <div class="ti-monitor-metric-label">Dispatched qty</div>
-        <div class="ti-monitor-metric-value success" id="kpi-dispatch-qty">–</div>
-      </div>
-      <div>
-        <div class="ti-monitor-metric-label">% Complete</div>
-        <div class="ti-monitor-metric-value" id="kpi-dispatch-pct">–</div>
-      </div>
-    </div>
-    <div class="ti-kpi-sub" id="kpi-dispatch-sub"></div>
   </div>
 </div>
 
@@ -202,23 +208,26 @@
   try {
     const summary = await Hub.api.getReportSummary();
 
-    const totalSo = Number(summary.total_so_qty) || 0;
-    const pendingQty = Number(summary.total_pending_qty) || 0;
-    const totalProduced = Math.max(0, totalSo - pendingQty);
-    const totalRequirement = Number(summary.total_production_requirement) || 0;
+    const dispatchKpi = summary.dispatch_kpi || {};
+    const dispatchScheduled = Number(dispatchKpi.scheduled) || 0;
+    const productionKpi = summary.production_kpi || {};
+    const pcPlanned = Number(productionKpi.planned) || 0;
+    const pcProduced = Number(productionKpi.produced) || 0;
+    const totalPendingQty = Number(summary.total_pending_qty) || 0;
     const partsTotal = Number(summary.parts_total) || 0;
     const partsCompleted = Number(summary.parts_completed) || 0;
     const partsPending = Number(summary.parts_pending) || 0;
     const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;
     const dispatchInvoiceCountMtd = Number(summary.dispatch_invoice_count_mtd) || 0;
 
-    // Quantity monitor
-    document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(totalSo);
-    document.getElementById('mon-pending-qty').textContent = Hub.utils.formatIndian(pendingQty);
-    document.getElementById('mon-produced-qty').textContent = Hub.utils.formatIndian(totalProduced);
+    // Quantity monitor — aligned with Production Calendar KPI
+    document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(pcPlanned);
+    document.getElementById('mon-produced-qty').textContent = Hub.utils.formatIndian(pcProduced);
+    document.getElementById('mon-pending-qty').textContent = Hub.utils.formatIndian(totalPendingQty);
     
-    // Percentage = Produced / SO (matching original dash)
-    const qtyPct = totalSo > 0 ? Math.round((totalProduced / totalSo) * 100) : 0;
+    const qtyDenominator = pcProduced + totalPendingQty;
+    const qtyPctRaw = qtyDenominator > 0 ? (pcProduced / qtyDenominator) * 100 : 0;
+    const qtyPct = Math.round(Number.isFinite(qtyPctRaw) ? qtyPctRaw : 0);
     document.getElementById('mon-qty-pct').textContent = qtyPct + '%';
     const qtyBar = document.getElementById('mon-qty-bar');
     qtyBar.style.width = Math.min(100, Math.max(0, qtyPct)) + '%';
@@ -242,17 +251,21 @@
     partsBar.style.width = Math.min(100, Math.max(0, partsPct)) + '%';
     partsBar.style.setProperty('--monitor-hue', Math.round((partsPct / 100) * 120));
 
-    // Dispatch KPI: total scheduled = same as Total SO Qty; dispatched MTD; % = dispatched / total SO
-    document.getElementById('kpi-dispatch-total-so').textContent = Hub.utils.formatIndian(totalSo);
-    document.getElementById('kpi-dispatch-qty').textContent = Hub.utils.formatIndian(dispatchQtyMtd);
-    const dispatchPct = totalSo > 0 ? Math.round((dispatchQtyMtd / totalSo) * 100) : 0;
-    document.getElementById('kpi-dispatch-pct').textContent = dispatchPct + '%';
-    const kpiDispatchSub = document.getElementById('kpi-dispatch-sub');
-    if (kpiDispatchSub) {
-      kpiDispatchSub.textContent =
-        dispatchInvoiceCountMtd > 0
-          ? `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
-          : '';
+    // Dispatch monitor — aligned with Dispatch Calendar KPI
+    const dispatchBalance = Math.max(dispatchScheduled - dispatchQtyMtd, 0);
+    document.getElementById('mon-dispatch-scheduled').textContent = Hub.utils.formatIndian(dispatchScheduled);
+    document.getElementById('mon-dispatch-qty').textContent = Hub.utils.formatIndian(dispatchQtyMtd);
+    document.getElementById('mon-dispatch-balance').textContent = Hub.utils.formatIndian(dispatchBalance);
+    const dispatchPct = dispatchScheduled > 0 ? Math.round((dispatchQtyMtd / dispatchScheduled) * 100) : 0;
+    document.getElementById('mon-dispatch-pct').textContent = dispatchPct + '%';
+    const dispatchBar = document.getElementById('mon-dispatch-bar');
+    dispatchBar.style.width = Math.min(100, Math.max(0, dispatchPct)) + '%';
+    dispatchBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, dispatchPct) / 100) * 120));
+    const dispatchFootnote = document.getElementById('mon-dispatch-footnote');
+    if (dispatchFootnote) {
+      dispatchFootnote.textContent = dispatchInvoiceCountMtd > 0
+        ? `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
+        : 'Month-to-date dispatch vs total scheduled quantity';
     }
   } catch (e) { console.error('Monitor load error:', e); }
 

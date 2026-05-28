@@ -33,6 +33,11 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
+def _is_null_qty(value: Any) -> bool:
+    """True when a qty cell is unset (null/empty), not a numeric zero."""
+    return value is None or value == ""
+
+
 def _normalize_part_key(part_no: Any) -> str:
     return str(part_no or "").strip().lower()
 
@@ -162,11 +167,11 @@ def _fetch_part_info() -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _completion_pct_from_balance_produced(produced: float, balance: float) -> Optional[float]:
-    """Completion % = produced qty / balance qty."""
-    if balance <= 0:
+def _completion_pct_from_balance_produced(produced: float, pending: float) -> Optional[float]:
+    """Completion % = produced qty / production pending qty."""
+    if pending <= 0:
         return None
-    return round((produced / balance) * 100.0, 2)
+    return round((produced / pending) * 100.0, 2)
 
 
 def _monthly_produced_from_daily(daily_map: Dict[str, Dict[str, float]]) -> Dict[str, float]:
@@ -234,6 +239,19 @@ def _fetch_daily_production_map(month: int, year: int) -> Dict[str, Dict[str, fl
 # Payload transformations
 # ---------------------------------------------------------------------------
 
+def _fetch_inventory_production_pending_map() -> Dict[str, float]:
+    """Inventory production_pending keyed by normalized part_no."""
+    from .models import _get_enriched_rows_for_reports
+
+    rows = _get_enriched_rows_for_reports()
+    out: Dict[str, float] = {}
+    for row in rows:
+        pk = _normalize_part_key(row.get("part_no"))
+        if pk:
+            out[pk] = float(row.get("production_pending") or 0)
+    return out
+
+
 def _insert_production_summary_columns(
     payload: Dict[str, Any],
     opening_stock_map: Dict[str, float],
@@ -242,6 +260,7 @@ def _insert_production_summary_columns(
     """Insert Planned Qty, Opening Stock, Balance Qty, Produced Qty, and % Completion."""
     rows = payload.get("rows") or []
     row_meta = payload.get("rowMeta") or []
+    inv_pending_map = _fetch_inventory_production_pending_map()
 
     grand_planned = 0.0
     grand_balance = 0.0
@@ -256,20 +275,20 @@ def _insert_production_summary_columns(
             continue
 
         pk = _normalize_part_key(row.get(PART_NO_COL))
-        planned = _to_float(row.get(TOTAL_QTY_COL))
+        pending_raw = round(_to_float(inv_pending_map.get(pk, 0.0)), 4)
+        pending = max(0.0, pending_raw)
         opening = _to_float(opening_stock_map.get(pk))
         produced = _to_float(monthly_produced_map.get(pk))
-        balance = max(0.0, round(planned - opening, 4))
-        completion_pct = _completion_pct_from_balance_produced(produced, balance)
+        completion_pct = _completion_pct_from_balance_produced(produced, pending)
 
-        row[PLANNED_QTY_COL] = round(planned, 4) if planned > 0 else 0.0
-        row[OPENING_STOCK_COL] = round(opening, 4) if opening > 0 else 0.0
-        row[BALANCE_PRODUCTION_COL] = balance
-        row[PRODUCED_QTY_COL] = round(produced, 4) if produced > 0 else 0.0
+        row[PLANNED_QTY_COL] = round(pending, 4) if pending > 0 else None
+        row[OPENING_STOCK_COL] = round(opening, 4) if opening > 0 else None
+        row[BALANCE_PRODUCTION_COL] = round(pending, 4) if pending > 0 else None
+        row[PRODUCED_QTY_COL] = round(produced, 4) if produced > 0 else None
         row[COMPLETION_PCT_COL] = completion_pct
 
-        grand_planned += planned
-        grand_balance += balance
+        grand_planned += pending
+        grand_balance += pending
         grand_opening += opening
         grand_produced += produced
 
@@ -289,10 +308,15 @@ def _insert_production_summary_columns(
             row[COMPLETION_PCT_COL] = grand_completion
             break
 
+    from .models import get_inventory_balance_total, get_inventory_planned_total
+
+    inventory_planned = round(get_inventory_planned_total(), 4)
+    inventory_balance = round(get_inventory_balance_total(), 4)
+
     return {
-        "planned": round(grand_planned, 4),
+        "planned": inventory_planned,
         "openingStock": round(grand_opening, 4),
-        "balance": round(grand_balance, 4),
+        "balance": inventory_balance,
         "produced": round(grand_produced, 4),
         "pct": grand_completion,
     }
@@ -339,6 +363,92 @@ def _insert_estimated_time_column(
         if meta.get("isGrandTotal"):
             row[ESTIMATED_TIME_COL] = round(grand_est_days, 2) if grand_est_days > 0 else None
             break
+
+
+def _all_day_cols_for_payload(payload: Dict[str, Any]) -> List[Tuple[str, int]]:
+    """Resolve day columns from payload columns or row keys."""
+    day_cols = _parse_day_cols(list(payload.get("columns") or []))
+    if day_cols:
+        return day_cols
+    rows = payload.get("rows") or []
+    if not rows or not isinstance(rows[0], dict):
+        return []
+    return _parse_day_cols(list(rows[0].keys()))
+
+
+def _should_hide_production_row(
+    row: Dict[str, Any],
+    _day_cols: Optional[List[Tuple[str, int]]] = None,
+) -> bool:
+    """Hide when Planned Qty and Produced Qty are both null (no summary qty)."""
+    return _is_null_qty(row.get(BALANCE_PRODUCTION_COL)) and _is_null_qty(
+        row.get(PRODUCED_QTY_COL)
+    )
+
+
+def _recompute_production_grand_total_row(
+    grand_row: Dict[str, Any],
+    part_rows: List[Dict[str, Any]],
+    day_cols: List[Tuple[str, int]],
+) -> None:
+    grand_planned = 0.0
+    grand_produced = 0.0
+    grand_opening = 0.0
+    grand_est_days = 0.0
+
+    for col, _ in day_cols:
+        day_sum = sum(_to_float(r.get(col)) for r in part_rows)
+        grand_row[col] = round(day_sum, 4) if day_sum > 0 else None
+
+    for row in part_rows:
+        grand_planned += _to_float(row.get(BALANCE_PRODUCTION_COL))
+        grand_produced += _to_float(row.get(PRODUCED_QTY_COL))
+        grand_opening += _to_float(row.get(OPENING_STOCK_COL))
+        est = row.get(ESTIMATED_TIME_COL)
+        if est is not None and est != "":
+            grand_est_days += _to_float(est)
+
+    grand_row[PLANNED_QTY_COL] = round(grand_planned, 4)
+    grand_row[BALANCE_PRODUCTION_COL] = round(grand_planned, 4)
+    grand_row[PRODUCED_QTY_COL] = round(grand_produced, 4) if grand_produced > 0 else 0.0
+    grand_row[OPENING_STOCK_COL] = round(grand_opening, 4) if grand_opening > 0 else 0.0
+    grand_row[ESTIMATED_TIME_COL] = round(grand_est_days, 2) if grand_est_days > 0 else None
+    grand_row[COMPLETION_PCT_COL] = _completion_pct_from_balance_produced(
+        grand_produced, grand_planned
+    )
+
+
+def _filter_inactive_production_rows(payload: Dict[str, Any]) -> None:
+    """Drop parts where both Planned Qty and Produced Qty are null."""
+    day_cols = _all_day_cols_for_payload(payload)
+    rows = payload.get("rows") or []
+    row_meta = list(payload.get("rowMeta") or [])
+
+    kept_rows: List[Dict[str, Any]] = []
+    kept_meta: List[Any] = []
+    grand_row: Optional[Dict[str, Any]] = None
+    grand_meta: Optional[Dict[str, Any]] = None
+
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            grand_row = row
+            grand_meta = meta
+            continue
+        if _should_hide_production_row(row, day_cols):
+            continue
+        kept_rows.append(row)
+        kept_meta.append(meta)
+
+    if grand_row is not None:
+        _recompute_production_grand_total_row(grand_row, kept_rows, day_cols)
+        kept_rows.append(grand_row)
+        kept_meta.append(grand_meta or {})
+
+    payload["rows"] = kept_rows
+    payload["rowMeta"] = kept_meta
 
 
 def _set_visible_production_columns(payload: Dict[str, Any]) -> None:
@@ -566,6 +676,17 @@ def _compute_cumulative_rm(payload: Dict[str, Any], part_info: Dict[str, Dict[st
 # Main entry
 # ---------------------------------------------------------------------------
 
+def get_production_kpi(month: int, year: int) -> Dict[str, Any]:
+    """Grand-total KPI aligned with the Production Calendar toolbar."""
+    payload = build_dispatch_calendar_payload(month, year)
+    opening_stock_map = _fetch_opening_stock_map(month, year)
+    daily_production = _fetch_daily_production_map(month, year)
+    monthly_produced = _monthly_produced_from_daily(daily_production)
+    return _insert_production_summary_columns(
+        payload, opening_stock_map, monthly_produced
+    )
+
+
 def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     """Return production calendar payload with planned/opening stock columns and day schedule."""
     payload = build_dispatch_calendar_payload(month, year)
@@ -582,6 +703,7 @@ def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
 
     _shift_production_days_by_lead_time(payload, part_info)
     _compute_cumulative_rm(payload, part_info)
+    _filter_inactive_production_rows(payload)
 
     _set_visible_production_columns(payload)
     payload["productionKpi"] = production_kpi

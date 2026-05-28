@@ -68,10 +68,9 @@
 
 <script>
 (function() {
-  const ALLOWED_EDIT_USER_IDS = [5, 43, 268, 231];
   const SG_LAYOUT_KEY = 'hub-rm-correction';
-  const currentUserId = Number((window.CURRENT_USER && window.CURRENT_USER.userId) || 0);
-  const canEdit = ALLOWED_EDIT_USER_IDS.includes(currentUserId);
+  const plusAccess = new Set((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.plusAccess) || []);
+  const canEdit = plusAccess.has('rm_correction_plus');
 
   let _entries = [];
   let _expanded = {};

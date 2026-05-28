@@ -49,6 +49,7 @@ def create_app() -> Flask:
     from .warehouse_api import warehouse_bp
 
     from .search_api import search_bp
+    from .rm_calculator_api import rm_calculator_bp
 
     app.register_blueprint(pm_bp)
     app.register_blueprint(tools_bp)
@@ -61,6 +62,7 @@ def create_app() -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(warehouse_bp, url_prefix="/api/wh")
     app.register_blueprint(search_bp)
+    app.register_blueprint(rm_calculator_bp)
 
     from .auth import (
         create_token,
@@ -136,7 +138,7 @@ def create_app() -> Flask:
 
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
-        "rm-variance", "rm-correction", "reports", "reports-manage",
+        "rm-variance", "rm-correction", "rm-calculator", "reports", "reports-manage",
         "admin", "dpr", "dispatch-calendar", "production-calendar", "executive",
     }
 
@@ -192,6 +194,7 @@ def create_app() -> Flask:
             "dpr": "rept",  # View access via reports
             "dispatch-calendar": "rept",
             "production-calendar": "rept",
+            "rm-calculator": "rept",
             "executive": "executive",
         }
 

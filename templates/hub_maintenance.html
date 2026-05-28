@@ -228,6 +228,7 @@
     <div class="ti-modal-header"><h3>Edit Breakdown</h3></div>
     <div class="ti-modal-body">
       <div><label class="ti-form-label">Root Cause</label><textarea class="ti-input" id="breakdownEditRootCause" rows="3" style="width:100%;resize:vertical" placeholder="Describe the root cause"></textarea></div>
+      <div style="margin-top:10px"><label class="ti-form-label">Analysis</label><textarea class="ti-input" id="breakdownEditAnalysis" rows="3" style="width:100%;resize:vertical" placeholder="Describe the analysis"></textarea></div>
       <div style="margin-top:10px"><label class="ti-form-label">Action Taken</label><textarea class="ti-input" id="breakdownEditAction" rows="3" style="width:100%;resize:vertical" placeholder="Describe the action taken"></textarea></div>
       <div style="margin-top:10px"><label class="ti-form-label">Remarks</label><textarea class="ti-input" id="breakdownEditRemarks" rows="3" style="width:100%;resize:vertical" placeholder="Add optional remarks"></textarea></div>
       <div style="margin-top:10px"><label class="ti-form-label">Spare Consumed</label><textarea class="ti-input" id="breakdownEditSpareConsumed" rows="3" style="width:100%;resize:vertical" placeholder="Add optional spare details"></textarea></div>
@@ -244,7 +245,11 @@
   <div class="ti-modal ti-modal-sm">
     <div class="ti-modal-header"><h3>Complete Breakdown</h3></div>
     <div class="ti-modal-body">
-      <p style="font-size:13px;color:var(--ti-text-muted)">Select the person completing maintenance.</p>
+      <p style="font-size:13px;color:var(--ti-text-muted)">Select the person completing maintenance and enter hours spent.</p>
+      <div style="margin-top:10px">
+        <label class="ti-form-label">Hours spent</label>
+        <input type="number" class="ti-input" id="breakdownCompleteHours" min="0" step="0.01" placeholder="e.g. 2.5" style="width:100%">
+      </div>
       <div>
         <label class="ti-form-label">Completed By</label>
         <input type="text" class="ti-input" id="breakdownCompleteUser" list="breakdown-complete-operators-list" placeholder="Start typing to filter..." style="width:100%">
@@ -806,6 +811,13 @@ function breakdownFormatTime(value) {
   return d.toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
+function breakdownFormatHours(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return breakdownEscape(value);
+  return breakdownEscape(String(n));
+}
+
 function breakdownFormatQty(value) {
   if (value === null || value === undefined || value === '') {
     return '<span style="color:var(--ti-text-dim)">—</span>';
@@ -880,6 +892,7 @@ function breakdownActiveColumns() {
     { key:'issue', label:'Issue / Problem', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'operatorName', label:'Operator', width:150, format:(v,r)=>breakdownEscape(v || r.operatorLogin || '—') },
     { key:'rootCause', label:'Root Cause', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'analysis', label:'Analysis', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'actionTaken', label:'Action Taken', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'remarks', label:'Remarks', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'spareConsumed', label:'Spare Consumed', width:220, format:v=>breakdownTrunc(v, 80) },
@@ -899,9 +912,11 @@ function breakdownClosedColumns() {
     { key:'issue', label:'Issue / Problem', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'operatorName', label:'Operator', width:150, format:(v,r)=>breakdownEscape(v || r.operatorLogin || '—') },
     { key:'rootCause', label:'Root Cause', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'analysis', label:'Analysis', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'actionTaken', label:'Action Taken', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'remarks', label:'Remarks', width:220, format:v=>breakdownTrunc(v, 80) },
     { key:'spareConsumed', label:'Spare Consumed', width:220, format:v=>breakdownTrunc(v, 80) },
+    { key:'hoursSpentToConsume', label:'Hours spent', width:160, format:v=>breakdownFormatHours(v) },
     { key:'completedByName', label:'Completed By', width:160, format:(v,r)=>breakdownEscape(v || r.completedByLogin || '—') },
     { key:'completedAt', label:'Completed At', width:170, format:v=>breakdownFormatTime(v) }
   ];
@@ -943,6 +958,7 @@ function renderBreakdownGrids() {
         const rec = _breakdownActive.find(x => x.id === _breakdownEditId);
         if (!rec) return;
         document.getElementById('breakdownEditRootCause').value = rec.rootCause || '';
+        document.getElementById('breakdownEditAnalysis').value = rec.analysis || '';
         document.getElementById('breakdownEditAction').value = rec.actionTaken || '';
         document.getElementById('breakdownEditRemarks').value = rec.remarks || '';
         document.getElementById('breakdownEditSpareConsumed').value = rec.spareConsumed || '';
@@ -952,6 +968,7 @@ function renderBreakdownGrids() {
         const rec = _breakdownActive.find(x => x.id === _breakdownCompleteId);
         if (!rec || !String(rec.rootCause || '').trim() || !String(rec.actionTaken || '').trim()) return;
         document.getElementById('breakdownCompleteUser').value = '';
+        document.getElementById('breakdownCompleteHours').value = '';
         openBreakdownModal('breakdownCompleteModal');
       }
     };
@@ -1012,6 +1029,7 @@ document.getElementById('breakdownEditSubmit').addEventListener('click', async (
   try {
     await apiPatch('/api/tool-breakdowns/' + _breakdownEditId, {
       rootCause: document.getElementById('breakdownEditRootCause').value,
+      analysis: document.getElementById('breakdownEditAnalysis').value,
       actionTaken: document.getElementById('breakdownEditAction').value,
       remarks: document.getElementById('breakdownEditRemarks').value,
       spareConsumed: document.getElementById('breakdownEditSpareConsumed').value,
@@ -1031,8 +1049,21 @@ document.getElementById('breakdownCompleteSubmit').addEventListener('click', asy
     showSnackbar('Please select a valid user');
     return;
   }
+  const hoursRaw = document.getElementById('breakdownCompleteHours').value.trim();
+  if (hoursRaw === '') {
+    showSnackbar('Please enter hours spent');
+    return;
+  }
+  const hours = Number(hoursRaw);
+  if (!Number.isFinite(hours) || hours < 0) {
+    showSnackbar('Please enter a valid number of hours');
+    return;
+  }
   try {
-    await apiPost('/api/tool-breakdowns/' + _breakdownCompleteId + '/complete', { completedById: user.id });
+    await apiPost('/api/tool-breakdowns/' + _breakdownCompleteId + '/complete', {
+      completedById: user.id,
+      hoursSpentToConsume: hours,
+    });
     closeBreakdownModal('breakdownCompleteModal');
     loadBreakdownData();
   } catch (e) {

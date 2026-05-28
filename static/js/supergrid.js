@@ -30,7 +30,8 @@ const SuperGrid = (() => {
    *     detailRowExpanded?:(row,rowIdx)=>boolean,
    *     detailRowHtml?:(row,rowIdx,colCount)=>string,
    *     onBodyRendered?:(tbody,rows)=>void,
-   *     grandTotalRowFn?:(dataRows,columns)=>Object|null }
+   *     grandTotalRowFn?:(dataRows,columns)=>Object|null,
+   *     grandTotalPosition?:'top'|'bottom' }
    * @returns {Object} API { setRows, getFilteredRows, destroy }
    */
   function create(container, config) {
@@ -56,7 +57,9 @@ const SuperGrid = (() => {
       detailRowHtml = null,
       onBodyRendered = null,
       grandTotalRowFn = null,
+      grandTotalPosition = 'bottom',
     } = options;
+    const grandTotalAtTop = String(grandTotalPosition || 'bottom').toLowerCase() === 'top';
 
     /* Support both SuperGrid.create(el, { options: { omitToolbar } }) and flat { omitToolbar } */
     const omitToolbar = Boolean(options.omitToolbar ?? config.omitToolbar);
@@ -249,12 +252,18 @@ const SuperGrid = (() => {
     }
 
     function _appendGrandTotalRow() {
-      filteredRows = filteredRows.filter(r => !r.__sgStickyBottom);
+      filteredRows = filteredRows.filter(r => !r.__sgGrandTotal);
       if (!grandTotalRowFn || !filteredRows.length) return;
-      const dataOnly = filteredRows.filter((r) => !r.__sgStickyTop);
+      const dataOnly = filteredRows.filter((r) => !_isSyntheticRow(r));
       if (!dataOnly.length) return;
       const gt = grandTotalRowFn(dataOnly, _getOrderedCols());
-      if (gt) {
+      if (!gt) return;
+      gt.__sgGrandTotal = true;
+      if (grandTotalAtTop) {
+        gt.__sgStickyTop = true;
+        const groups = _splitRowGroups(filteredRows);
+        filteredRows = [...groups.stickyTop, gt, ...groups.data, ...groups.stickyBottom];
+      } else {
         gt.__sgStickyBottom = true;
         filteredRows.push(gt);
       }

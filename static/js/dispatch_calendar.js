@@ -936,10 +936,11 @@
     if (!elTotal || typeof window.Hub === 'undefined' || !window.Hub.api || !window.Hub.utils) return;
     try {
       const summary = await window.Hub.api.getReportSummary();
-      const totalSo = Number(summary.total_so_qty) || 0;
+      const dispatchKpi = summary.dispatch_kpi || {};
+      const dispatchScheduled = Number(dispatchKpi.scheduled) || 0;
       const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;
-      const dispatchPct = totalSo > 0 ? Math.round((dispatchQtyMtd / totalSo) * 100) : 0;
-      elTotal.textContent = window.Hub.utils.formatIndian(totalSo);
+      const dispatchPct = dispatchScheduled > 0 ? Math.round((dispatchQtyMtd / dispatchScheduled) * 100) : 0;
+      elTotal.textContent = window.Hub.utils.formatIndian(dispatchScheduled);
       const qEl = document.getElementById('dc-kpi-dispatch-qty');
       const pEl = document.getElementById('dc-kpi-dispatch-pct');
       if (qEl) qEl.textContent = window.Hub.utils.formatIndian(dispatchQtyMtd);

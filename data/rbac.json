@@ -14,7 +14,8 @@
         "preventive_maintenance",
         "edit_dpr",
         "edit_buffer",
-        "rept_plus"
+        "rept_plus",
+        "rm_correction_plus"
       ],
       "updatedAt": "2026-05-19T16:26:36.149139+00:00"
     },
@@ -45,7 +46,8 @@
         "rept"
       ],
       "plusAccess": [
-        "edit_dpr"
+        "edit_dpr",
+        "rm_correction_plus"
       ],
       "updatedAt": "2026-05-05T13:36:28.538328+00:00"
     },
@@ -56,7 +58,8 @@
         "rept"
       ],
       "plusAccess": [
-        "edit_dpr"
+        "edit_dpr",
+        "rm_correction_plus"
       ],
       "updatedAt": "2026-05-12T04:40:57.372986+00:00"
     },
@@ -78,13 +81,15 @@
       "access": [
         "tools",
         "life_report",
+        "rm_variance",
         "rept"
       ],
       "plusAccess": [
         "edit_dpr",
-        "edit_buffer"
+        "edit_buffer",
+        "rm_correction_plus"
       ],
-      "updatedAt": "2026-05-07T04:08:02.610403+00:00"
+      "updatedAt": "2026-05-28T09:45:34.990186+00:00"
     },
     {
       "userId": 274,
@@ -147,7 +152,9 @@
         "rm_variance",
         "rept"
       ],
-      "plusAccess": [],
+      "plusAccess": [
+        "rm_correction_plus"
+      ],
       "updatedAt": "2026-05-19T16:22:26.439808+00:00"
     },
     {
@@ -232,5 +239,5 @@
       "updatedAt": "2026-05-18T09:30:40.066978+00:00"
     }
   ],
-  "updatedAt": "2026-05-20T05:18:17.740663+00:00"
+  "updatedAt": "2026-05-28T09:45:34.990186+00:00"
 }

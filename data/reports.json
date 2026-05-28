@@ -53,6 +53,12 @@
       "name": "Closing Stock",
       "createdAt": "2026-05-09T10:19:10.066789+00:00",
       "updatedAt": "2026-05-09T10:19:10.066789+00:00"
+    },
+    {
+      "id": "37d1f699-073c-41b1-a73e-fa3f98d9519e",
+      "name": "Tools",
+      "createdAt": "2026-05-28T09:57:28.448366+00:00",
+      "updatedAt": "2026-05-28T09:57:28.448366+00:00"
     }
   ],
   "reports": [
@@ -206,8 +212,7 @@
       "variables": [],
       "createdAt": "2026-03-25T12:13:51.363Z",
       "updatedAt": "2026-05-22T13:25:46.910546+00:00",
-      "pinned": false,
-      "drilldowns": []
+      "pinned": false
     },
     {
       "id": "a491c9dc-b8a5-4d9c-92f2-073926e837e0",
@@ -709,6 +714,19 @@
       "pinned": false,
       "createdAt": "2026-05-20T15:21:14.785213+00:00",
       "updatedAt": "2026-05-20T15:21:14.785213+00:00"
+    },
+    {
+      "id": "b9612579-cb55-43f2-8ffd-715bc9d19b39",
+      "groupId": "37d1f699-073c-41b1-a73e-fa3f98d9519e",
+      "name": "Tool Breakdown History",
+      "queryTemplate": "SELECT\n  DATE_FORMAT(x.event_at, '%d-%m-%Y %H:%i') AS 'Date',\n  x.tool_no AS 'Tool No',\n  x.event_type AS 'Event Type',\n  x.status AS 'Status',\n  x.part_no AS 'Part No',\n  x.part_name AS 'Part Name',\n  x.machine AS 'Machine',\n  x.issue AS 'Issue / Problem',\n  x.priority AS 'Priority',\n  x.root_cause AS 'Root Cause',\nx.Analysis as 'Analysis',\n  x.action_taken AS 'Action Taken',\n  x.remarks AS 'Remarks',\n  x.hours_spent AS 'Hours Spent',\n  x.spare_consumed AS 'Spare Consumed',\n  x.current_stroke AS 'Current Stroke',\n  x.next_stroke AS 'Next Stroke',\n  (\n  COALESCE((\n    SELECT tl.TL_life_span\n    FROM tool_life tl\n    WHERE TRIM(tl.TL_tool_number) = TRIM(x.tool_no)\n    ORDER BY tl.TL_created_at DESC, tl.TL_tool_id DESC\n    LIMIT 1\n  ), 0)\n  -\n  COALESCE((\n    SELECT MAX(comp.componentStrokes)\n    FROM (\n      SELECT\n        ct.CT_COMPID,\n        SUM(pd.PD_PRODQTY / GREATEST(COALESCE(ct.CT_NO_OF_CAVITY, 1), 1)) AS componentStrokes\n      FROM production_details pd\n      INNER JOIN components_tool ct ON ct.CT_ID = pd.PD_TOOLID\n      WHERE TRIM(ct.CT_TOOLNO) = TRIM(x.tool_no)\n        AND DATE(pd.PD_DATE) <= DATE(x.event_at)\n      GROUP BY ct.CT_COMPID\n    ) comp\n  ), 0)\n) AS 'Life Balance',\n  x.done_by AS 'Done By',\n  DATE_FORMAT(x.completed_at, '%d-%m-%Y %H:%i') AS 'Completed At',\n  x.attachment AS 'Attachment'\nFROM (\n  SELECT\n    pm.PM_date AS event_at,\n    pm.PM_tool_number COLLATE utf8mb4_unicode_ci AS tool_no,\n    'Preventive Maintenance' COLLATE utf8mb4_unicode_ci AS event_type,\n    'Completed' COLLATE utf8mb4_unicode_ci AS status,\n    '' COLLATE utf8mb4_unicode_ci AS part_no,\n    '' COLLATE utf8mb4_unicode_ci AS part_name,\n    '' COLLATE utf8mb4_unicode_ci AS machine,\n    '' COLLATE utf8mb4_unicode_ci AS issue,\n    '' COLLATE utf8mb4_unicode_ci AS priority,\n    '' COLLATE utf8mb4_unicode_ci AS root_cause,\n    '' COLLATE utf8mb4_unicode_ci AS analysis,\n    '' COLLATE utf8mb4_unicode_ci AS action_taken,\n    '' COLLATE utf8mb4_unicode_ci AS remarks,\n    '' COLLATE utf8mb4_unicode_ci AS hours_spent,\n    '' COLLATE utf8mb4_unicode_ci AS spare_consumed,\n    pm.PM_current_stroke AS current_stroke,\n    pm.PM_next_stroke AS next_stroke,\n    '' COLLATE utf8mb4_unicode_ci AS done_by,\n    pm.PM_date AS completed_at,\n    COALESCE(pm.PM_maintenance_attachment, '') COLLATE utf8mb4_unicode_ci AS attachment\n  FROM preventive_maintenance pm\n  WHERE TRIM(pm.PM_tool_number) COLLATE utf8mb4_unicode_ci = TRIM({toolName}) COLLATE utf8mb4_unicode_ci\n\n  UNION ALL\n\n  SELECT\n    tb.downtime_at AS event_at,\n    tb.tool_no COLLATE utf8mb4_unicode_ci AS tool_no,\n    'Tool Breakdown' COLLATE utf8mb4_unicode_ci AS event_type,\n    CASE WHEN tb.completed_at IS NULL THEN 'Active' ELSE 'Completed' END COLLATE utf8mb4_unicode_ci AS status,\n    COALESCE(tb.part_no, '') COLLATE utf8mb4_unicode_ci AS part_no,\n    COALESCE(tb.part_name, '') COLLATE utf8mb4_unicode_ci AS part_name,\n    COALESCE(tb.machine_name, tb.machine_id, '') COLLATE utf8mb4_unicode_ci AS machine,\n    COALESCE(tb.issue, '') COLLATE utf8mb4_unicode_ci AS issue,\n    COALESCE(tb.priority, '') COLLATE utf8mb4_unicode_ci AS priority,\n    COALESCE(tb.root_cause, '') COLLATE utf8mb4_unicode_ci AS root_cause,\nCOALESCE(tb.analysis, '') COLLATE utf8mb4_unicode_ci AS analysis,\n    COALESCE(tb.action_taken, '') COLLATE utf8mb4_unicode_ci AS action_taken,\n    COALESCE(tb.remarks, '') COLLATE utf8mb4_unicode_ci AS remarks,\nCOALESCE(tb.hours_spent, '') COLLATE utf8mb4_unicode_ci AS hours_spent,\n    COALESCE(tb.spare_consumed, '') COLLATE utf8mb4_unicode_ci AS spare_consumed,\n    current_stroke AS current_stroke,\n    next_stroke AS next_stroke,\n    COALESCE(tb.completed_by_name, tb.completed_by_login, tb.operator_name, tb.operator_login, '') COLLATE utf8mb4_unicode_ci AS done_by,\n    tb.completed_at AS completed_at,\n    '' COLLATE utf8mb4_unicode_ci AS attachment\n  FROM tool_breakdowns tb\n  WHERE TRIM(tb.tool_no) COLLATE utf8mb4_unicode_ci = TRIM({toolName}) COLLATE utf8mb4_unicode_ci\n) x\nORDER BY x.event_at ASC;",
+      "variables": [
+        "toolName"
+      ],
+      "pinned": true,
+      "createdAt": "2026-05-28T09:57:41.589136+00:00",
+      "updatedAt": "2026-05-28T12:53:35.295960+00:00",
+      "drilldowns": []
     }
   ]
 }

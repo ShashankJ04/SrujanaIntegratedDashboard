@@ -189,6 +189,24 @@
     return isPartNumberColumnName(columnKey) || isComponentIdentifierColumnName(columnKey);
   }
 
+  /** RM conversion / grams-per-part columns — keep SQL decimal precision in the grid. */
+  function isHighPrecisionColumnName(columnKey) {
+    const raw = String(columnKey || '').trim();
+    if (!raw) return false;
+    const key = raw.toLowerCase();
+    const compact = key.replace(/\s+/g, '');
+    if (compact === 'rm_conval' || compact === 'rmconval') return true;
+    if (compact === 'conval' || key.includes('con val') || key.includes('conval')) return true;
+    if (compact === 'totalwt' || key === 'total wt') return true;
+    if (key.includes('input rm')) return true;
+    return false;
+  }
+
+  function numericFractionDigits(columnKey) {
+    if (isHighPrecisionColumnName(columnKey)) return 10;
+    return 6;
+  }
+
   /**
    * Codes stored as numeric strings (e.g. 08124) must not pass through Number() —
    * that drops leading zeros and Indian grouping shows 8,124 instead of 08124.
@@ -211,7 +229,11 @@
     }
     const n = Number(value);
     if (!Number.isNaN(n) && String(value).trim() !== '') {
-      return n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      const maxFrac = columnKey ? numericFractionDigits(columnKey) : 6;
+      return n.toLocaleString('en-IN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxFrac,
+      });
     }
     return String(value);
   }
@@ -330,6 +352,10 @@
     return list.filter(d => d && String(d.column || '').trim().toLowerCase() === key);
   }
 
+  function isReportsGrandTotalRow(row) {
+    return !!(row && row.__sgGrandTotal);
+  }
+
   function withDrilldownFormatters(report, resultRows, columns) {
     return columns.map(function(c) {
       const align = 'left';
@@ -341,7 +367,7 @@
           align: align,
           sortable: true,
           format: function(value, row) {
-            if (row && row.__sgStickyBottom) {
+            if (isReportsGrandTotalRow(row)) {
               return '<span class="sg-grand-total-cell">' + escapeHtml(formatIndianValue(value, c)) + '</span>';
             }
             return escapeHtml(formatIndianValue(value, c));
@@ -354,7 +380,7 @@
         align: align,
         sortable: true,
         format: function(value, row) {
-          if (row && row.__sgStickyBottom) {
+          if (isReportsGrandTotalRow(row)) {
             return '<span class="sg-grand-total-cell">' + escapeHtml(formatIndianValue(value, c)) + '</span>';
           }
           if (value === null || value === undefined || value === '') return '';
@@ -407,6 +433,20 @@
     });
   }
 
+  function syncReportsGrandTotalSticky() {
+    const root = document.getElementById('runTable');
+    if (!root) return;
+    const scroll = root.querySelector('.sg-scroll');
+    const table = root.querySelector('.sg-table');
+    if (!scroll || !table) return;
+    const thead = table.querySelector('thead');
+    const headH = thead ? Math.round(thead.getBoundingClientRect().height) : 42;
+    scroll.style.setProperty('--sg-head-h', headH + 'px');
+    table.querySelectorAll('tbody tr.sg-sticky-top-row td').forEach(function(td) {
+      td.style.top = headH + 'px';
+    });
+  }
+
   function renderResultGrid(report, result, restoreSearchValue) {
     const runTableEl = document.getElementById('runTable');
     if (runGrid && runGrid.destroy) runGrid.destroy();
@@ -427,6 +467,12 @@
         exportBtn: false,
         resizable: true,
         grandTotalRowFn: buildReportsGrandTotalRow,
+        grandTotalPosition: 'top',
+        onBodyRendered: function() {
+          requestAnimationFrame(function() {
+            requestAnimationFrame(syncReportsGrandTotalSticky);
+          });
+        },
       },
     });
     bindDrilldownClicks();

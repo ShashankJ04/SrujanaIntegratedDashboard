@@ -26,6 +26,7 @@ DASHBOARD_KEYS: List[str] = [
     "production",
     "rm_variance",
     "rm_correction",
+    "rm_correction_plus",
     "rept",
     "rept_plus",
     "edit_dpr",

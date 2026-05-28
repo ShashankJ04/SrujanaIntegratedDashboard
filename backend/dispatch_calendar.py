@@ -823,3 +823,63 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
         },
         "partDayDispatch": part_day_dispatch,
     }
+
+
+def get_dispatch_schedule_by_part(month: int, year: int) -> Dict[str, Dict[str, Any]]:
+    """Dispatch schedule entries keyed by normalized part_no."""
+    templates = _load_dispatch_calendar_query_templates()
+    mo_qt = templates.get(MONTHLY_ORDER_REPORT_ID, "")
+    if not mo_qt:
+        return {}
+    mo_sql, mo_params = reports_store.compile_report_query(
+        mo_qt,
+        {"month": month, "year": year},
+    )
+    mo_rows = fetch_all(mo_sql, tuple(mo_params))
+    out: Dict[str, Dict[str, Any]] = {}
+    for raw in mo_rows:
+        if _is_grand_total_row(raw):
+            continue
+        pk = _normalize_part_key(_mo_part_no_raw(raw))
+        if not pk:
+            continue
+        out[pk] = {
+            "partNo": str(_mo_part_no_raw(raw) or "").strip(),
+            "scheduledQty": _to_float(raw.get(TOTAL_QTY_COL)),
+        }
+    return out
+
+
+def get_scheduled_qty_by_part(month: int, year: int) -> Dict[str, float]:
+    """Per-part Total Scheduled Qty from the dispatch monthly-order report."""
+    return {
+        pk: float(info.get("scheduledQty") or 0.0)
+        for pk, info in get_dispatch_schedule_by_part(month, year).items()
+    }
+
+
+def get_dispatch_kpi(month: int, year: int) -> Dict[str, Any]:
+    """Grand-total dispatch KPI aligned with the Dispatch Calendar toolbar."""
+    payload = build_dispatch_calendar_payload(month, year)
+    rows = payload.get("rows") or []
+    row_meta = payload.get("rowMeta") or []
+    scheduled = 0.0
+    dispatched = 0.0
+    eps = 1e-9
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if not meta.get("isGrandTotal"):
+            continue
+        scheduled = _to_float(row.get(TOTAL_QTY_COL))
+        dispatched = _to_float(row.get(TOTAL_DISPATCHED_QTY_COL))
+        break
+    pct: Optional[float] = (
+        round((100.0 * dispatched / scheduled), 2) if scheduled > eps else None
+    )
+    return {
+        "scheduled": round(scheduled, 4),
+        "dispatched": round(dispatched, 4),
+        "pct": pct,
+    }

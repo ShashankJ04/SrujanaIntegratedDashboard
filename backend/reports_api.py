@@ -12,6 +12,18 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request, send_file
 
 _EXPORT_DT_FMT = "%d-%m-%Y, %H:%M:%S"
+_EXCEL_NUMERIC_FORMAT = "#,##0.000000"
+_EXCEL_HIGH_PRECISION_FORMAT = "#,##0." + ("0" * 10)
+
+
+def _is_high_precision_column(col_name: str) -> bool:
+    key = str(col_name or "").strip().lower()
+    compact = key.replace(" ", "")
+    if compact in ("rm_conval", "rmconval", "conval", "totalwt"):
+        return True
+    if "conval" in key or "con val" in key or "input rm" in key:
+        return True
+    return False
 
 from .auth import api_login_required
 from .rbac import require_access, require_plus_access
@@ -280,7 +292,21 @@ def export_report(report_id):
 
     for ri, row in enumerate(rows, header_row + 1):
         for ci, col in enumerate(columns, 1):
-            cell = ws.cell(row=ri, column=ci, value=row.get(col))
+            val = row.get(col)
+            cell = ws.cell(row=ri, column=ci)
+            if val is not None and not isinstance(val, bool):
+                try:
+                    num = float(val)
+                    cell.value = num
+                    cell.number_format = (
+                        _EXCEL_HIGH_PRECISION_FORMAT
+                        if _is_high_precision_column(col)
+                        else _EXCEL_NUMERIC_FORMAT
+                    )
+                except (TypeError, ValueError):
+                    cell.value = val
+            else:
+                cell.value = val
             cell.border = thin_border
 
     output = BytesIO()

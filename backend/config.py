@@ -13,6 +13,18 @@ def _runtime_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _load_env_file() -> None:
+    """Load project `.env` for flask CLI and other entrypoints (run.py also loads it)."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(_runtime_base_dir() / ".env")
+
+
+_load_env_file()
+
+
 def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
     """Resolve file/dir paths from env for both source and packaged runs."""
     configured = str(raw_path or "").strip()
@@ -38,6 +50,8 @@ class Config:
     DB_USER = os.environ.get("DB_USER", "root")
     DB_PASSWORD = os.environ.get("DB_PASSWORD", "root")
     DB_NAME = os.environ.get("DB_NAME", "erp")
+    DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "15"))
+    DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "15"))
 
     # MySQL connection settings — Warehouse database (separate)
     WH_DB_HOST = os.environ.get("WH_DB_HOST", "localhost")
@@ -45,6 +59,8 @@ class Config:
     WH_DB_USER = os.environ.get("WH_DB_USER", "root")
     WH_DB_PASSWORD = os.environ.get("WH_DB_PASSWORD", "root")
     WH_DB_NAME = os.environ.get("WH_DB_NAME", "warehouse_db")
+    WH_DB_POOL_SIZE = int(os.environ.get("WH_DB_POOL_SIZE", "5"))
+    WH_DB_POOL_MAX_OVERFLOW = int(os.environ.get("WH_DB_POOL_MAX_OVERFLOW", "10"))
 
     # Table to visualize in the dashboard
     TARGET_TABLE_NAME = os.environ.get("TARGET_TABLE_NAME", "vw_bharat_dashboard")
@@ -84,6 +100,19 @@ class Config:
         os.environ.get("REPORTS_SUMMARY_CACHE_SECONDS", "30")
     )
     PM_STATUS_CACHE_SECONDS = int(os.environ.get("PM_STATUS_CACHE_SECONDS", "20"))
+
+    # Tool Management daily schedule: scheduled_production (default) | production_calendar
+    _tool_schedule_raw = os.environ.get(
+        "TOOL_SCHEDULE_SOURCE", "production_calendar"
+    ).strip().lower()
+    TOOL_SCHEDULE_SOURCE = (
+        _tool_schedule_raw
+        if _tool_schedule_raw in ("scheduled_production", "production_calendar")
+        else "production_calendar"
+    )
+    TOOL_SCHEDULE_CACHE_SECONDS = int(
+        os.environ.get("TOOL_SCHEDULE_CACHE_SECONDS", "30")
+    )
 
     # Shop-floor DPR machine QR (encoded URL uses this host; if empty, LAN IP is detected)
     MACHINE_IP = os.environ.get("MACHINE_IP", "").strip()

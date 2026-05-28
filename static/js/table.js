@@ -1,11 +1,14 @@
 const DataTable = (() => {
-  function formatLocaleNumber(value) {
+  const HIGH_PRECISION_COLUMNS = new Set(["rm_conval"]);
+
+  function formatLocaleNumber(value, col) {
     if (value === null || value === undefined) return "";
     const n = Number(value);
     if (Number.isNaN(n)) return String(value);
+    const maxFrac = col && HIGH_PRECISION_COLUMNS.has(col.name) ? 10 : 2;
     return n.toLocaleString("en-IN", {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: maxFrac,
     });
   }
 
@@ -311,7 +314,7 @@ const DataTable = (() => {
               }
             }
             td.textContent = col.is_numeric
-              ? formatLocaleNumber(value)
+              ? formatLocaleNumber(value, col)
               : value === null || value === undefined ? "" : String(value);
           }
           tr.appendChild(td);

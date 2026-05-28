@@ -381,7 +381,8 @@ def _get_dashboard_base_sql() -> str:
     """Base SQL for dashboard metrics (without buffer calculations).
 
     This mirrors vw_bharat_dashboard and returns:
-    part_no, part_name, feb (monthly demand), wip, fg, total_stock, produced_qty,
+    part_no, part_name, sales_order_qty (hidden), wip, fg, total_stock, produced_qty,
+    plus feb (Total Requirement) overlaid from dispatch scheduled qty at cache refresh.
     plus raw-material fields: rm_rawmt_part_no, rm_conval, rm_inward_accepted_qty,
     current_acceptedqty (actual RM stock from inward).
     """
@@ -390,7 +391,7 @@ def _get_dashboard_base_sql() -> str:
         SELECT
             x.PART_NO AS part_no,
             x.PART_NAME AS part_name,
-            x.QTY AS feb,
+            x.QTY AS sales_order_qty,
             IFNULL(y_wip.csQty, 0) AS wip,
             IFNULL(y_fg.csQty, 0) AS fg,
             (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
@@ -524,7 +525,7 @@ def _get_dashboard_base_sql() -> str:
                 LEFT JOIN (
                     SELECT co_Id, co_partNo, co_partname, ct.rmId, ct_compid, MM_RawMtPartNo,
                         ROUND(1000 / ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth))
-                            * ((1000 * ct.ctNoOfCavity) / ct.ctPitch)), 1) AS conVal
+                            * ((1000 * ct.ctNoOfCavity) / ct.ctPitch)), 10) AS conVal
                     FROM components
                     INNER JOIN (
                         SELECT CT_RMID AS rmId, ct_compid,
@@ -566,6 +567,201 @@ FROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster
     """
 
 
+def _normalize_inventory_part_key(part_no: Any) -> str:
+    return str(part_no or "").strip().lower()
+
+
+def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, Any]:
+    return {
+        "part_no": part_no,
+        "part_name": part_name or part_no,
+        "sales_order_qty": 0.0,
+        "feb": 0.0,
+        "wip": 0.0,
+        "fg": 0.0,
+        "total_stock": 0.0,
+        "produced_qty": 0.0,
+        "rm_rawmt_part_no": None,
+        "rm_conval": 0.0000000000,
+        "rm_inward_accepted_qty": 0.0,
+        "current_acceptedqty": 0.0,
+    }
+
+
+def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str, Any]]:
+    """Stock and production metrics for parts outside the sales-order base SQL."""
+    cleaned = [str(p or "").strip() for p in part_nos if str(p or "").strip()]
+    if not cleaned:
+        return []
+    placeholders = ", ".join(["%s"] * len(cleaned))
+    sql = f"""
+        SELECT
+            TRIM(c.CO_PARTNO) AS part_no,
+            TRIM(c.CO_PARTNAME) AS part_name,
+            0 AS sales_order_qty,
+            IFNULL(y_wip.csQty, 0) AS wip,
+            IFNULL(y_fg.csQty, 0) AS fg,
+            (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
+            IFNULL(z.pdProdQty, 0) AS produced_qty,
+            rm.rm_rawmt_part_no,
+            IFNULL(rm.rm_conval, 0) AS rm_conval,
+            IFNULL(rm.rm_inward_accepted_qty, 0) AS rm_inward_accepted_qty,
+            IFNULL(rm.current_acceptedqty, 0) AS current_acceptedqty
+        FROM components c
+        LEFT JOIN (
+            SELECT TRIM(c2.CO_PARTNO) AS PART_NO, SUM(a.csQty) AS csQty
+            FROM (
+                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
+                FROM comp_stockhistory
+                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
+                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
+                  AND CH_StageId = 6
+                  AND CH_WEEK = 0
+            ) a
+            JOIN components c2 ON a.csCompId = c2.CO_id
+            WHERE c2.CO_ACTIVEYN = 'Y'
+            GROUP BY TRIM(c2.CO_PARTNO)
+        ) y_fg ON TRIM(c.CO_PARTNO) = y_fg.PART_NO
+        LEFT JOIN (
+            SELECT TRIM(c2.CO_PARTNO) AS PART_NO, SUM(a.csQty) AS csQty
+            FROM (
+                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
+                FROM comp_stockhistory
+                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
+                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
+                  AND CH_StageId != 6
+                  AND CH_WEEK = 0
+            ) a
+            JOIN components c2 ON a.csCompId = c2.CO_id
+            WHERE c2.CO_ACTIVEYN = 'Y'
+            GROUP BY TRIM(c2.CO_PARTNO)
+        ) y_wip ON TRIM(c.CO_PARTNO) = y_wip.PART_NO
+        LEFT JOIN (
+            SELECT TRIM(CO_partNo) AS PART_NO, SUM(PD_PRODQTY) AS pdProdQty
+            FROM scheduled_production
+            INNER JOIN production_details ON PS_ID = PD_PSID
+            INNER JOIN schedule_master ON SM_Id = PS_SMID
+            INNER JOIN components ON CO_Id = PS_ParentCompId
+            WHERE PD_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
+                              AND last_day(current_date)
+              AND SM_Status = 'S'
+              AND PS_plantId = 2
+            GROUP BY TRIM(CO_partNo)
+        ) z ON TRIM(c.CO_PARTNO) = z.PART_NO
+        LEFT JOIN (
+            SELECT
+                TRIM(mq.co_partNo) AS PART_NO,
+                mq.mm_rawmtpartNo AS rm_rawmt_part_no,
+                mq.conVal AS rm_conval,
+                IFNULL(iq.total_acceptedqty, 0) AS rm_inward_accepted_qty,
+                IFNULL(inq.current_acceptedqty, 0) AS current_acceptedqty
+            FROM (
+                SELECT rmx.*, rmy.conVal
+                FROM (
+                    SELECT c3.co_id, c3.co_partNo, c3.CO_PARTNAME, mm_rawmtpartNo, mm_id
+                    FROM components c3
+                    JOIN (
+                        SELECT ct_compid AS compId, MAX(ct_rmid) AS rmId
+                        FROM components_tool
+                        WHERE CT_ACTIVEYN = 'Y'
+                        GROUP BY ct_compid
+                    ) ct ON c3.co_id = ct.compId
+                    JOIN materialmaster ON ct.rmId = mm_id
+                    WHERE c3.co_activeyn = 'Y'
+                      AND TRIM(c3.co_partNo) IN ({placeholders})
+                ) rmx
+                LEFT JOIN (
+                    SELECT co_Id, co_partNo, co_partname, ct.rmId, ct_compid, MM_RawMtPartNo,
+                        ROUND(1000 / ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth))
+                            * ((1000 * ct.ctNoOfCavity) / ct.ctPitch)), 10) AS conVal
+                    FROM components
+                    INNER JOIN (
+                        SELECT CT_RMID AS rmId, ct_compid,
+                               CT_NO_OF_CAVITY AS ctNoOfCavity, CT_Pitch AS ctPitch
+                        FROM components_tool
+                        WHERE ct_id IN (
+                            SELECT MAX(ct_id) FROM components_tool
+                            WHERE CT_ActiveYN='Y' AND CT_PPC='Y'
+                              AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
+                            GROUP BY ct_compid
+                        )
+                        AND CT_ActiveYN='Y' AND CT_PPC='Y'
+                        AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
+                    ) ct ON co_id = ct.ct_compid
+                    INNER JOIN materialmaster ON ct.rmId = mm_id
+                    INNER JOIN materialtypemaster ON MM_MTID = MT_Id
+                    WHERE co_activeyn = 'Y' AND co_id = CO_PARENTID
+                ) rmy ON rmx.co_Id = rmy.co_Id
+                     AND rmx.co_partNo = rmy.co_partNo
+                     AND rmx.CO_PARTNAME = rmy.CO_PARTNAME
+            ) mq
+            LEFT JOIN (
+                SELECT RD_RMID,
+                    ROUND(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
+                        - SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END), 2) AS total_acceptedqty
+                FROM rm_inwarddetails, rm_inwardmaster, materialmaster, materialtypemaster
+                WHERE rd_riid = ri_id AND RD_RMID = MM_Id AND MM_mtId = MT_Id
+                  AND RI_date <= last_day(DATE_ADD(current_date, INTERVAL -1 MONTH))
+                GROUP BY RD_RMID
+            ) iq ON mq.mm_id = iq.RD_rmid
+            LEFT JOIN (
+                SELECT RD_RMID,
+                    ROUND(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
+                        - SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END), 2) AS current_acceptedqty
+                FROM rm_inwarddetails, rm_inwardmaster, materialmaster, materialtypemaster
+                WHERE rd_riid = ri_id AND RD_RMID = MM_Id AND MM_mtId = MT_Id
+                GROUP BY RD_RMID
+            ) inq ON mq.mm_id = inq.RD_rmid
+        ) rm ON TRIM(c.CO_PARTNO) = rm.PART_NO
+        WHERE c.CO_ACTIVEYN = 'Y'
+          AND TRIM(c.CO_PARTNO) IN ({placeholders})
+    """
+    params = tuple(cleaned + cleaned)
+    return list(fetch_all(sql, params))
+
+
+def _merge_dispatch_schedule_into_inventory_rows(
+    base_rows: List[Dict[str, Any]],
+    schedule: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Keep dispatch-scheduled parts with non-zero requirement; drop zero-requirement parts."""
+    base_by_pk: Dict[str, Dict[str, Any]] = {}
+    for row in base_rows:
+        pk = _normalize_inventory_part_key(row.get("part_no"))
+        if pk:
+            base_by_pk[pk] = row
+
+    missing_part_nos: List[str] = []
+    for pk, info in schedule.items():
+        qty = float(info.get("scheduledQty") or 0)
+        if qty <= 0:
+            continue
+        if pk not in base_by_pk:
+            missing_part_nos.append(str(info.get("partNo") or pk).strip())
+
+    supplemental_by_pk: Dict[str, Dict[str, Any]] = {}
+    for row in _fetch_inventory_metrics_for_parts(missing_part_nos):
+        pk = _normalize_inventory_part_key(row.get("part_no"))
+        if pk:
+            supplemental_by_pk[pk] = row
+
+    merged: List[Dict[str, Any]] = []
+    for pk, info in schedule.items():
+        qty = float(info.get("scheduledQty") or 0)
+        if qty <= 0:
+            continue
+        if pk in base_by_pk:
+            row = dict(base_by_pk[pk])
+        elif pk in supplemental_by_pk:
+            row = dict(supplemental_by_pk[pk])
+        else:
+            part_no = str(info.get("partNo") or pk).strip()
+            row = _empty_inventory_base_row(part_no)
+        row["feb"] = qty
+        merged.append(row)
+    return merged
+
+
 def refresh_dashboard_base_cache() -> Dict[str, Any]:
     """Run the heavy base SQL once and cache results in memory.
 
@@ -573,8 +769,13 @@ def refresh_dashboard_base_cache() -> Dict[str, Any]:
     """
     global _DASHBOARD_BASE_CACHE
 
+    from .dispatch_calendar import get_dispatch_schedule_by_part
+
     base_sql = _get_dashboard_base_sql()
-    rows = fetch_all(base_sql)
+    base_rows = fetch_all(base_sql)
+    today = date.today()
+    schedule = get_dispatch_schedule_by_part(today.month, today.year)
+    rows = _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
     _DASHBOARD_BASE_CACHE = {
         "rows": rows,
         "last_refreshed": datetime.utcnow(),
@@ -946,6 +1147,22 @@ def _get_enriched_rows_for_reports() -> List[Dict[str, Any]]:
     return enriched_rows
 
 
+def get_inventory_planned_total() -> float:
+    """Sum of positive production_pending across all inventory rows."""
+    rows = _get_enriched_rows_for_reports()
+    return sum(
+        max(0.0, float(row.get("production_pending") or 0)) for row in rows
+    )
+
+
+def get_inventory_balance_total() -> float:
+    """Sum of positive balance_production_qty across all inventory rows."""
+    rows = _get_enriched_rows_for_reports()
+    return sum(
+        max(0.0, float(row.get("balance_production_qty") or 0)) for row in rows
+    )
+
+
 def get_report_summary() -> Dict[str, Any]:
     """High-level KPI metrics for the reports page using balance production qty."""
     cache_seconds = int(
@@ -1025,6 +1242,34 @@ def get_report_summary() -> Dict[str, Any]:
     except Exception:
         pass
 
+    production_kpi: Dict[str, Any] = {
+        "planned": 0.0,
+        "openingStock": 0.0,
+        "balance": 0.0,
+        "produced": 0.0,
+        "pct": None,
+    }
+    try:
+        from .production_calendar import get_production_kpi
+
+        today = date.today()
+        production_kpi = get_production_kpi(today.month, today.year)
+    except Exception:
+        pass
+
+    dispatch_kpi: Dict[str, Any] = {
+        "scheduled": 0.0,
+        "dispatched": 0.0,
+        "pct": None,
+    }
+    try:
+        from .dispatch_calendar import get_dispatch_kpi
+
+        today = date.today()
+        dispatch_kpi = get_dispatch_kpi(today.month, today.year)
+    except Exception:
+        pass
+
     summary = {
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
@@ -1038,6 +1283,8 @@ def get_report_summary() -> Dict[str, Any]:
         "parts_pending": parts_pending,
         "dispatch_qty_mtd": dispatch_qty_mtd,
         "dispatch_invoice_count_mtd": dispatch_invoice_count_mtd,
+        "production_kpi": production_kpi,
+        "dispatch_kpi": dispatch_kpi,
     }
     if cache_seconds > 0:
         with _REPORT_SUMMARY_CACHE_LOCK:
@@ -1735,7 +1982,7 @@ _DPR_NPD_LEGACY_PART_NAMES: Dict[str, str] = {
 }
 
 
-def get_dpr_part_options(limit: int = 8000) -> List[Dict[str, str]]:
+def get_dpr_part_options(limit: int = 8000, *, include_npd: bool = True) -> List[Dict[str, str]]:
     """Distinct active components for Part No picklist."""
     sql = """
         SELECT TRIM(co_partNo) AS part_no, MIN(CO_PARTNAME) AS part_name
@@ -1754,13 +2001,19 @@ def get_dpr_part_options(limit: int = 8000) -> List[Dict[str, str]]:
         for r in rows
         if r.get("part_no")
     ]
-    existing = {str(x.get("part_no") or "").strip().lower() for x in out}
-    for part_no, part_name in _DPR_NPD_PARTS:
-        if part_no.lower() not in existing:
-            out.append({"part_no": part_no, "part_name": part_name})
-            existing.add(part_no.lower())
+    if include_npd:
+        existing = {str(x.get("part_no") or "").strip().lower() for x in out}
+        for part_no, part_name in _DPR_NPD_PARTS:
+            if part_no.lower() not in existing:
+                out.append({"part_no": part_no, "part_name": part_name})
+                existing.add(part_no.lower())
     out.sort(key=lambda x: str(x.get("part_no") or "").strip().lower())
     return out
+
+
+def get_rm_calculator_part_options(limit: int = 8000) -> List[Dict[str, str]]:
+    """DPR-style part picklist without synthetic new-product-development parts."""
+    return get_dpr_part_options(limit, include_npd=False)
 
 
 def _dpr_tool_row_for_part(part_no: str) -> Optional[Dict[str, Any]]:
@@ -2342,41 +2595,29 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
 
     daily = pack(day_row)
 
-    # Monthly: planned from enriched reports, produced from production_details
-    report_rows = _get_enriched_rows_for_reports()
     monthly_planned = 0.0
-    for row in report_rows:
-        monthly_planned += max(0.0, float(row.get("production_pending") or 0))
-
+    monthly_produced = 0.0
+    monthly_pct: Optional[float] = None
+    production_kpi: Dict[str, Any] = {
+        "planned": 0.0,
+        "openingStock": 0.0,
+        "balance": 0.0,
+        "produced": 0.0,
+        "pct": None,
+    }
     try:
-        sql_monthly_produced = """
-            SELECT COALESCE(SUM(pd.PD_PRODQTY), 0) AS produced
-            FROM production_details pd
-            WHERE (pd.PD_TOOLID, pd.pd_psid) IN (
-                SELECT t.ps_toolid, t.first_ps_id
-                FROM (
-                    SELECT
-                        sp.PS_TOOLID AS ps_toolid,
-                        FIRST_VALUE(sp.PS_ID) OVER (
-                            PARTITION BY sp.PS_TOOLID
-                            ORDER BY sp.ps_date ASC
-                        ) AS first_ps_id
-                    FROM scheduled_production sp
-                    WHERE sp.ps_smid = (
-                        SELECT sm_id
-                        FROM schedule_master
-                        WHERE sm_month = %s
-                          AND sm_year = %s
-                        LIMIT 1
-                    )
-                ) t
-                GROUP BY t.ps_toolid, t.first_ps_id
-            )
-        """
-        monthly_produced_row = fetch_one(sql_monthly_produced, (m, y))
-        monthly_produced = float((monthly_produced_row or {}).get("produced") or 0)
+        from .production_calendar import get_production_kpi
+
+        production_kpi = get_production_kpi(m, y)
+        monthly_planned = float(production_kpi.get("planned") or 0)
+        monthly_produced = float(production_kpi.get("produced") or 0)
+        monthly_pct = (
+            round((100.0 * monthly_produced / monthly_planned), 2)
+            if monthly_planned > 0
+            else None
+        )
     except Exception:
-        monthly_produced = 0.0
+        pass
 
     monthly = {
         "planned": monthly_planned,
@@ -2385,11 +2626,6 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
     }
 
     daily_pct = round((100.0 * daily["produced"] / daily["planned"]), 2) if daily["planned"] > 0 else None
-    monthly_pct = (
-        round((100.0 * monthly["produced"] / monthly["planned"]), 2)
-        if monthly["planned"] > 0
-        else None
-    )
     total_machines = len(get_dpr_machine_options())
     planned_machines = int((planned_machines_row or {}).get("planned_machines") or 0)
     last_day_planned = float((last_day_row or {}).get("planned") or 0)

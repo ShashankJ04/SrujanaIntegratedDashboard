@@ -56,6 +56,14 @@
               <span class="ti-nav-label">RM Correction</span>
             </a>
           </li>
+          {% if has_rept %}
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="rm-calculator" href="/app?section=rm-calculator">
+              <span class="ti-nav-icon">⚖️</span>
+              <span class="ti-nav-label">RM Calculator</span>
+            </a>
+          </li>
+          {% endif %}
           <li class="ti-nav-item">
             <a class="ti-nav-link" data-section="dpr" href="/app?section=dpr">
               <span class="ti-nav-icon">📝</span>
