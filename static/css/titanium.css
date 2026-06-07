@@ -5716,6 +5716,303 @@ body.dpr-col-resizing {
   background: rgba(21, 101, 192, 0.12);
 }
 
+/* Laser Welding hub section */
+.ti-laser-welding {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+
+.ti-laser-welding .lw-toolbar {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.ti-laser-welding .lw-brand-icon {
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.ti-nav-icon--img {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.ti-nav-icon--img img {
+  object-fit: contain;
+  display: block;
+}
+
+.ti-laser-welding .lw-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ti-laser-welding .lw-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ti-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-grid-search {
+  min-width: 140px;
+  max-width: 280px;
+  width: min(240px, 48vw);
+  padding: 7px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ti-laser-welding .lw-grid-search:focus {
+  border-color: var(--ti-accent, #3b82f6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ti-accent, #3b82f6) 16%, transparent);
+}
+
+.ti-laser-welding .lw-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0;
+  flex-shrink: 0;
+  padding: 3px;
+  background: var(--ti-surface-2);
+  border: 1px solid var(--ti-border);
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.ti-laser-welding .lw-tab {
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ti-text-muted);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.ti-laser-welding .lw-tab:hover:not(.lw-tab--active) {
+  color: var(--ti-text);
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 8%, transparent);
+}
+
+.ti-laser-welding .lw-tab--active {
+  background: var(--ti-bg-surface, #fff);
+  color: var(--ti-text-bright, var(--ti-text));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 0 0 1px color-mix(in srgb, var(--ti-accent, #3b82f6) 20%, transparent);
+}
+
+.ti-laser-welding .lw-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-laser-welding .lw-panel--active {
+  display: flex;
+}
+
+.ti-laser-welding .lw-table-wrap {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--ti-border);
+  border-radius: 10px;
+  overflow: auto;
+  background: var(--ti-bg-surface, var(--ti-surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ti-text) 4%, transparent);
+}
+
+.ti-laser-welding #lw-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ti-laser-welding #lw-table.ti-excel-table--original thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  /* color + gradient from .ti-excel-table--original — do not override background */
+}
+
+.ti-laser-welding #lw-table tbody td {
+  padding: 8px 12px;
+  vertical-align: middle;
+  font-size: 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ti-border) 70%, transparent);
+  transition: background 0.15s ease;
+}
+
+.ti-laser-welding .lw-data-row:hover td {
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 4%, transparent);
+}
+
+.ti-laser-welding .lw-data-row--processed td {
+  background: color-mix(in srgb, var(--ti-text-muted) 6%, transparent);
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-data-row--processed .val-bold,
+.ti-laser-welding .lw-data-row--processed .lw-lot-badge {
+  color: var(--ti-text);
+}
+
+.ti-laser-welding .lw-new-row td {
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 5%, var(--ti-surface-2));
+  border-bottom: none;
+}
+
+.ti-laser-welding .lw-new-row .lw-new-part-name {
+  color: var(--ti-text-muted);
+  font-size: 12px;
+}
+
+.ti-laser-welding .lw-edit-cell {
+  padding: 5px 8px;
+}
+
+.ti-laser-welding .lw-cell-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ti-bg-surface, #fff);
+  border: 1px solid var(--ti-glass-border, #d1d9e6);
+  border-radius: 6px;
+  color: var(--ti-text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.ti-laser-welding .lw-cell-input:hover {
+  border-color: color-mix(in srgb, var(--ti-accent, #3b82f6) 55%, var(--ti-glass-border, #d1d9e6));
+}
+
+.ti-laser-welding .lw-cell-input:focus {
+  border-color: var(--ti-accent, #3b82f6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ti-accent, #3b82f6) 18%, transparent);
+}
+
+.ti-laser-welding .lw-qty-input {
+  width: 90px;
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-lot-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 12%, transparent);
+  color: var(--ti-accent, #2563eb);
+  border: 1px solid color-mix(in srgb, var(--ti-accent, #3b82f6) 25%, transparent);
+}
+
+.ti-laser-welding .lw-actions-cell {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-actions-cell .ti-btn {
+  margin: 0 2px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.ti-laser-welding .lw-actions-cell .ti-btn:active {
+  transform: scale(0.96);
+}
+
+.ti-laser-welding .lw-act-detail.is-expanded {
+  border-color: var(--ti-accent, #3b82f6);
+  color: var(--ti-accent, #3b82f6);
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 12%, transparent);
+}
+
+.ti-laser-welding .lw-view-only {
+  font-size: 11px;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-detail-row .lw-detail-cell {
+  padding: 0;
+  background: var(--ti-surface-2);
+  border-bottom: 1px solid var(--ti-border);
+  animation: lw-detail-in 0.22s ease-out;
+}
+
+@keyframes lw-detail-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ti-laser-welding .lw-detail-inline {
+  padding: 10px 16px 14px;
+}
+
+.ti-laser-welding .lw-detail-table thead th {
+  background: linear-gradient(180deg, #1e40af 0%, #2563eb 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.25);
+}
+
+.ti-laser-welding .lw-detail-table {
+  width: 100%;
+  font-size: 12px;
+  border: 1px solid color-mix(in srgb, #1565c0 35%, var(--ti-border));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-detail-loading,
+.ti-laser-welding .lw-detail-empty {
+  font-size: 12px;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-detail-error {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.ti-laser-welding .lw-placeholder.lw-panel--active {
+  align-items: center;
+  justify-content: center;
+}
+
+.ti-laser-welding .lw-coming-soon {
+  padding: 48px 24px;
+}
+
+.ti-laser-welding .lw-coming-soon-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ti-text-muted);
+}
+
 /* Maintenance hub: tab panels fill remaining height (Tools grid + PM/Life SuperGrid) */
 #panel-tools.ti-tab-panel.active,
 #panel-pm.ti-tab-panel.active,

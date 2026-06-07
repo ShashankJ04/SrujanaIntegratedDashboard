@@ -157,6 +157,7 @@ const Hub = (() => {
     'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
     'production-calendar': { title: 'Production Calendar', icon: '⏱️' },
     'machine-planning': { title: 'Machine Planning', icon: '⚒️' },
+    'laser-welding': { title: 'Laser Welding', icon: '⚡' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
     admin:       { title: 'Administration',  icon: '⚙️' },
@@ -175,6 +176,7 @@ const Hub = (() => {
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'production-calendar') return ACCESS.has('rept');
     if (section === 'machine-planning') return ACCESS.has('rept');
+    if (section === 'laser-welding') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-calculator') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
@@ -517,6 +519,10 @@ const Hub = (() => {
 
       if (section === 'machine-planning' && typeof window.MachinePlanningPage?.init === 'function') {
         window.MachinePlanningPage.init();
+      }
+
+      if (section === 'laser-welding' && typeof window.LaserWeldingPage?.init === 'function') {
+        window.LaserWeldingPage.init();
       }
 
       if (section === 'reports') {

@@ -89,6 +89,14 @@
               <span class="ti-nav-label">Machine Planning</span>
             </a>
           </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="laser-welding" href="/app?section=laser-welding">
+              <span class="ti-nav-icon ti-nav-icon--img">
+                <img src="{{ url_for('static', filename='img/laser-welding-icon.png') }}" alt="" width="20" height="20" />
+              </span>
+              <span class="ti-nav-label">Laser Welding</span>
+            </a>
+          </li>
           {% endif %}
         </li>
 
@@ -223,5 +231,6 @@
   <script src="{{ url_for('static', filename='js/dispatch_calendar.js') }}"></script>
   <script src="{{ url_for('static', filename='js/production_calendar.js') }}"></script>
   <script src="{{ url_for('static', filename='js/machine_planning.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/laser_welding.js') }}"></script>
 </body>
 </html>

@@ -50,6 +50,7 @@ def create_app() -> Flask:
     from .search_api import search_bp
     from .rm_calculator_api import rm_calculator_bp
     from .machine_planning_api import machine_planning_bp
+    from .laser_welding_api import laser_welding_bp
 
     app.register_blueprint(pm_bp)
     app.register_blueprint(tools_bp)
@@ -63,6 +64,7 @@ def create_app() -> Flask:
     app.register_blueprint(search_bp)
     app.register_blueprint(rm_calculator_bp)
     app.register_blueprint(machine_planning_bp)
+    app.register_blueprint(laser_welding_bp)
 
     from .auth import (
         create_token,
@@ -140,6 +142,7 @@ def create_app() -> Flask:
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "rm-calculator", "reports", "reports-manage",
         "admin", "dpr", "dispatch-calendar", "production-calendar", "machine-planning",
+        "laser-welding",
     }
 
     @app.route("/app")
@@ -196,6 +199,7 @@ def create_app() -> Flask:
             "production-calendar": "rept",
             "rm-calculator": "rept",
             "machine-planning": "rept",
+            "laser-welding": "rept",
         }
 
         if name == "maintenance":

@@ -1,0 +1,62 @@
+<!-- Laser Welding — Child Parts processing workflow -->
+<section class="ti-section ti-hub-section-fill ti-laser-welding" id="lw-root" data-section="laser-welding">
+
+  <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one lw-toolbar">
+    <div class="ti-dc-toolbar-left">
+      <img src="{{ url_for('static', filename='img/laser-welding-icon.png') }}" alt="" class="ti-dc-icon lw-brand-icon" width="32" height="32" />
+      <div class="ti-dc-title-block">
+        <h2 class="ti-dc-title">Laser Welding</h2>
+        <p class="ti-dc-subtitle" id="lw-subtitle">Child Parts — lot tracking &amp; processing</p>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-right ti-dc-toolbar-actions lw-toolbar-actions">
+      <span class="lw-count" id="lw-item-count">—</span>
+      <input type="search" class="ti-input lw-grid-search" id="lw-grid-search"
+             placeholder="Filter rows…" autocomplete="off" aria-label="Filter table" />
+    </div>
+  </div>
+
+  <div class="lw-tabs" role="tablist" aria-label="Laser Welding tabs">
+    <button type="button" class="lw-tab lw-tab--active" data-tab="child_parts" role="tab" aria-selected="true">
+      Child Parts
+    </button>
+    <button type="button" class="lw-tab" data-tab="sub_assembly" role="tab" aria-selected="false">
+      Sub-Assembly
+    </button>
+    <button type="button" class="lw-tab" data-tab="final_assembly" role="tab" aria-selected="false">
+      Final Assembly
+    </button>
+  </div>
+
+  <div id="lw-child-panel" class="lw-panel lw-panel--active">
+    <div id="lw-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+
+    <div id="lw-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-table">
+        <thead>
+          <tr>
+            <th class="lw-col-part">Part No</th>
+            <th class="lw-col-name">Part Name</th>
+            <th class="lw-col-stage">Stage</th>
+            <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lw-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="lw-placeholder-panel" class="lw-panel lw-placeholder">
+    <div class="ti-empty lw-coming-soon">
+      <div class="ti-empty-icon">🚧</div>
+      <div class="ti-empty-text">Coming soon</div>
+      <p class="lw-coming-soon-hint">This tab is under development.</p>
+    </div>
+  </div>
+
+  <datalist id="lw-parts-datalist"></datalist>
+</section>
