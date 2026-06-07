@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, List, Dict
 from flask import Blueprint, jsonify, request, g
 from .auth import api_login_required
-from .db import fetch_all, wh_fetch_all
+from .db import fetch_all
 from . import rbac as rbac_store
 from . import reports_store
 
@@ -57,17 +57,6 @@ def global_search():
             LIMIT 10
         """, (q_like, q_like))
         for r in comps:
-            add_result(r)
-
-    # 2. Search Warehouse Tags
-    if can_inventory:
-        tags = wh_fetch_all("""
-            SELECT tag_id as id, CONCAT(item_code, ' (', status, ')') as label, 'Tag' as type, '/app?section=inventory' as link
-            FROM inventory_grn_item_tag
-            WHERE tag_id LIKE %s OR item_code LIKE %s
-            LIMIT 10
-        """, (q_like, q_like))
-        for r in tags:
             add_result(r)
 
     # 3. Search Sales Orders

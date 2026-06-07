@@ -24,7 +24,6 @@ class ColumnMeta:
     is_sortable: bool
 
 
-_CACHED_COLUMNS: Optional[List[ColumnMeta]] = None
 _DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None}
 _PULSE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
@@ -37,13 +36,6 @@ def _clear_reports_summary_cache() -> None:
     with _REPORT_SUMMARY_CACHE_LOCK:
         _REPORT_SUMMARY_CACHE["ts"] = 0.0
         _REPORT_SUMMARY_CACHE["summary"] = None
-
-
-def _get_table_name() -> str:
-    table = current_app.config.get("TARGET_TABLE_NAME")
-    if not table:
-        raise RuntimeError("TARGET_TABLE_NAME is not configured.")
-    return table
 
 
 def get_dashboard_columns() -> List[ColumnMeta]:
@@ -218,94 +210,6 @@ def get_dashboard_columns() -> List[ColumnMeta]:
     ]
 
 
-def get_table_columns(force_refresh: bool = False) -> List[ColumnMeta]:
-    """Return metadata for all columns of the target table.
-
-    Results are cached in-process for performance; use force_refresh=True
-    if the schema changes while the app is running.
-    """
-    global _CACHED_COLUMNS
-    if _CACHED_COLUMNS is not None and not force_refresh:
-        return _CACHED_COLUMNS
-
-    table = _get_table_name()
-    sql = """
-        SELECT COLUMN_NAME, DATA_TYPE
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-        ORDER BY ORDINAL_POSITION
-    """
-    rows = fetch_all(sql, (table,))
-
-    cols: List[ColumnMeta] = []
-    numeric_types = {
-        "int",
-        "integer",
-        "smallint",
-        "mediumint",
-        "bigint",
-        "decimal",
-        "numeric",
-        "float",
-        "double",
-    }
-    for row in rows:
-        name = row["COLUMN_NAME"]
-        data_type = row["DATA_TYPE"].lower()
-        is_numeric = data_type in numeric_types
-        label = name.replace("_", " ").title()
-        cols.append(
-            ColumnMeta(
-                name=name,
-                label=label,
-                data_type=data_type,
-                is_numeric=bool(is_numeric),
-                is_sortable=True,
-            )
-        )
-
-    _CACHED_COLUMNS = cols
-    return cols
-
-
-def _build_where_clause(
-    columns: List[ColumnMeta],
-    global_search: Optional[str],
-) -> Tuple[str, List[Any]]:
-    clauses: List[str] = []
-    params: List[Any] = []
-
-    if global_search:
-        like_pattern = f"%{global_search}%"
-        text_cols = [c for c in columns if not c.is_numeric]
-        if text_cols:
-            or_parts = []
-            for col in text_cols:
-                or_parts.append(f"`{col.name}` LIKE %s")
-                params.append(like_pattern)
-            clauses.append("(" + " OR ".join(or_parts) + ")")
-
-    if not clauses:
-        return "", []
-
-    where_sql = " WHERE " + " AND ".join(clauses)
-    return where_sql, params
-
-
-def _validate_sort(
-    columns: List[ColumnMeta],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-) -> str:
-    if not sort_by:
-        return ""
-    col_names = {c.name for c in columns if c.is_sortable}
-    if sort_by not in col_names:
-        return ""
-    direction = "ASC" if (sort_dir or "").lower() != "desc" else "DESC"
-    return f" ORDER BY `{sort_by}` {direction} "
-
-
 def _matches_global_search(
     row: Dict[str, Any],
     columns: List[ColumnMeta],
@@ -330,51 +234,6 @@ def _dashboard_row_sort_key(val: Any) -> Tuple[int, Any]:
         return (0, float(val))
     except (TypeError, ValueError):
         return (1, str(val).lower())
-
-
-def get_rows(
-    page: int,
-    page_size: int,
-    global_search: Optional[str],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-) -> Dict[str, Any]:
-    columns = get_table_columns()
-    table = _get_table_name()
-
-    where_sql, params = _build_where_clause(columns, global_search)
-    order_sql = _validate_sort(columns, sort_by, sort_dir)
-
-    count_sql = f"SELECT COUNT(*) AS cnt FROM `{table}`{where_sql}"
-    count_row = fetch_one(count_sql, params)
-    total_count = int(count_row["cnt"]) if count_row else 0
-
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
-
-    # Special case: page_size == -1 means "all rows"
-    if page_size == -1:
-        page = 1
-        sql = f"SELECT * FROM `{table}`{where_sql}{order_sql}"
-        rows = fetch_all(sql, params)
-        effective_page_size = total_count
-    else:
-        if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
-        page_size = min(page_size, max_page_size)
-        page = max(page, 1)
-        offset = (page - 1) * page_size
-        sql = f"SELECT * FROM `{table}`{where_sql}{order_sql} LIMIT %s OFFSET %s"
-        params_with_pagination: List[Any] = list(params) + [page_size, offset]
-        rows = fetch_all(sql, params_with_pagination)
-        effective_page_size = page_size
-
-    return {
-        "columns": [c.__dict__ for c in columns],
-        "rows": rows,
-        "totalCount": total_count,
-        "page": page,
-        "pageSize": effective_page_size,
-    }
 
 
 def _get_dashboard_base_sql() -> str:
@@ -833,7 +692,7 @@ def get_dashboard_base_rows(
 
     total_count = len(working_rows)
 
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
+    max_page_size = 200
 
     if page_size == -1:
         page = 1
@@ -841,7 +700,7 @@ def get_dashboard_base_rows(
         page_rows = working_rows
     else:
         if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
+            page_size = 25
         page_size = min(page_size, max_page_size)
         page = max(page, 1)
         total_pages = max(1, (total_count + page_size - 1) // page_size)
@@ -992,29 +851,24 @@ def _enrich_dashboard_buffer_rows(
     return enriched_rows
 
 
-def get_dashboard_rows_with_buffer(
-    page: int,
-    page_size: int,
-    global_search: Optional[str],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-    row_filter: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Return dashboard rows enriched with buffer and RM derived columns.
-
-    Default buffer_qty is 0 when not configured for a part_no.
-    All filtering, sorting, and pagination are applied on the enriched rows so
-    that derived column sorting works correctly.
-    """
-    columns = get_dashboard_columns()
-    base_rows = _get_cached_base_rows()
-    if not base_rows:
-        # Cache is empty – populate it once from the database.
-        refresh_dashboard_base_cache()
+def build_enriched_inventory_rows_for_period(
+    month: int,
+    year: int,
+) -> List[Dict[str, Any]]:
+    """Fully enriched inventory grid for a calendar month (live cache or rebuilt schedule)."""
+    today = date.today()
+    if month == today.month and year == today.year:
         base_rows = _get_cached_base_rows()
+        if not base_rows:
+            refresh_dashboard_base_cache()
+            base_rows = _get_cached_base_rows()
+    else:
+        from .dispatch_calendar import get_dispatch_schedule_by_part
 
-    # Enrich full cache first so RM group totals (total_rm_*, current_stock_available, etc.)
-    # reflect all parts sharing an RM code — not only rows matching global search.
+        base_rows = fetch_all(_get_dashboard_base_sql())
+        schedule = get_dispatch_schedule_by_part(month, year)
+        base_rows = _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
+
     enriched_all = _enrich_dashboard_buffer_rows(base_rows)
     _normalize_rm_allocation_inputs(enriched_all)
     sum_util, sum_req, inward_by_key, actual_by_key = _rm_material_group_aggregates(
@@ -1023,6 +877,46 @@ def get_dashboard_rows_with_buffer(
     _apply_rm_allocation_assignments(
         enriched_all, sum_util, sum_req, inward_by_key, actual_by_key
     )
+    return enriched_all
+
+
+def get_dashboard_rows_with_buffer(
+    page: int,
+    page_size: int,
+    global_search: Optional[str],
+    sort_by: Optional[str],
+    sort_dir: Optional[str],
+    row_filter: Optional[str] = None,
+    snapshot_year: Optional[int] = None,
+    snapshot_month: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Return dashboard rows enriched with buffer and RM derived columns.
+
+    Default buffer_qty is 0 when not configured for a part_no.
+    All filtering, sorting, and pagination are applied on the enriched rows so
+    that derived column sorting works correctly.
+
+    Past months are served from frozen end-of-month snapshots (read-only).
+    """
+    from .inventory_snapshot import is_current_inventory_period, load_snapshot_rows
+
+    columns = get_dashboard_columns()
+    today = date.today()
+    year = snapshot_year if snapshot_year is not None else today.year
+    month = snapshot_month if snapshot_month is not None else today.month
+    is_current = is_current_inventory_period(year, month)
+
+    if is_current:
+        enriched_all = build_enriched_inventory_rows_for_period(month, year)
+        snapshot_available = True
+    else:
+        loaded = load_snapshot_rows(year, month)
+        if loaded is None:
+            enriched_all = []
+            snapshot_available = False
+        else:
+            enriched_all = loaded
+            snapshot_available = True
 
     if global_search:
         term = str(global_search).lower()
@@ -1054,7 +948,7 @@ def get_dashboard_rows_with_buffer(
 
     total_count = len(enriched_rows)
 
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
+    max_page_size = 200
 
     if page_size == -1:
         page = 1
@@ -1062,7 +956,7 @@ def get_dashboard_rows_with_buffer(
         page_rows = enriched_rows
     else:
         if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
+            page_size = 25
         page_size = min(page_size, max_page_size)
         page = max(page, 1)
         total_pages = max(1, (total_count + page_size - 1) // page_size)
@@ -1077,6 +971,10 @@ def get_dashboard_rows_with_buffer(
         "totalCount": total_count,
         "page": page,
         "pageSize": effective_page_size,
+        "periodYear": year,
+        "periodMonth": month,
+        "isReadOnly": not is_current,
+        "snapshotAvailable": snapshot_available,
     }
 
 
@@ -1561,10 +1459,11 @@ def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
 # ══════════════════════════════════════════════════════════════════════════
 
 def get_dpr_machine_options() -> List[Dict[str, Any]]:
-    """Machine dropdown options. Uses Config.DPR_MACHINE_LIST_SQL."""
-    sql = str(current_app.config.get("DPR_MACHINE_LIST_SQL") or "").strip()
-    if not sql:
-        return []
+    """Machine dropdown options from machinemaster."""
+    sql = (
+        "SELECT MCM_Id AS id, MCM_Name AS label FROM machinemaster "
+        "WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
+    )
     rows = fetch_all(sql)
     out: List[Dict[str, Any]] = []
     for row in rows:
@@ -2644,6 +2543,21 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         (d,),
     ) or {}
 
+    active_tool_breakdowns = 0
+    try:
+        bd_row = fetch_one(
+            """
+            SELECT COUNT(*) AS active_tool_breakdowns
+            FROM tool_breakdowns
+            WHERE DATE(downtime_at) = %s
+              AND completed_at IS NULL
+            """,
+            (d,),
+        )
+        active_tool_breakdowns = int((bd_row or {}).get("active_tool_breakdowns") or 0)
+    except Exception:
+        pass
+
     return {
         "date": d,
         "monthStart": month_start,
@@ -2664,6 +2578,7 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         "operatorPlanned": snap_row.get("operator_planned"),
         "operatorActual": snap_row.get("operator_actual"),
         "bottleneckPending": (snap_row.get("bottleneck_pending") or "") or "",
+        "activeToolBreakdowns": active_tool_breakdowns,
     }
 
 
@@ -2712,6 +2627,21 @@ def get_dpr_version(review_date: str) -> str:
     bottleneck = str(snap_row.get("bottleneck_pending") or "")
     bottleneck_hash = hashlib.md5(bottleneck.encode("utf-8")).hexdigest()[:8]
 
+    active_tool_breakdowns = 0
+    try:
+        bd_row = fetch_one(
+            """
+            SELECT COUNT(*) AS active_tool_breakdowns
+            FROM tool_breakdowns
+            WHERE DATE(downtime_at) = %s
+              AND completed_at IS NULL
+            """,
+            (d,),
+        )
+        active_tool_breakdowns = int((bd_row or {}).get("active_tool_breakdowns") or 0)
+    except Exception:
+        pass
+
     parts = [
         str(row_ts),
         str(row_count),
@@ -2721,6 +2651,8 @@ def get_dpr_version(review_date: str) -> str:
         "n" if op_actual is None else str(op_actual),
         "b",
         bottleneck_hash,
+        "tb",
+        str(active_tool_breakdowns),
     ]
     return "|".join(parts)
 

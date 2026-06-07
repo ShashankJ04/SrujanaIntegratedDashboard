@@ -66,6 +66,8 @@ def generate_excel_response(
     sort_by: str,
     sort_dir: str,
     row_filter: Optional[str] = None,
+    snapshot_year: Optional[int] = None,
+    snapshot_month: Optional[int] = None,
 ) -> Response:
     result = get_dashboard_rows_with_buffer(
         page=1,
@@ -74,6 +76,8 @@ def generate_excel_response(
         sort_by=sort_by or None,
         sort_dir=sort_dir or None,
         row_filter=row_filter,
+        snapshot_year=snapshot_year,
+        snapshot_month=snapshot_month,
     )
     rows = result["rows"]
     columns_meta = [ColumnMeta(**c) for c in result["columns"]]
@@ -135,7 +139,12 @@ def generate_excel_response(
     wb.save(buffer)
     buffer.seek(0)
 
-    filename = "table_export.xlsx"
+    year = result.get("periodYear")
+    month = result.get("periodMonth")
+    if year and month:
+        filename = f"inventory_report_{int(year):04d}_{int(month):02d}.xlsx"
+    else:
+        filename = "table_export.xlsx"
     response = Response(
         buffer.getvalue(),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

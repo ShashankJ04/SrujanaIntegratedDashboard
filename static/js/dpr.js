@@ -558,6 +558,10 @@ window.DprPage = (() => {
         "dpr-machines-read",
         `${formatCellNumber(monthlyKpi.plannedMachines)} / ${formatCellNumber(monthlyKpi.totalMachines)}`,
       );
+      setSnapshotValue(
+        "dpr-tools-breakdown-read",
+        formatCellNumber(monthlyKpi.activeToolBreakdowns ?? 0),
+      );
       setSnapshotValue("dpr-board-last-planned", formatKpiQty(monthlyKpi.lastDayPlanned));
       setSnapshotValue("dpr-board-last-produced", formatKpiQty(monthlyKpi.lastDayProduced));
       setKpiProducedPctEl("dpr-board-last-achievement", monthlyKpi.lastDayAchievementPct);
@@ -573,6 +577,7 @@ window.DprPage = (() => {
       setKpiProducedPctEl("dpr-kpi-monthly-produced-pct", null);
       setSnapshotValue("dpr-operators-read", "—");
       setSnapshotValue("dpr-machines-read", "—");
+      setSnapshotValue("dpr-tools-breakdown-read", "—");
       setSnapshotValue("dpr-board-last-planned", "—");
       setSnapshotValue("dpr-board-last-produced", "—");
       setKpiProducedPctEl("dpr-board-last-achievement", null);
@@ -1199,7 +1204,7 @@ window.DprPage = (() => {
         sel.dataset.field = "machineId";
         const opt0 = document.createElement("option");
         opt0.value = "";
-        opt0.textContent = machines.length ? "Select machine" : "No machines (set DPR_MACHINE_LIST_SQL)";
+        opt0.textContent = machines.length ? "Select machine" : "No machines found";
         sel.appendChild(opt0);
         machines.forEach((m) => {
           const o = document.createElement("option");
@@ -1693,6 +1698,12 @@ window.DprPage = (() => {
             breakdownModalState = null;
             setBreakdownWarning("");
             setBreakdownModalSuccess(true);
+            try {
+              monthlyKpi = await Api.summary(dateVal);
+              updateKpiStrip();
+            } catch (sumErr) {
+              console.warn(sumErr);
+            }
           } catch (e) {
             console.error(e);
             notify(e.message || "Failed to raise breakdown.", true);

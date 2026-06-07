@@ -15,14 +15,12 @@ from .db import execute, fetch_one
 from .models import (
     get_dashboard_base_rows,
     get_dashboard_rows_with_buffer,
-    get_rm_chart_data,
-    get_rows,
-    get_table_columns,
     get_buffer_config_for_all_parts,
     get_buffer_config_for_part,
     get_completion_buckets,
     get_pending_treemap,
     get_production_vs_requirement,
+    get_rm_chart_data,
     get_report_summary,
     get_top_shortfalls,
     refresh_dashboard_base_cache,
@@ -75,30 +73,6 @@ def _parse_iso_date(name: str) -> str:
     return raw
 
 
-@api_bp.get("/columns")
-def columns() -> Any:
-    cols = get_table_columns()
-    return jsonify([c.__dict__ for c in cols])
-
-
-@api_bp.get("/rows")
-def rows() -> Any:
-    page = _parse_int("page", 1)
-    page_size = _parse_int("pageSize", 25)
-    search = request.args.get("search") or None
-    sort_by = request.args.get("sortBy") or None
-    sort_dir = request.args.get("sortDir") or None
-
-    result = get_rows(
-        page=page,
-        page_size=page_size,
-        global_search=search,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-    )
-    return jsonify(result)
-
-
 @api_bp.get("/dashboard-metrics")
 def dashboard_metrics() -> Any:
     page = _parse_int("page", 1)
@@ -119,12 +93,20 @@ def dashboard_metrics() -> Any:
 
 @api_bp.get("/dashboard-rows")
 def dashboard_rows() -> Any:
+    from .inventory_snapshot import parse_period_args
+
     page = _parse_int("page", 1)
     page_size = _parse_int("pageSize", 25)
     search = request.args.get("search") or None
     sort_by = request.args.get("sortBy") or None
     sort_dir = request.args.get("sortDir") or None
     row_filter = request.args.get("rowFilter") or None
+    year, month, err = parse_period_args(
+        request.args.get("year"),
+        request.args.get("month"),
+    )
+    if err:
+        return jsonify(err[0]), err[1]
 
     result = get_dashboard_rows_with_buffer(
         page=page,
@@ -133,8 +115,17 @@ def dashboard_rows() -> Any:
         sort_by=sort_by,
         sort_dir=sort_dir,
         row_filter=row_filter,
+        snapshot_year=year,
+        snapshot_month=month,
     )
     return jsonify(result)
+
+
+@api_bp.get("/inventory-snapshots")
+def inventory_snapshots() -> Any:
+    from .inventory_snapshot import list_snapshot_periods
+
+    return jsonify({"periods": list_snapshot_periods()})
 
 
 @api_bp.post("/dashboard-refresh")
@@ -187,15 +178,25 @@ def buffer_config_update(part_no: str) -> Any:
 
 @api_bp.get("/export")
 def export() -> Any:
+    from .inventory_snapshot import parse_period_args
+
     search = request.args.get("search") or ""
     sort_by = request.args.get("sortBy") or ""
     sort_dir = request.args.get("sortDir") or ""
     row_filter = request.args.get("rowFilter") or None
+    year, month, err = parse_period_args(
+        request.args.get("year"),
+        request.args.get("month"),
+    )
+    if err:
+        return jsonify(err[0]), err[1]
     return generate_excel_response(
         global_search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
         row_filter=row_filter,
+        snapshot_year=year,
+        snapshot_month=month,
     )
 
 

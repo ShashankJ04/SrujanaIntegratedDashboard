@@ -31,7 +31,6 @@ DASHBOARD_KEYS: List[str] = [
     "rept_plus",
     "edit_dpr",
     "edit_buffer",
-    "executive",
 ]
 
 # ── Store path ──────────────────────────────────────────────────────────

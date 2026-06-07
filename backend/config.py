@@ -53,44 +53,12 @@ class Config:
     DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "15"))
     DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "15"))
 
-    # MySQL connection settings — Warehouse database (separate)
-    WH_DB_HOST = os.environ.get("WH_DB_HOST", "localhost")
-    WH_DB_PORT = int(os.environ.get("WH_DB_PORT", "3306"))
-    WH_DB_USER = os.environ.get("WH_DB_USER", "root")
-    WH_DB_PASSWORD = os.environ.get("WH_DB_PASSWORD", "root")
-    WH_DB_NAME = os.environ.get("WH_DB_NAME", "warehouse_db")
-    WH_DB_POOL_SIZE = int(os.environ.get("WH_DB_POOL_SIZE", "5"))
-    WH_DB_POOL_MAX_OVERFLOW = int(os.environ.get("WH_DB_POOL_MAX_OVERFLOW", "10"))
-
-    # Table to visualize in the dashboard
-    TARGET_TABLE_NAME = os.environ.get("TARGET_TABLE_NAME", "vw_bharat_dashboard")
-
     # JWT / Auth
     JWT_SECRET = os.environ.get("JWT_SECRET", "Shrujana")
     JWT_EXPIRES_IN = int(os.environ.get("JWT_EXPIRES_IN", "86400"))
     DES_KEY = os.environ.get("DES_KEY", "tJykDLYx")
 
-    # Pagination defaults
-    DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25"))
-    MAX_PAGE_SIZE = int(os.environ.get("MAX_PAGE_SIZE", "200"))
-
-    # User logins allowed to edit buffer qty on the report table (comma-separated)
-    BUFFER_EDIT_LOGINS = frozenset(
-        x.strip()
-        for x in os.environ.get("BUFFER_EDIT_LOGINS", "Bharath,U3_Bharath").split(",")
-        if x.strip()
-    )
-
     # DPR (Daily Production Review)
-    DPR_EDIT_LOGINS = frozenset(
-        x.strip().lower()
-        for x in os.environ.get("DPR_EDIT_LOGINS", "bharath,u3_bharath,vivaan").split(",")
-        if x.strip()
-    )
-    DPR_MACHINE_LIST_SQL = os.environ.get(
-        "DPR_MACHINE_LIST_SQL",
-        "SELECT MCM_Id AS id, MCM_Name AS label FROM machinemaster WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name",
-    )
     DPR_POLL_INTERVAL_MS = int(
         os.environ.get("DPR_POLL_INTERVAL_MS", str(DPR_POLL_INTERVAL_MS_DEFAULT))
     )
@@ -129,8 +97,6 @@ class Config:
         os.path.join(APP_DATA_DIR, "reports.json"),
     )
 
-    # Bumped when static assets change so packaged apps avoid stale browser/embedded caches.
-    STATIC_ASSET_VERSION = str(os.environ.get("STATIC_ASSET_VERSION", "3")).strip() or "3"
     DPR_QR_STORAGE_DIR = resolve_runtime_path(
         os.environ.get("DPR_QR_STORAGE_DIR", ""),
         "qr-codes",
@@ -139,6 +105,11 @@ class Config:
         os.environ.get("PM_ATTACHMENTS_DIR", ""),
         "pm-attachments",
     )
+
+    # Inventory report — auto snapshot at 23:59 on the last day of each month
+    INVENTORY_SNAPSHOT_ENABLED = os.environ.get(
+        "INVENTORY_SNAPSHOT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
 
 
 

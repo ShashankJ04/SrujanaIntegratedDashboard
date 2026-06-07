@@ -85,8 +85,6 @@ const Hub = (() => {
       return sp.toString();
     },
     buildExportUrl(params) { return `/api/export?${this.buildQuery(params)}`; },
-    getColumns()          { return this.get('/api/columns'); },
-    getRows(params)       { return this.get(`/api/rows?${this.buildQuery(params)}`); },
     getDashboardRows(p)   { return this.get(`/api/dashboard-rows?${this.buildQuery(p)}`); },
     refreshDashboard()    { return this.post('/api/dashboard-refresh'); },
     updateBufferConfig(pn, q) { return this.put(`/api/buffer-config/${encodeURIComponent(pn)}`, { buffer_qty: q }); },
@@ -157,8 +155,8 @@ const Hub = (() => {
     'rm-calculator': { title: 'RM Calculator', icon: '⚖️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
     'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
-    'production-calendar': { title: 'Production Calendar', icon: '🏗️' },
-    executive:   { title: 'Executive View',  icon: '🎯' },
+    'production-calendar': { title: 'Production Calendar', icon: '⏱️' },
+    'machine-planning': { title: 'Machine Planning', icon: '⚒️' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
     admin:       { title: 'Administration',  icon: '⚙️' },
@@ -176,11 +174,11 @@ const Hub = (() => {
     if (section === 'dpr') return ACCESS.has('rept');
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'production-calendar') return ACCESS.has('rept');
+    if (section === 'machine-planning') return ACCESS.has('rept');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-calculator') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
-    if (section === 'executive') return ACCESS.has('executive');
     if (section === 'reports') return ACCESS.has('rept');
     if (section === 'reports-manage') return PLUS_ACCESS.has('rept_plus');
     if (section === 'maintenance') {
@@ -190,7 +188,7 @@ const Hub = (() => {
   }
 
   function getDefaultSection() {
-    const order = ['overview', 'production', 'maintenance', 'executive', 'reports', 'admin'];
+    const order = ['overview', 'production', 'maintenance', 'reports', 'admin'];
     return order.find(canAccessSection) || 'overview';
   }
 
@@ -515,6 +513,10 @@ const Hub = (() => {
 
       if (section === 'production-calendar' && typeof window.ProductionCalendarPage?.init === 'function') {
         window.ProductionCalendarPage.init();
+      }
+
+      if (section === 'machine-planning' && typeof window.MachinePlanningPage?.init === 'function') {
+        window.MachinePlanningPage.init();
       }
 
       if (section === 'reports') {

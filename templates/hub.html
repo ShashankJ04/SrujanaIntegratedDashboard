@@ -79,20 +79,20 @@
           </li>
           <li class="ti-nav-item">
             <a class="ti-nav-link" data-section="production-calendar" href="/app?section=production-calendar">
-              <span class="ti-nav-icon">🏗️</span>
+              <span class="ti-nav-icon">⏱️</span>
               <span class="ti-nav-label">Production Calendar</span>
+            </a>
+          </li>
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="machine-planning" href="/app?section=machine-planning">
+              <span class="ti-nav-icon">⚒️</span>
+              <span class="ti-nav-label">Machine Planning</span>
             </a>
           </li>
           {% endif %}
         </li>
 
         <li class="ti-nav-section">
-          <li class="ti-nav-item">
-            <a class="ti-nav-link" data-section="executive" href="/app?section=executive">
-              <span class="ti-nav-icon">🎯</span>
-              <span class="ti-nav-label">Executive View</span>
-            </a>
-          </li>
           {% if has_rept %}
           <li class="ti-nav-item ti-nav-expandable" id="ti-nav-reports-wrap">
             <div class="ti-nav-row">
@@ -206,8 +206,6 @@
   <!-- ═══ SCRIPTS ═══ -->
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script>
-    window.DASHBOARD_DEFAULT_PAGE_SIZE = {{ config.DEFAULT_PAGE_SIZE|default(25)|int }};
-    window.DASHBOARD_MAX_PAGE_SIZE = {{ config.MAX_PAGE_SIZE|default(200)|int }};
     window.BUFFER_EDIT_ALLOWED = {{ buffer_edit_allowed|default(false)|tojson }};
     window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};
     window.DPR_POLL_INTERVAL_MS = {{ dpr_poll_interval_ms|tojson }};
@@ -222,8 +220,8 @@
   <script src="{{ url_for('static', filename='js/table.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dpr.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/dispatch_calendar.js') }}?v={{ config.get('STATIC_ASSET_VERSION', '3') }}"></script>
-  <script src="{{ url_for('static', filename='js/production_calendar.js') }}?v={{ config.get('STATIC_ASSET_VERSION', '3') }}"></script>
-  <script src="{{ url_for('static', filename='js/executive.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dispatch_calendar.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/production_calendar.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/machine_planning.js') }}"></script>
 </body>
 </html>

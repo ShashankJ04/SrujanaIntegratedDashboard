@@ -614,62 +614,86 @@ def _shift_production_days_by_lead_time(
             break
 
 
-def _compute_cumulative_rm(payload: Dict[str, Any], part_info: Dict[str, Dict[str, Any]]) -> None:
-    """Walk day columns left-to-right, tracking running RM balances per raw material.
+def _compute_net_pending_days(
+    payload: Dict[str, Any],
+    daily_production: Dict[str, Dict[str, float]],
+) -> None:
+    """Keep only days that genuinely need new production.
 
-    Within each day, components sharing the same RM are processed in ascending
-    order of their RM requirement so that the component needing the least RM
-    gets the highest cumRmAvailable reading (priority to min requirement).
+    For each part, walks day columns left-to-right consuming available stock
+    (FG + WIP combined) sequentially.  A day cell is set to None if:
+    - Dispatch status is 'dispatched' (already shipped), OR
+    - Combined remaining FG + WIP stock covers the day's need.
+    Otherwise the cell shows the shortfall that requires fresh production.
     """
-    columns = list(payload.get("columns") or [])
-    day_cols = _parse_day_cols(columns)
+    rows = payload.get("rows") or []
+    row_meta = payload.get("rowMeta") or []
+    day_cols = _all_day_cols_for_payload(payload)
     if not day_cols:
         return
 
-    current_rm: Dict[Any, float] = {}
-    for pk, info in part_info.items():
-        rm_id = info.get("rmId")
-        if rm_id and rm_id not in current_rm:
-            current_rm[rm_id] = _to_float(info.get("rmAvailable"))
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            continue
 
-    rows = payload.get("rows") or []
-    row_meta = payload.get("rowMeta") or []
+        day_status = meta.get("dayStatus") or {}
+        stock_available = _to_float(meta.get("stockFg")) + _to_float(meta.get("stockWip"))
+
+        original_scheduled: Dict[str, float] = {}
+
+        for col_name, day_num in day_cols:
+            scheduled = _to_float(row.get(col_name))
+            if scheduled <= 0:
+                continue
+
+            original_scheduled[str(day_num)] = scheduled
+
+            day_str = str(day_num)
+            status_info = day_status.get(day_str, {})
+            status = status_info.get("status", "") if isinstance(status_info, dict) else ""
+
+            if status == "dispatched":
+                row[col_name] = None
+                continue
+
+            if stock_available >= scheduled:
+                stock_available -= scheduled
+                row[col_name] = None
+            elif stock_available > 0:
+                shortfall = scheduled - stock_available
+                stock_available = 0.0
+                row[col_name] = round(shortfall, 4)
+            else:
+                pass  # keep cell as-is (full qty needs production)
+
+        meta["originalScheduled"] = original_scheduled
+        if idx < len(row_meta):
+            row_meta[idx] = meta
+
+    grand_sums: Dict[int, float] = {d: 0.0 for _, d in day_cols}
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            continue
+        for col_name, day_num in day_cols:
+            grand_sums[day_num] += _to_float(row.get(col_name))
 
     for idx, row in enumerate(rows):
-        if isinstance(row, dict):
-            meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
-            if "cumRmAvailable" not in meta:
-                meta["cumRmAvailable"] = {}
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            for col_name, day_num in day_cols:
+                val = grand_sums.get(day_num, 0.0)
+                row[col_name] = round(val, 4) if val > 0 else None
+            break
 
-    for c, d in day_cols:
-        day_entries: List[Tuple[float, int]] = []
-        for idx, row in enumerate(rows):
-            if not isinstance(row, dict):
-                continue
-            meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
-            if meta.get("isGrandTotal"):
-                continue
-
-            qty = _to_float(row.get(c))
-            p_info = meta.get("partInfo") or {}
-            rm_id = p_info.get("rmId")
-            con_val = _to_float(p_info.get("conVal"))
-
-            rm_req = (qty / con_val) if (qty > 0 and rm_id and con_val > 0) else 0.0
-            day_entries.append((rm_req, idx))
-
-        day_entries.sort(key=lambda e: e[0])
-
-        for rm_req, idx in day_entries:
-            meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
-            p_info = meta.get("partInfo") or {}
-            rm_id = p_info.get("rmId")
-
-            if rm_req > 0 and rm_id:
-                current_rm[rm_id] -= rm_req
-
-            if rm_id:
-                meta["cumRmAvailable"][str(d)] = round(current_rm.get(rm_id, 0.0), 4)
+    payload["pendingOnly"] = True
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +726,7 @@ def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     _insert_estimated_time_column(payload, part_info)
 
     _shift_production_days_by_lead_time(payload, part_info)
-    _compute_cumulative_rm(payload, part_info)
+    _compute_net_pending_days(payload, daily_production)
     _filter_inactive_production_rows(payload)
 
     _set_visible_production_columns(payload)

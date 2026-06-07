@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime
 from functools import wraps
 import math
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, jsonify, request, g
+from io import BytesIO
+
+from flask import Blueprint, jsonify, request, g, send_file
 
 from .auth import api_login_required
 from . import rbac
@@ -16,6 +19,9 @@ from .pm_api import _norm_tool_no
 from . import pm_store
 
 tool_breakdowns_bp = Blueprint("tool_breakdowns_bp", __name__, url_prefix="/api/tool-breakdowns")
+
+_BREAKDOWN_EXPORT_DT_FMT = "%d-%m-%Y, %H:%M:%S"
+_BREAKDOWN_MONTH_ABBR = ("", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 @tool_breakdowns_bp.before_request
@@ -461,19 +467,57 @@ def create_breakdown():
     return jsonify({"id": new_id_row.get("id") if new_id_row else None})
 
 
-@tool_breakdowns_bp.get("")
-@_require_breakdown_list_access
-def list_breakdowns():
-    status = str(request.args.get("status") or "active").strip().lower()
-    tool_no_raw = request.args.get("toolNo")
-    limit_raw = request.args.get("limit")
+_BREAKDOWN_SELECT_COLUMNS = """
+            id, tool_no, part_no, part_name, machine_id, machine_name,
+            dpr_row_id, dpr_review_date, dpr_produced_qty,
+            issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
+            root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,
+            completed_at, completed_by_id, completed_by_login, completed_by_name,
+            hours_spent, current_stroke, next_stroke,
+            created_by, updated_by, created_at, updated_at
+"""
 
-    where_parts = []
+
+def _parse_month_year_filters() -> tuple[Optional[int], Optional[int], Optional[tuple]]:
+    """Return (year, month, error_response) — filters on tool_breakdowns.created_at."""
+    month_raw = request.args.get("month")
+    year_raw = request.args.get("year")
+    if month_raw in (None, "") and year_raw in (None, ""):
+        return None, None, None
+    if month_raw in (None, "") or year_raw in (None, ""):
+        return None, None, (jsonify({"error": "month and year must be provided together"}), 400)
+    try:
+        month = int(month_raw)
+        year = int(year_raw)
+    except (TypeError, ValueError):
+        return None, None, (jsonify({"error": "Invalid month or year"}), 400)
+    if month < 1 or month > 12:
+        return None, None, (jsonify({"error": "Invalid month"}), 400)
+    if year < 2000 or year > 2100:
+        return None, None, (jsonify({"error": "Invalid year"}), 400)
+    return year, month, None
+
+
+def _fetch_breakdown_rows(
+    status: str,
+    tool_no_raw: Optional[str] = None,
+    limit_raw: Optional[str] = None,
+) -> tuple[Optional[List[Dict[str, Any]]], Optional[tuple]]:
+    where_parts: List[str] = []
     params: List[Any] = []
     if status == "closed":
         where_parts.append("completed_at IS NOT NULL")
     else:
         where_parts.append("completed_at IS NULL")
+
+    filter_year, filter_month, period_err = _parse_month_year_filters()
+    if period_err:
+        return None, period_err
+    if filter_year is not None and filter_month is not None:
+        last_day = calendar.monthrange(filter_year, filter_month)[1]
+        where_parts.append("DATE(created_at) >= %s AND DATE(created_at) <= %s")
+        params.append(date(filter_year, filter_month, 1).isoformat())
+        params.append(date(filter_year, filter_month, last_day).isoformat())
 
     if tool_no_raw:
         tool_no = _norm_tool_no(tool_no_raw).strip()
@@ -487,25 +531,188 @@ def list_breakdowns():
             lim = max(1, min(1000, int(limit_raw)))
             limit_clause = f" LIMIT {lim}"
         except (TypeError, ValueError):
-            return jsonify({"error": "Invalid limit"}), 400
+            return None, (jsonify({"error": "Invalid limit"}), 400)
 
     where_sql = " AND ".join(where_parts) if where_parts else "1=1"
     sql = f"""
         SELECT
-            id, tool_no, part_no, part_name, machine_id, machine_name,
-            dpr_row_id, dpr_review_date, dpr_produced_qty,
-            issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
-            root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,
-            completed_at, completed_by_id, completed_by_login, completed_by_name,
-            hours_spent, current_stroke, next_stroke,
-            created_by, updated_by, created_at, updated_at
+            {_BREAKDOWN_SELECT_COLUMNS}
         FROM tool_breakdowns
         WHERE {where_sql}
         ORDER BY downtime_at DESC, id DESC
         {limit_clause}
     """
     rows = fetch_all(sql, params if params else None)
-    return jsonify([_breakdown_row_to_dict(r) for r in rows])
+    return rows, None
+
+
+def _breakdown_export_title_line(
+    status: str,
+    month: Optional[int],
+    year: Optional[int],
+    exported_at: Optional[datetime] = None,
+) -> str:
+    status_label = "Closed" if status == "closed" else "Active"
+    if month is not None and year is not None and 1 <= month <= 12:
+        period = f"{_BREAKDOWN_MONTH_ABBR[month]}-{year}"
+    else:
+        period = "All Periods"
+    when = exported_at or datetime.now()
+    return (
+        f"Tool Break Down {status_label} For {period} "
+        f"Exported on {when.strftime(_BREAKDOWN_EXPORT_DT_FMT)}"
+    )
+
+
+def _breakdown_export_headers(*, closed: bool) -> List[str]:
+    headers = [
+        "Tool No",
+        "Priority",
+        "Part No",
+        "Part Name",
+        "Machine",
+        "Downtime",
+        "Produced Qty",
+        "Issue / Problem",
+        "Operator",
+        "Root Cause",
+        "Analysis",
+        "Action Taken",
+        "Remarks",
+        "Spare Consumed",
+        "Created At",
+    ]
+    if closed:
+        headers.extend(["Hours Spent", "Completed By", "Completed At"])
+    return headers
+
+
+def _breakdown_export_row(rec: Dict[str, Any], *, closed: bool) -> List[Any]:
+    machine = rec.get("machineName") or rec.get("machineId") or ""
+    operator = rec.get("operatorName") or rec.get("operatorLogin") or ""
+    completed_by = rec.get("completedByName") or rec.get("completedByLogin") or ""
+    vals: List[Any] = [
+        rec.get("toolNo") or "",
+        rec.get("priority") or "Immediate",
+        rec.get("partNo") or "",
+        rec.get("partName") or "",
+        machine,
+        rec.get("downtimeAt") or "",
+        rec.get("dprProducedQty") if rec.get("dprProducedQty") is not None else "",
+        rec.get("issue") or "",
+        operator,
+        rec.get("rootCause") or "",
+        rec.get("analysis") or "",
+        rec.get("actionTaken") or "",
+        rec.get("remarks") or "",
+        rec.get("spareConsumed") or "",
+        rec.get("createdAt") or "",
+    ]
+    if closed:
+        vals.extend([
+            rec.get("hoursSpentToConsume") if rec.get("hoursSpentToConsume") is not None else "",
+            completed_by,
+            rec.get("completedAt") or "",
+        ])
+    return vals
+
+
+@tool_breakdowns_bp.get("")
+@_require_breakdown_list_access
+def list_breakdowns():
+    status = str(request.args.get("status") or "active").strip().lower()
+    rows, err = _fetch_breakdown_rows(
+        status,
+        tool_no_raw=request.args.get("toolNo"),
+        limit_raw=request.args.get("limit"),
+    )
+    if err:
+        return err
+    return jsonify([_breakdown_row_to_dict(r) for r in rows or []])
+
+
+@tool_breakdowns_bp.get("/export")
+@_require_breakdown_list_access
+def export_breakdowns():
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    status = str(request.args.get("status") or "active").strip().lower()
+    if status not in {"active", "closed"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    rows, err = _fetch_breakdown_rows(status)
+    if err:
+        return err
+
+    closed = status == "closed"
+    headers = _breakdown_export_headers(closed=closed)
+    records = [_breakdown_row_to_dict(r) for r in rows or []]
+    col_count = max(len(headers), 1)
+
+    filter_year, filter_month, _ = _parse_month_year_filters()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Active Breakdowns" if not closed else "Closed Breakdowns"
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    title_font = Font(bold=True, size=13)
+    header_fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    next_row = 1
+    title_cell = ws.cell(
+        row=next_row,
+        column=1,
+        value=_breakdown_export_title_line(status, filter_month, filter_year),
+    )
+    title_cell.font = title_font
+    if col_count > 1:
+        ws.merge_cells(
+            start_row=next_row,
+            start_column=1,
+            end_row=next_row,
+            end_column=col_count,
+        )
+    next_row += 2  # title row + blank row before column headers
+
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=next_row, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    for row_idx, rec in enumerate(records, next_row + 1):
+        for col_idx, value in enumerate(_breakdown_export_row(rec, closed=closed), 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.border = thin_border
+
+    month_raw = request.args.get("month")
+    year_raw = request.args.get("year")
+    suffix = ""
+    if month_raw and year_raw:
+        try:
+            suffix = f"_{int(year_raw)}_{int(month_raw):02d}"
+        except (TypeError, ValueError):
+            suffix = ""
+    download_name = f"tool_breakdown{suffix}_{status}.xlsx"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 
 @tool_breakdowns_bp.patch("/<int:breakdown_id>")

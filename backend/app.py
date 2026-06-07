@@ -46,10 +46,10 @@ def create_app() -> Flask:
     from .schedule_api import schedule_bp
     from .reports_api import reports_bp
     from .admin_api import admin_bp
-    from .warehouse_api import warehouse_bp
 
     from .search_api import search_bp
     from .rm_calculator_api import rm_calculator_bp
+    from .machine_planning_api import machine_planning_bp
 
     app.register_blueprint(pm_bp)
     app.register_blueprint(tools_bp)
@@ -60,9 +60,9 @@ def create_app() -> Flask:
     app.register_blueprint(schedule_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(admin_bp)
-    app.register_blueprint(warehouse_bp, url_prefix="/api/wh")
     app.register_blueprint(search_bp)
     app.register_blueprint(rm_calculator_bp)
+    app.register_blueprint(machine_planning_bp)
 
     from .auth import (
         create_token,
@@ -139,7 +139,7 @@ def create_app() -> Flask:
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "rm-calculator", "reports", "reports-manage",
-        "admin", "dpr", "dispatch-calendar", "production-calendar", "executive",
+        "admin", "dpr", "dispatch-calendar", "production-calendar", "machine-planning",
     }
 
     @app.route("/app")
@@ -195,7 +195,7 @@ def create_app() -> Flask:
             "dispatch-calendar": "rept",
             "production-calendar": "rept",
             "rm-calculator": "rept",
-            "executive": "executive",
+            "machine-planning": "rept",
         }
 
         if name == "maintenance":
@@ -255,6 +255,10 @@ def create_app() -> Flask:
         if not path.startswith(base) or not os.path.isfile(path):
             return "Not found", 404
         return send_from_directory(base, safe, mimetype="image/png")
+
+    from .inventory_snapshot import start_inventory_snapshot_scheduler
+
+    start_inventory_snapshot_scheduler(app)
 
     return app
 
