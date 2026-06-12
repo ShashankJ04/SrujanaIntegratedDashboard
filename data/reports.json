@@ -122,7 +122,7 @@
       "id": "a8f3c2e1-9b4d-4a7e-8f1c-2d6e5b0a3c91",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Part Machine Mapping",
-      "queryTemplate": "SELECT\n  m.part_no AS 'Part No',\n  m.part_name AS 'Part Name',\n  CASE WHEN m.is_supplier = 1 THEN 'SUPPLIER' ELSE COALESCE(mm.MCM_Name, m.primary_machine_name) END AS 'Primary Machine',\n  GROUP_CONCAT(a.machine_name ORDER BY a.alt_rank SEPARATOR ', ') AS 'Alt Machines',\n  m.spm AS 'SPM',\n  m.cavity AS 'Cavity',\n  CASE WHEN m.is_supplier = 1 THEN 'Yes' ELSE '' END AS 'Supplier',\n  c.CO_PARTNO AS 'ERP Part No'\nFROM part_machine_mapping m\nLEFT JOIN components c ON c.CO_Id = m.component_id\nLEFT JOIN machinemaster mm ON mm.MCM_Id = m.primary_machine_id\nLEFT JOIN part_machine_alternate a ON a.mapping_id = m.mapping_id\nGROUP BY m.mapping_id\nORDER BY m.part_no, m.primary_machine_name;",
+      "queryTemplate": "SELECT\n  c.CO_PARTNO AS 'Part No',\n  c.CO_PARTNAME AS 'Part Name',\n  CASE WHEN m.is_supplier = 1 THEN 'SUPPLIER' ELSE mm.MCM_Name END AS 'Primary Machine',\n  GROUP_CONCAT(mm2.MCM_Name ORDER BY a.alt_rank SEPARATOR ', ') AS 'Alt Machines',\n  m.spm AS 'SPM',\n  m.cavity AS 'Cavity',\n  CASE WHEN m.is_supplier = 1 THEN 'Yes' ELSE '' END AS 'Supplier'\nFROM part_machine_mapping m\nINNER JOIN components c ON c.CO_Id = m.component_id\nLEFT JOIN machinemaster mm ON mm.MCM_Id = m.machine_id\nLEFT JOIN part_machine_alternate a ON a.mapping_id = m.mapping_id\nLEFT JOIN machinemaster mm2 ON mm2.MCM_Id = a.machine_id\nGROUP BY m.mapping_id\nORDER BY c.CO_PARTNO, mm.MCM_Name;",
       "variables": [],
       "createdAt": "2026-06-08T20:30:00.000Z",
       "updatedAt": "2026-06-08T15:12:00.001844+00:00",
