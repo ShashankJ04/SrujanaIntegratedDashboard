@@ -111,6 +111,12 @@ class Config:
         "INVENTORY_SNAPSHOT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Laser Welding — ERP stock integration (child parts inspect)
+    LW_ERP_PLANT_ID = int(os.environ.get("LW_ERP_PLANT_ID", "1"))
+    LW_FG_STAGE_ID = int(os.environ.get("LW_FG_STAGE_ID", "6"))
+    LW_CT_SOURCE_STOCK_TRANSFER = int(os.environ.get("LW_CT_SOURCE_STOCK_TRANSFER", "18"))
+    LW_CR_SRC_FG_SEGREGATION = int(os.environ.get("LW_CR_SRC_FG_SEGREGATION", "9"))
+
 
 
 def get_config():

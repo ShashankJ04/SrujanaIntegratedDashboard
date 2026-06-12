@@ -226,3 +226,13 @@ def execute(
     with get_cursor() as cursor:
         affected = cursor.execute(sql, params or ())
     return affected
+
+
+def execute_insert(
+    sql: str,
+    params: Optional[Sequence[Any]] = None,
+) -> int:
+    """Run an INSERT and return the auto-increment id from the same connection."""
+    with get_cursor() as cursor:
+        cursor.execute(sql, params or ())
+        return int(cursor.lastrowid or 0)

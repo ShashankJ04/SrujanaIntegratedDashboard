@@ -119,6 +119,17 @@
       "pinned": true
     },
     {
+      "id": "a8f3c2e1-9b4d-4a7e-8f1c-2d6e5b0a3c91",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Part Machine Mapping",
+      "queryTemplate": "SELECT\n  m.part_no AS 'Part No',\n  m.part_name AS 'Part Name',\n  CASE WHEN m.is_supplier = 1 THEN 'SUPPLIER' ELSE COALESCE(mm.MCM_Name, m.primary_machine_name) END AS 'Primary Machine',\n  GROUP_CONCAT(a.machine_name ORDER BY a.alt_rank SEPARATOR ', ') AS 'Alt Machines',\n  m.spm AS 'SPM',\n  m.cavity AS 'Cavity',\n  CASE WHEN m.is_supplier = 1 THEN 'Yes' ELSE '' END AS 'Supplier',\n  c.CO_PARTNO AS 'ERP Part No'\nFROM part_machine_mapping m\nLEFT JOIN components c ON c.CO_Id = m.component_id\nLEFT JOIN machinemaster mm ON mm.MCM_Id = m.primary_machine_id\nLEFT JOIN part_machine_alternate a ON a.mapping_id = m.mapping_id\nGROUP BY m.mapping_id\nORDER BY m.part_no, m.primary_machine_name;",
+      "variables": [],
+      "createdAt": "2026-06-08T20:30:00.000Z",
+      "updatedAt": "2026-06-08T15:12:00.001844+00:00",
+      "pinned": true,
+      "drilldowns": []
+    },
+    {
       "id": "c65ce59b-550d-4193-abc8-f703c772054b",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Suppliers",
@@ -225,8 +236,7 @@
       ],
       "createdAt": "2026-03-30T13:26:07.878Z",
       "updatedAt": "2026-06-06T07:45:28.739971+00:00",
-      "pinned": true,
-      "drilldowns": []
+      "pinned": true
     },
     {
       "id": "2d02592d-9d51-485b-b006-74625eb2757f",

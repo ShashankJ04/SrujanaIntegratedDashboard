@@ -29,6 +29,8 @@ DASHBOARD_KEYS: List[str] = [
     "rm_correction_plus",
     "rept",
     "rept_plus",
+    "lw",
+    "lw_plus",
     "edit_dpr",
     "edit_buffer",
 ]

@@ -71,7 +71,9 @@ def create_app() -> Flask:
         get_current_user,
         has_rept_access,
         has_rept_plus_access,
+        has_lw_access,
         is_dpr_editor,
+        is_lw_editor,
         login_required,
         verify_credentials,
     )
@@ -168,6 +170,8 @@ def create_app() -> Flask:
             ),
             has_rept=has_rept_access(user),
             has_rept_plus=has_rept_plus_access(user),
+            has_lw=has_lw_access(user),
+            lw_edit_allowed=is_lw_editor(user),
             effective_permissions=perms,
         )
 
@@ -199,7 +203,7 @@ def create_app() -> Flask:
             "production-calendar": "rept",
             "rm-calculator": "rept",
             "machine-planning": "rept",
-            "laser-welding": "rept",
+            "laser-welding": "lw",
         }
 
         if name == "maintenance":

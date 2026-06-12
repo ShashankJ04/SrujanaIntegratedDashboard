@@ -212,6 +212,40 @@ def has_rept_plus_access(user: Optional[Dict[str, Any]] = None) -> bool:
     return "rept_plus" in perms.get("plusAccess", [])
 
 
+def has_lw_access(user: Optional[Dict[str, Any]] = None) -> bool:
+    """True if user may view the Laser Welding section."""
+    if user is not None and not isinstance(user, dict):
+        user = get_current_user()
+    if not user:
+        user = get_current_user()
+    if not user:
+        return False
+    from . import rbac
+    perms = rbac.get_effective_permissions(
+        user.get("userId", 0),
+        user.get("login", ""),
+        user.get("userId") == 43,
+    )
+    return "lw" in perms.get("access", [])
+
+
+def is_lw_editor(user: Optional[Dict[str, Any]] = None) -> bool:
+    """True if user has plusAccess to edit Laser Welding data."""
+    if user is not None and not isinstance(user, dict):
+        user = get_current_user()
+    if not user:
+        user = get_current_user()
+    if not user:
+        return False
+    from . import rbac
+    perms = rbac.get_effective_permissions(
+        user.get("userId", 0),
+        user.get("login", ""),
+        user.get("userId") == 43,
+    )
+    return "lw_plus" in perms.get("plusAccess", [])
+
+
 def is_buffer_editor(user: Optional[Dict[str, Any]] = None) -> bool:
     """True if the user has plusAccess to edit_buffer in the RBAC system."""
     if user is not None and not isinstance(user, dict):

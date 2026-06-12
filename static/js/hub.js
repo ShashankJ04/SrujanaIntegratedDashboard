@@ -117,11 +117,29 @@ const Hub = (() => {
       if (abs >= 1_000)       return neg + (abs / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
       return neg + String(Math.round(abs));
     },
-    snackbar(msg, dur = 4000) {
+    snackbar(msg, typeOrDur = 4000, durOverride) {
+      const types = ['error', 'warning', 'success', 'info'];
+      let type = '';
+      let dur = 4000;
+      if (typeof typeOrDur === 'string' && types.includes(typeOrDur)) {
+        type = typeOrDur;
+        dur = type === 'error' || type === 'warning' ? 8000 : 4000;
+      } else if (typeof typeOrDur === 'number') {
+        dur = typeOrDur;
+      }
+      if (typeof durOverride === 'number') dur = durOverride;
+
       let el = document.getElementById('ti-snackbar');
-      if (!el) { el = document.createElement('div'); el.id = 'ti-snackbar'; el.className = 'ti-snackbar'; document.body.appendChild(el); }
-      el.textContent = msg; el.classList.add('show');
-      clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), dur);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'ti-snackbar';
+        el.className = 'ti-snackbar';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.className = 'ti-snackbar show' + (type ? ` ti-snackbar--${type}` : '');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), dur);
     },
     varianceChip(val, opts = {}) {
       const r = Math.round(val * 100) / 100;
@@ -176,7 +194,7 @@ const Hub = (() => {
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'production-calendar') return ACCESS.has('rept');
     if (section === 'machine-planning') return ACCESS.has('rept');
-    if (section === 'laser-welding') return ACCESS.has('rept');
+    if (section === 'laser-welding') return ACCESS.has('lw');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-calculator') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');

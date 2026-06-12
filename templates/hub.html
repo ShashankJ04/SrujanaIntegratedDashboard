@@ -89,6 +89,8 @@
               <span class="ti-nav-label">Machine Planning</span>
             </a>
           </li>
+          {% endif %}
+          {% if has_lw %}
           <li class="ti-nav-item">
             <a class="ti-nav-link" data-section="laser-welding" href="/app?section=laser-welding">
               <span class="ti-nav-icon ti-nav-icon--img">
@@ -216,6 +218,7 @@
   <script>
     window.BUFFER_EDIT_ALLOWED = {{ buffer_edit_allowed|default(false)|tojson }};
     window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};
+    window.LW_EDIT_ALLOWED = {{ lw_edit_allowed|default(false)|tojson }};
     window.DPR_POLL_INTERVAL_MS = {{ dpr_poll_interval_ms|tojson }};
     window.CURRENT_USER = {{ user|tojson }};
     window.CURRENT_PERMISSIONS = {{ effective_permissions|tojson }};
