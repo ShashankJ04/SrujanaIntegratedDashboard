@@ -90,6 +90,14 @@
             </a>
           </li>
           {% endif %}
+          {% if has_scdl %}
+          <li class="ti-nav-item">
+            <a class="ti-nav-link" data-section="production-scheduler" href="/app?section=production-scheduler">
+              <span class="ti-nav-icon">🗓️</span>
+              <span class="ti-nav-label">Production Scheduler</span>
+            </a>
+          </li>
+          {% endif %}
           {% if has_lw %}
           <li class="ti-nav-item">
             <a class="ti-nav-link" data-section="laser-welding" href="/app?section=laser-welding">
@@ -234,6 +242,7 @@
   <script src="{{ url_for('static', filename='js/dispatch_calendar.js') }}"></script>
   <script src="{{ url_for('static', filename='js/production_calendar.js') }}"></script>
   <script src="{{ url_for('static', filename='js/machine_planning.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/production_scheduler.js') }}"></script>
   <script src="{{ url_for('static', filename='js/laser_welding.js') }}"></script>
 </body>
 </html>

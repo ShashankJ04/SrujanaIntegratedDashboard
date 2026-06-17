@@ -51,6 +51,7 @@ def create_app() -> Flask:
     from .rm_calculator_api import rm_calculator_bp
     from .machine_planning_api import machine_planning_bp
     from .laser_welding_api import laser_welding_bp
+    from .scheduler.api import scheduler_bp
 
     app.register_blueprint(pm_bp)
     app.register_blueprint(tools_bp)
@@ -65,12 +66,14 @@ def create_app() -> Flask:
     app.register_blueprint(rm_calculator_bp)
     app.register_blueprint(machine_planning_bp)
     app.register_blueprint(laser_welding_bp)
+    app.register_blueprint(scheduler_bp)
 
     from .auth import (
         create_token,
         get_current_user,
         has_rept_access,
         has_rept_plus_access,
+        has_scdl_access,
         has_lw_access,
         is_dpr_editor,
         is_lw_editor,
@@ -144,7 +147,7 @@ def create_app() -> Flask:
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "rm-calculator", "reports", "reports-manage",
         "admin", "dpr", "dispatch-calendar", "production-calendar", "machine-planning",
-        "laser-welding",
+        "laser-welding", "production-scheduler",
     }
 
     @app.route("/app")
@@ -170,6 +173,7 @@ def create_app() -> Flask:
             ),
             has_rept=has_rept_access(user),
             has_rept_plus=has_rept_plus_access(user),
+            has_scdl=has_scdl_access(user),
             has_lw=has_lw_access(user),
             lw_edit_allowed=is_lw_editor(user),
             effective_permissions=perms,
@@ -203,6 +207,7 @@ def create_app() -> Flask:
             "production-calendar": "rept",
             "rm-calculator": "rept",
             "machine-planning": "rept",
+            "production-scheduler": "scdl",
             "laser-welding": "lw",
         }
 

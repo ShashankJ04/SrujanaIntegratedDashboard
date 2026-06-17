@@ -212,6 +212,23 @@ def has_rept_plus_access(user: Optional[Dict[str, Any]] = None) -> bool:
     return "rept_plus" in perms.get("plusAccess", [])
 
 
+def has_scdl_access(user: Optional[Dict[str, Any]] = None) -> bool:
+    """True if user may view the Production Scheduler section."""
+    if user is not None and not isinstance(user, dict):
+        user = get_current_user()
+    if not user:
+        user = get_current_user()
+    if not user:
+        return False
+    from . import rbac
+    perms = rbac.get_effective_permissions(
+        user.get("userId", 0),
+        user.get("login", ""),
+        user.get("userId") == 43,
+    )
+    return "scdl" in perms.get("access", [])
+
+
 def has_lw_access(user: Optional[Dict[str, Any]] = None) -> bool:
     """True if user may view the Laser Welding section."""
     if user is not None and not isinstance(user, dict):

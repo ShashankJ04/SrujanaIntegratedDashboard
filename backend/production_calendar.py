@@ -21,7 +21,15 @@ OPENING_STOCK_COL = "Opening Stock"
 COMPLETION_PCT_COL = "% Completion"
 ESTIMATED_TIME_COL = "Estimated Time"
 
-WORK_HOURS_PER_DAY = 6
+_DEFAULT_WORK_HOURS = 6
+
+
+def _work_hours_per_day() -> int:
+    try:
+        from flask import current_app
+        return int(current_app.config.get("WORK_HOURS_PER_DAY", _DEFAULT_WORK_HOURS))
+    except RuntimeError:
+        return _DEFAULT_WORK_HOURS
 
 
 def _to_float(value: Any) -> float:
@@ -326,7 +334,7 @@ def _insert_estimated_time_column(
     payload: Dict[str, Any],
     part_info: Dict[str, Dict[str, Any]],
 ) -> None:
-    """Estimated time (days) = Balance Qty / (SPM * cavity * 60 * WORK_HOURS_PER_DAY).
+    """Estimated time (days) = Balance Qty / (SPM * cavity * 60 * work_hours).
 
     Grand Total shows the sum of individual estimated days (total machine-days).
     """
@@ -350,7 +358,7 @@ def _insert_estimated_time_column(
         rate = spm * cavity
 
         if balance > 0 and rate > 0:
-            days = balance / (rate * WORK_HOURS_PER_DAY * 60)
+            days = balance / (rate * _work_hours_per_day() * 60)
             row[ESTIMATED_TIME_COL] = round(days, 2)
             grand_est_days += days
         else:

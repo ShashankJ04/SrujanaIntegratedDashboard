@@ -22,17 +22,17 @@
     <button type="button" class="lw-tab lw-tab--active" data-tab="child_parts" role="tab" aria-selected="true">
       Inspection
     </button>
-    <!-- <button type="button" class="lw-tab" data-tab="qa_disposition" role="tab" aria-selected="false">
+    <button type="button" class="lw-tab" data-tab="qa_disposition" role="tab" aria-selected="false">
       QA Disposition
     </button>
-    <button type="button" class="lw-tab" data-tab="rework" role="tab" aria-selected="false">
-      Rework
-    </button> -->
     <button type="button" class="lw-tab" data-tab="sub_assembly" role="tab" aria-selected="false">
       Sub-Assembly
     </button>
     <button type="button" class="lw-tab" data-tab="final_assembly" role="tab" aria-selected="false">
       Laser Welding
+    </button>
+    <button type="button" class="lw-tab" data-tab="packing" role="tab" aria-selected="false">
+      Packing
     </button>
   </div>
 
@@ -61,7 +61,7 @@
             <th class="lw-col-part">Part No</th>
             <th class="lw-col-name">Part Name</th>
             <th class="lw-col-operator">Operator</th>
-            <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-time">Time taken</th>
             <th class="lw-col-actions">Actions</th>
           </tr>
         </thead>
@@ -113,41 +113,20 @@
     </div>
   </div>
 
-  <div id="lw-rework-panel" class="lw-panel">
-    <div id="lw-rework-loading" class="ti-dc-loading" style="display:none">
-      <div class="ti-spinner"></div><span>Loading…</span>
-    </div>
-    <div id="lw-rework-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
-    <div class="lw-rework-form-wrap">
-      <div class="lw-rework-form" id="lw-rework-form">
-        <div class="lw-rework-field">
-          <label for="lw-rework-part">Part</label>
-          <select id="lw-rework-part" class="ti-input lw-rework-select"><option value="">Select part…</option></select>
-        </div>
-        <div class="lw-rework-field">
-          <label for="lw-rework-lot">LW Lot</label>
-          <select id="lw-rework-lot" class="ti-input lw-rework-select"><option value="">Select lot…</option></select>
-        </div>
-        <div class="lw-rework-field lw-rework-field--readonly">
-          <label>Pending Rework</label>
-          <span id="lw-rework-pending-display" class="lw-rework-readonly">—</span>
-        </div>
-        <div class="lw-rework-actions">
-          <button type="button" class="ti-btn ti-btn-primary" id="lw-rework-inward" disabled>Inwarded</button>
-        </div>
-      </div>
-      <div class="lw-rework-queue">
-        <h3 class="lw-panel-heading">Pending Inward</h3>
-        <div id="lw-rework-queue" class="lw-queue-list"></div>
-      </div>
-    </div>
-  </div>
-
   <div id="lw-assembly-panel" class="lw-panel">
     <div id="lw-asm-loading" class="ti-dc-loading" style="display:none">
       <div class="ti-spinner"></div><span>Loading…</span>
     </div>
     <div id="lw-asm-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+
+    <div class="lw-mode-bar" id="lw-asm-mode-bar">
+      <label class="lw-mode-option">
+        <input type="radio" name="lw-asm-mode" value="welding" checked /> Welding
+      </label>
+      <label class="lw-mode-option">
+        <input type="radio" name="lw-asm-mode" value="rework_welding" /> Re-Work Welding
+      </label>
+    </div>
 
     <div id="lw-asm-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
       <table class="ti-excel-table ti-excel-table--original" id="lw-asm-table">
@@ -157,6 +136,7 @@
             <th class="lw-col-bom">BOM No</th>
             <th class="lw-col-name">Product</th>
             <th class="lw-col-operator">Operator</th>
+            <th class="lw-col-machine">Machine</th>
             <th class="lw-col-lot">Lot No</th>
             <th class="lw-col-actions">Actions</th>
           </tr>
@@ -166,7 +146,78 @@
     </div>
   </div>
 
-  <div id="lw-placeholder-panel" class="lw-panel lw-placeholder">
+  <div id="lw-sub-assembly-panel" class="lw-panel">
+    <div id="lw-sa-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-sa-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+
+    <div class="lw-mode-bar" id="lw-sa-mode-bar">
+      <label class="lw-mode-option">
+        <input type="radio" name="lw-sa-mode" value="sub_assembly" checked /> Sub-Assembly
+      </label>
+      <label class="lw-mode-option">
+        <input type="radio" name="lw-sa-mode" value="rework_sub_assembly" /> Re-Work Sub-Assembly
+      </label>
+    </div>
+
+    <div id="lw-sa-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-sa-table">
+        <thead id="lw-sa-table-head">
+          <tr>
+            <th class="lw-col-customer">Customer</th>
+            <th class="lw-col-bom">BOM No</th>
+            <th class="lw-col-part">Sub-Assembly Part</th>
+            <th class="lw-col-operator">Operator</th>
+            <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lw-sa-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="lw-packing-panel" class="lw-panel">
+    <div id="lw-packing-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-packing-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div class="lw-qa-form-wrap">
+      <div class="lw-qa-form" id="lw-packing-form">
+        <div class="lw-qa-field">
+          <label for="lw-packing-part">Part / BOM</label>
+          <select id="lw-packing-part" class="ti-input lw-qa-select"><option value="">Select part…</option></select>
+        </div>
+        <div class="lw-qa-field">
+          <label for="lw-packing-lot">LW Lot</label>
+          <select id="lw-packing-lot" class="ti-input lw-qa-select"><option value="">Select lot…</option></select>
+        </div>
+        <div class="lw-qa-field lw-qa-field--readonly">
+          <label>Type</label>
+          <span id="lw-packing-type-display" class="lw-qa-readonly">—</span>
+        </div>
+        <div class="lw-qa-field lw-qa-field--readonly">
+          <label>Available</label>
+          <span id="lw-packing-qty-display" class="lw-qa-readonly">—</span>
+        </div>
+        <div class="lw-qa-field">
+          <label for="lw-packing-qty">Pack Qty</label>
+          <input type="number" id="lw-packing-qty" class="ti-input lw-qa-input" min="1" step="1" value="" />
+        </div>
+        <div class="lw-qa-actions">
+          <p class="lw-qa-hint" id="lw-packing-hint">Select a lot to pack.</p>
+          <button type="button" class="ti-btn ti-btn-primary" id="lw-packing-pack" disabled>Packed</button>
+        </div>
+      </div>
+      <div class="lw-qa-queue">
+        <h3 class="lw-panel-heading">Ready to Pack</h3>
+        <div id="lw-packing-queue" class="lw-queue-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lw-placeholder-panel" class="lw-panel lw-placeholder" style="display:none">
     <div class="ti-empty lw-coming-soon">
       <div class="ti-empty-icon">🚧</div>
       <div class="ti-empty-text">Coming soon</div>
@@ -210,91 +261,6 @@
     </div>
   </div>
 
-  <div class="ti-modal-overlay" id="lw-store-modal-overlay" aria-hidden="true">
-    <div class="ti-modal lw-store-modal" role="dialog" aria-labelledby="lw-store-modal-title">
-      <div class="ti-modal-header">
-        <h3 id="lw-store-modal-title">Store Part Inspection</h3>
-      </div>
-      <div class="ti-modal-body">
-        <div class="lw-prod-modal-meta">
-          <div class="lw-prod-meta-item lw-prod-meta-part">
-            <label>BOM / Product</label>
-            <span id="lw-store-modal-part" class="lw-rework-readonly">—</span>
-          </div>
-          <div class="lw-prod-meta-item lw-prod-meta-operator">
-            <label>Lot No</label>
-            <span id="lw-store-modal-lot" class="lw-rework-readonly">—</span>
-          </div>
-          <div class="lw-prod-meta-item lw-prod-meta-pending">
-            <label>Pending</label>
-            <span id="lw-store-modal-pending" class="lw-rework-readonly">—</span>
-          </div>
-          <div class="lw-prod-meta-item lw-prod-time-field">
-            <label>Time taken <span class="lw-required">*</span></label>
-            <div class="lw-prod-time-inputs">
-              <input type="number" id="lw-store-modal-hours" class="ti-input" min="0" step="1" value="0" aria-label="Hours" />
-              <span class="lw-prod-time-unit">h</span>
-              <input type="number" id="lw-store-modal-mins" class="ti-input" min="0" max="60" step="1" value="0" aria-label="Minutes" />
-              <span class="lw-prod-time-unit">m</span>
-            </div>
-          </div>
-        </div>
-        <div class="lw-store-modal-qty">
-          <div class="lw-store-qty-field">
-            <label for="lw-store-modal-qty">QTY <span class="lw-required">*</span></label>
-            <input type="number" id="lw-store-modal-qty" class="ti-input" min="1" step="1" value="0" />
-          </div>
-          <div class="lw-store-qty-field">
-            <label for="lw-store-modal-qa">QA</label>
-            <input type="number" id="lw-store-modal-qa" class="ti-input" min="0" step="1" value="0" />
-          </div>
-        </div>
-      </div>
-      <div class="ti-modal-footer">
-        <button type="button" class="ti-btn ti-btn-outline" id="lw-store-modal-cancel">Cancel</button>
-        <button type="button" class="ti-btn ti-btn-primary" id="lw-store-modal-save">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="ti-modal-overlay" id="lw-clean-modal-overlay" aria-hidden="true">
-    <div class="ti-modal lw-clean-modal" role="dialog" aria-labelledby="lw-clean-modal-title">
-      <div class="ti-modal-header">
-        <h3 id="lw-clean-modal-title">Cleaned</h3>
-      </div>
-      <div class="ti-modal-body">
-        <div class="lw-clean-modal-meta">
-          <div class="lw-clean-meta-item">
-            <label>BOM / Product</label>
-            <span id="lw-clean-modal-product" class="lw-rework-readonly">—</span>
-          </div>
-          <div class="lw-clean-meta-item">
-            <label>Uncleaned</label>
-            <span id="lw-clean-modal-uncleaned" class="lw-rework-readonly">—</span>
-          </div>
-        </div>
-        <div class="lw-clean-modal-fields">
-          <div class="lw-clean-field">
-            <label for="lw-clean-modal-lot">Lot number <span class="lw-required">*</span></label>
-            <input type="text" id="lw-clean-modal-lot" class="ti-input" readonly />
-          </div>
-          <div class="lw-clean-field">
-            <label for="lw-clean-modal-qty">QTY <span class="lw-required">*</span></label>
-            <input type="number" id="lw-clean-modal-qty" class="ti-input" min="1" step="1" value="0" />
-          </div>
-          <div class="lw-clean-field">
-            <label for="lw-clean-modal-operator">Operator <span class="lw-required">*</span></label>
-            <select id="lw-clean-modal-operator" class="ti-input"></select>
-          </div>
-        </div>
-      </div>
-      <div class="ti-modal-footer">
-        <button type="button" class="ti-btn ti-btn-outline" id="lw-clean-modal-cancel">Cancel</button>
-        <button type="button" class="ti-btn ti-btn-primary" id="lw-clean-modal-save">Save</button>
-      </div>
-    </div>
-  </div>
-
   <div class="ti-modal-overlay" id="lw-weld-modal-overlay" aria-hidden="true">
     <div class="ti-modal ti-modal-lg lw-weld-modal" role="dialog" aria-labelledby="lw-weld-modal-title">
       <div class="ti-modal-header">
@@ -310,6 +276,10 @@
             <label>Operator</label>
             <span id="lw-weld-modal-operator" class="lw-rework-readonly">—</span>
           </div>
+          <div class="lw-prod-meta-item lw-prod-meta-operator" id="lw-weld-modal-machine-wrap">
+            <label>Machine</label>
+            <span id="lw-weld-modal-machine" class="lw-rework-readonly">—</span>
+          </div>
           <div class="lw-prod-meta-item lw-prod-time-field">
             <label>Time taken <span class="lw-required">*</span></label>
             <div class="lw-prod-time-inputs">
@@ -319,8 +289,12 @@
               <span class="lw-prod-time-unit">m</span>
             </div>
           </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field" id="lw-weld-target-lot-wrap" style="display:none">
+            <label for="lw-weld-modal-target-lot">Assembly Lot <span class="lw-required">*</span></label>
+            <select id="lw-weld-modal-target-lot" class="ti-input"><option value="">Select lot…</option></select>
+          </div>
           <div class="lw-prod-meta-item lw-weld-qty-field">
-            <label for="lw-weld-modal-qty">Weld QTY <span class="lw-required">*</span></label>
+            <label for="lw-weld-modal-qty" id="lw-weld-modal-qty-label">Weld QTY <span class="lw-required">*</span></label>
             <input type="number" id="lw-weld-modal-qty" class="ti-input" min="1" step="1" value="0" />
           </div>
         </div>
@@ -329,25 +303,6 @@
       <div class="ti-modal-footer">
         <button type="button" class="ti-btn ti-btn-outline" id="lw-weld-modal-cancel">Cancel</button>
         <button type="button" class="ti-btn ti-btn-primary" id="lw-weld-modal-save">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="ti-modal-overlay" id="lw-rework-modal-overlay" aria-hidden="true">
-    <div class="ti-modal ti-modal-lg lw-rework-modal" role="dialog" aria-labelledby="lw-rework-modal-title">
-      <div class="ti-modal-header">
-        <h3 id="lw-rework-modal-title">Rework re-inspect</h3>
-      </div>
-      <div class="ti-modal-body">
-        <div class="lw-rework-modal-field">
-          <label>Part</label>
-          <span id="lw-rework-modal-part" class="lw-rework-readonly" data-part-number="">—</span>
-        </div>
-        <div id="lw-rework-modal-lines" class="lw-prod-modal-lines"></div>
-      </div>
-      <div class="ti-modal-footer">
-        <button type="button" class="ti-btn ti-btn-outline" id="lw-rework-modal-cancel">Cancel</button>
-        <button type="button" class="ti-btn ti-btn-primary" id="lw-rework-modal-save">Save</button>
       </div>
     </div>
   </div>

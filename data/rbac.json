@@ -10,6 +10,7 @@
         "production",
         "rm_variance",
         "rept",
+        "scdl",
         "lw"
       ],
       "plusAccess": [
@@ -20,7 +21,7 @@
         "rm_correction_plus",
         "lw_plus"
       ],
-      "updatedAt": "2026-06-11T18:32:27.068088+00:00"
+      "updatedAt": "2026-06-12T13:29:26.267621+00:00"
     },
     {
       "userId": 2,
@@ -242,5 +243,5 @@
       "updatedAt": "2026-05-18T09:30:40.066978+00:00"
     }
   ],
-  "updatedAt": "2026-06-11T18:32:27.068088+00:00"
+  "updatedAt": "2026-06-12T13:29:26.267621+00:00"
 }

@@ -36,6 +36,16 @@ def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
     return str((_runtime_base_dir() / p).resolve())
 
 
+def _parse_int_tuple_env(env_key: str, default_csv: str) -> tuple:
+    raw = str(os.environ.get(env_key, "") or "").strip() or default_csv
+    values: list[int] = []
+    for piece in raw.split(","):
+        piece = piece.strip()
+        if piece:
+            values.append(int(piece))
+    return tuple(values)
+
+
 class Config:
     """Application configuration.
 
@@ -111,19 +121,46 @@ class Config:
         "INVENTORY_SNAPSHOT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Production scheduling — standard work hours per day
+    WORK_HOURS_PER_DAY = int(os.environ.get("WORK_HOURS_PER_DAY", "6"))
+
+    # Soft capacity overflow per machine-day (minutes beyond nominal shift)
+    CAPACITY_OVERFLOW_MINUTES = int(os.environ.get("CAPACITY_OVERFLOW_MINUTES", "30"))
+
     # Laser Welding — ERP stock integration (child parts inspect)
     LW_ERP_PLANT_ID = int(os.environ.get("LW_ERP_PLANT_ID", "1"))
     LW_FG_STAGE_ID = int(os.environ.get("LW_FG_STAGE_ID", "6"))
+    # Part Inspection whitelist (11 parts) — separate plant/stage from default SS parts.
+    LW_WHITELIST_ERP_PLANT_ID = int(os.environ.get("LW_WHITELIST_ERP_PLANT_ID", "2"))
+    LW_WHITELIST_PART_INSPECTION_STAGE_ID = int(
+        os.environ.get("LW_WHITELIST_PART_INSPECTION_STAGE_ID", "19")
+    )
+    LW_WHITELIST_CT_SOURCE_REDUCE = int(
+        os.environ.get("LW_WHITELIST_CT_SOURCE_REDUCE", "1")
+    )
+    LW_WHITELIST_REDUCE_OP_STAGE = int(
+        os.environ.get("LW_WHITELIST_REDUCE_OP_STAGE", "1")
+    )
+    LW_WHITELIST_QA_OUTWARD_STAGE_ID = int(
+        os.environ.get("LW_WHITELIST_QA_OUTWARD_STAGE_ID", "6")
+    )
+    LW_WHITELIST_PACK_INWARD_OP_STAGE = int(
+        os.environ.get("LW_WHITELIST_PACK_INWARD_OP_STAGE", "19")
+    )
+    LW_WHITELIST_PACK_INWARD_NEXT_STAGE = int(
+        os.environ.get("LW_WHITELIST_PACK_INWARD_NEXT_STAGE", "6")
+    )
+    LW_PACKING_ERP_PLANT_ID = int(os.environ.get("LW_PACKING_ERP_PLANT_ID", "2"))
+    LW_PACKING_INWARD_STAGE_ID = int(os.environ.get("LW_PACKING_INWARD_STAGE_ID", "6"))
     LW_CT_SOURCE_STOCK_TRANSFER = int(os.environ.get("LW_CT_SOURCE_STOCK_TRANSFER", "18"))
     LW_CR_SRC_FG_SEGREGATION = int(os.environ.get("LW_CR_SRC_FG_SEGREGATION", "9"))
-
+    # Part Inspection whitelist — stable component family ids (CO_PARENTID), not part numbers.
+    LW_PART_INSPECTION_PARENT_IDS: tuple = _parse_int_tuple_env(
+        "LW_PART_INSPECTION_PARENT_IDS",
+        "1624,1775,1776,1782,1656,1654,1655,1668,1538,1539,1540",
+    )
 
 
 def get_config():
-    """Return the active configuration class.
-
-    The main app will first try to import Config from `config.py`;
-    if that doesn't exist, it can fall back to this example.
-    """
-
+    """Return the active configuration class."""
     return Config

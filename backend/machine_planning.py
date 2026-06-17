@@ -14,7 +14,15 @@ from typing import Any, Dict, List, Optional, Sequence
 from .db import execute, fetch_all, fetch_one
 from .models import build_enriched_inventory_rows_for_period
 
-WORK_HOURS_PER_DAY = 7
+_DEFAULT_WORK_HOURS = 6
+
+
+def _work_hours_per_day() -> int:
+    try:
+        from flask import current_app
+        return int(current_app.config.get("WORK_HOURS_PER_DAY", _DEFAULT_WORK_HOURS))
+    except RuntimeError:
+        return _DEFAULT_WORK_HOURS
 
 
 # ── Machine helpers ──────────────────────────────────────────────────────
@@ -191,7 +199,7 @@ def get_plan(machine_id: int, month_year: str) -> Dict[str, Any]:
         inv = inv_by_part.get(pn, {})
 
         spm = int(info.get("spm") or 0)
-        max_parts_per_day = spm * 60 * WORK_HOURS_PER_DAY if spm > 0 else 0
+        max_parts_per_day = spm * 60 * _work_hours_per_day() if spm > 0 else 0
 
         production_pending = max(0, float(inv.get("production_pending") or 0))
         produced_qty = int(inv.get("produced_qty") or info.get("produced_qty") or 0)
