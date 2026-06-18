@@ -6,8 +6,18 @@ from typing import Any, Optional
 
 from .db import fetch_all, fetch_one
 
-SUB_ASSEMBLY_PARENT_ITEM_ID = 2
+SA_CATEGORY_CODE = "SA"
 BO_CATEGORY_CODE = "BO"
+
+_BO_UNDER_SA_SQL = """
+    FROM bom_lin_item bl
+    INNER JOIN bom b ON b.bom_id = bl.bom_id AND b.is_latest_version = 'Y'
+    INNER JOIN bom_lin_item sa
+        ON sa.bom_id = bl.bom_id
+       AND sa.ITEM_ID = bl.PARENT_ITEM_ID
+       AND UPPER(TRIM(sa.CATEGORY_CODE)) = %s
+    WHERE UPPER(TRIM(bl.CATEGORY_CODE)) = %s
+"""
 
 
 def _normalize_part(part_no: Any) -> str:
@@ -15,27 +25,44 @@ def _normalize_part(part_no: Any) -> str:
 
 
 def is_bo_sub_assembly_part(part_no: Any) -> bool:
-    """True when part is a BO sub-assembly child on a qualified BOM."""
+    """True when part is a BO child of an SA sub-assembly on a latest-version BOM."""
     part = _normalize_part(part_no)
     if not part:
         return False
     row = fetch_one(
-        """
+        f"""
         SELECT 1 AS ok
-        FROM bom_lin_item bl
-        INNER JOIN bom b ON b.bom_id = bl.bom_id AND b.is_latest_version = 'Y'
-        WHERE TRIM(bl.PART_NO) = %s
-          AND bl.PARENT_ITEM_ID = %s
-          AND bl.CATEGORY_CODE = %s
-          AND (
-            SELECT COUNT(*) FROM bom_lin_item x
-            WHERE x.bom_id = bl.bom_id AND x.PARENT_ITEM_ID = %s
-          ) > 1
+        {_BO_UNDER_SA_SQL}
+          AND TRIM(bl.PART_NO) = %s
         LIMIT 1
         """,
-        (part, SUB_ASSEMBLY_PARENT_ITEM_ID, BO_CATEGORY_CODE, SUB_ASSEMBLY_PARENT_ITEM_ID),
+        (SA_CATEGORY_CODE, BO_CATEGORY_CODE, part),
     )
     return bool(row)
+
+
+def fetch_bo_parts_for_inspection() -> list[dict[str, Any]]:
+    """BO parts under SA sub-assemblies that have inventory stock."""
+    rows = fetch_all(
+        f"""
+        SELECT DISTINCT TRIM(bl.PART_NO) AS part_no, TRIM(bl.PART_NAME) AS part_name
+        {_BO_UNDER_SA_SQL}
+          AND EXISTS (
+            SELECT 1 FROM inventory inv
+            WHERE TRIM(inv.ITEM_CODE) = TRIM(bl.PART_NO) AND inv.QTY > 0
+          )
+        ORDER BY part_no
+        """,
+        (SA_CATEGORY_CODE, BO_CATEGORY_CODE),
+    )
+    return [
+        {
+            "part_no": str(r.get("part_no") or "").strip(),
+            "part_name": str(r.get("part_name") or "").strip(),
+        }
+        for r in rows
+        if str(r.get("part_no") or "").strip()
+    ]
 
 
 def fetch_bo_available_qty(part_no: Any, cursor: Any = None) -> int:

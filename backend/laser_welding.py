@@ -939,29 +939,7 @@ def get_parts(mode: Optional[str] = None) -> List[Dict[str, str]]:
                 "partName": part_name,
             }
 
-    rows_bo = fetch_all(
-        """
-        SELECT DISTINCT TRIM(bl.PART_NO) AS part_no, TRIM(bl.PART_NAME) AS part_name
-        FROM bom_lin_item bl
-        INNER JOIN bom b ON b.bom_id = bl.bom_id AND b.is_latest_version = 'Y'
-        WHERE bl.PARENT_ITEM_ID = %s
-          AND bl.CATEGORY_CODE = 'BO'
-          AND (
-            SELECT COUNT(*) FROM bom_lin_item x
-            WHERE x.bom_id = bl.bom_id AND x.PARENT_ITEM_ID = %s
-          ) > 1
-          AND EXISTS (
-            SELECT 1 FROM inventory inv
-            WHERE TRIM(inv.ITEM_CODE) = TRIM(bl.PART_NO) AND inv.QTY > 0
-          )
-        ORDER BY part_no
-        """,
-        (
-            bo_inventory.SUB_ASSEMBLY_PARENT_ITEM_ID,
-            bo_inventory.SUB_ASSEMBLY_PARENT_ITEM_ID,
-        ),
-    )
-    for r in rows_bo:
+    for r in bo_inventory.fetch_bo_parts_for_inspection():
         part_no = str(r.get("part_no") or "").strip()
         if not part_no:
             continue
