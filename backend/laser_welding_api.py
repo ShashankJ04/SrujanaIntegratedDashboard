@@ -74,8 +74,10 @@ def operators() -> Any:
 @laser_welding_bp.route("/machines", methods=["GET"])
 @require_access("lw")
 def machines() -> Any:
+    type_raw = request.args.get("type", "").strip()
+    machine_type = int(type_raw) if type_raw else None
     try:
-        rows = lw.get_lw_machines()
+        rows = lw.get_lw_machines(machine_type)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"count": len(rows), "machines": rows})
@@ -210,6 +212,7 @@ def child_parts_inspect() -> Any:
             lines=lines,
             time_taken_minutes=int(time_taken or 0),
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -275,11 +278,103 @@ def child_parts_reinspect() -> Any:
 @laser_welding_bp.route("/qa/rows", methods=["GET"])
 @require_access("lw")
 def qa_rows() -> Any:
+    work_date = request.args.get("date", "").strip()
+    if not work_date:
+        return jsonify({"error": "date is required"}), 400
     try:
-        rows = lw.get_qa_rows()
+        rows = lw.get_qa_inspect_rows(work_date)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"count": len(rows), "rows": rows})
+
+
+@laser_welding_bp.route("/qa/eligible", methods=["GET"])
+@require_access("lw")
+def qa_eligible() -> Any:
+    work_date = request.args.get("date", "").strip()
+    if not work_date:
+        return jsonify({"error": "date is required"}), 400
+    try:
+        items = lw.get_qa_eligible_parts(work_date)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(items), "items": items})
+
+
+@laser_welding_bp.route("/qa/source-lots", methods=["GET"])
+@require_access("lw")
+def qa_source_lots() -> Any:
+    part_no = request.args.get("partNo", "").strip()
+    if not part_no:
+        return jsonify({"error": "partNo is required"}), 400
+    try:
+        lots = lw.get_qa_source_lots(part_no)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(lots), "lots": lots})
+
+
+@laser_welding_bp.route("/qa/pending", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def qa_pending() -> Any:
+    body = request.get_json(silent=True) or {}
+    part_number = str(body.get("partNumber") or body.get("partNo") or "").strip()
+    work_date = str(body.get("workDate") or "").strip()
+    operator_id = body.get("operatorId")
+    if not part_number or not work_date:
+        return jsonify({"error": "partNumber and workDate are required"}), 400
+    if not operator_id:
+        return jsonify({"error": "Operator is required"}), 400
+
+    user = g.get("current_user") or {}
+    try:
+        result = lw.create_pending_qa(
+            part_number=part_number,
+            operator_id=int(operator_id),
+            work_date=work_date,
+            created_by=user.get("userId"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
+
+
+@laser_welding_bp.route("/qa/inspect", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def qa_inspect() -> Any:
+    body = request.get_json(silent=True) or {}
+    draft_line_id = body.get("draftLineId") or body.get("lineId")
+    work_date = str(body.get("workDate") or "").strip()
+    lines = body.get("lines") or []
+    time_taken = body.get("timeTakenMinutes")
+    if not draft_line_id:
+        return jsonify({"error": "Pending QA row is required — add part and operator first"}), 400
+    if not work_date:
+        return jsonify({"error": "workDate is required"}), 400
+
+    user = g.get("current_user") or {}
+    try:
+        result = lw.inspect_qa(
+            draft_line_id=int(draft_line_id),
+            work_date=work_date,
+            lines=lines,
+            time_taken_minutes=int(time_taken or 0),
+            ot_flag=body.get("otFlag"),
+            processed_by=user.get("userId"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
 
 
 @laser_welding_bp.route("/qa/lot/<int:lot_id>", methods=["GET"])
@@ -319,11 +414,118 @@ def qa_approve() -> Any:
 @laser_welding_bp.route("/packing/rows", methods=["GET"])
 @require_access("lw")
 def packing_rows() -> Any:
+    work_date = request.args.get("date", "").strip()
+    if not work_date:
+        return jsonify({"error": "date is required"}), 400
     try:
-        rows = lw.get_packing_rows()
+        rows = lw.get_packing_inspect_rows(work_date)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"count": len(rows), "rows": rows})
+
+
+@laser_welding_bp.route("/packing/source-lots", methods=["GET"])
+@require_access("lw")
+def packing_source_lots() -> Any:
+    part_no = request.args.get("partNo", "").strip()
+    if not part_no:
+        return jsonify({"error": "partNo is required"}), 400
+    try:
+        lots = lw.get_packing_source_lots(part_no)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(lots), "lots": lots})
+
+
+@laser_welding_bp.route("/packing/parts", methods=["GET"])
+@require_access("lw")
+def packing_parts_catalog() -> Any:
+    try:
+        parts = lw.get_packing_parts_catalog()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(parts), "parts": parts})
+
+
+@laser_welding_bp.route("/packing/pack-materials", methods=["GET"])
+@require_access("lw")
+def packing_pack_materials() -> Any:
+    try:
+        catalog = lw.get_packing_pack_materials()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    materials = catalog.get("materials") or []
+    return jsonify({
+        "count": len(materials),
+        "trays": catalog.get("trays") or [],
+        "cartons": catalog.get("cartons") or [],
+        "materials": materials,
+    })
+
+
+@laser_welding_bp.route("/packing/pending", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def packing_pending() -> Any:
+    body = request.get_json(silent=True) or {}
+    part_number = str(body.get("partNumber") or body.get("partNo") or "").strip()
+    work_date = str(body.get("workDate") or "").strip()
+    operator_id = body.get("operatorId")
+    if not part_number or not work_date:
+        return jsonify({"error": "partNumber and workDate are required"}), 400
+    if not operator_id:
+        return jsonify({"error": "Operator is required"}), 400
+
+    user = g.get("current_user") or {}
+    try:
+        result = lw.create_pending_packing(
+            part_no=part_number,
+            operator_id=int(operator_id),
+            work_date=work_date,
+            created_by=user.get("userId"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
+
+
+@laser_welding_bp.route("/packing/inspect", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def packing_inspect() -> Any:
+    body = request.get_json(silent=True) or {}
+    draft_line_id = body.get("draftLineId") or body.get("lineId")
+    work_date = str(body.get("workDate") or "").strip()
+    lines = body.get("lines") or []
+    time_taken = body.get("timeTakenMinutes")
+    if not draft_line_id:
+        return jsonify({"error": "Pending packing row is required — add part and operator first"}), 400
+    if not work_date:
+        return jsonify({"error": "workDate is required"}), 400
+
+    user = g.get("current_user") or {}
+    try:
+        result = lw.inspect_packing(
+            draft_line_id=int(draft_line_id),
+            work_date=work_date,
+            lines=lines,
+            tray_qty=int(body.get("trayQty") or 0),
+            carton_qty=int(body.get("cartonQty") or 0),
+            time_taken_minutes=int(time_taken or 0),
+            ot_flag=body.get("otFlag"),
+            processed_by=user.get("userId"),
+            tray_item_code=body.get("trayItemCode") or body.get("tray_item_code"),
+            carton_item_code=body.get("cartonItemCode") or body.get("carton_item_code"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
 
 
 @laser_welding_bp.route("/packing/pack", methods=["POST"])
@@ -474,6 +676,7 @@ def assembly_weld() -> Any:
             consumptions=consumptions,
             operator_id=int(operator_id) if operator_id else None,
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -520,6 +723,21 @@ def assembly_rework_rows() -> Any:
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"count": len(rows), "rows": rows})
+
+
+@laser_welding_bp.route("/assembly/rework/eligible", methods=["GET"])
+@require_access("lw")
+def assembly_rework_eligible() -> Any:
+    work_date = request.args.get("date", "").strip()
+    if not work_date:
+        return jsonify({"error": "date is required"}), 400
+    try:
+        items = lw.get_rework_weld_eligible_items(work_date)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(items), "items": items})
 
 
 @laser_welding_bp.route("/assembly/rework/pending", methods=["POST"])
@@ -586,6 +804,7 @@ def assembly_rework_weld() -> Any:
             consumptions=consumptions,
             operator_id=int(operator_id) if operator_id else None,
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -680,6 +899,7 @@ def cleaning_inspect() -> Any:
             lines=lines,
             time_taken_minutes=int(time_taken or 0),
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -764,18 +984,22 @@ def sub_assembly_pending() -> Any:
     sub_assembly_part_no = str(body.get("subAssemblyPartNo") or body.get("partNo") or "").strip()
     work_date = str(body.get("workDate") or "").strip()
     operator_id = body.get("operatorId")
+    machine_id = body.get("machineId")
     if not sub_assembly_part_no:
         return jsonify({"error": "subAssemblyPartNo is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
     if not operator_id:
         return jsonify({"error": "Operator is required"}), 400
+    if not machine_id:
+        return jsonify({"error": "Machine is required"}), 400
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_sub_assembly(
             sub_assembly_part_no=sub_assembly_part_no,
             operator_id=int(operator_id),
+            machine_id=int(machine_id),
             work_date=work_date,
             bom_id=str(bom_id).strip() if bom_id else None,
             created_by=user.get("userId"),
@@ -826,6 +1050,7 @@ def sub_assembly_weld() -> Any:
             consumptions=consumptions,
             operator_id=int(operator_id) if operator_id else None,
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -895,6 +1120,21 @@ def sub_assembly_rework_rows() -> Any:
     return jsonify({"count": len(rows), "rows": rows})
 
 
+@laser_welding_bp.route("/sub-assembly/rework/eligible", methods=["GET"])
+@require_access("lw")
+def sub_assembly_rework_eligible() -> Any:
+    work_date = request.args.get("date", "").strip()
+    if not work_date:
+        return jsonify({"error": "date is required"}), 400
+    try:
+        items = lw.get_rework_sub_assembly_eligible_items(work_date)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(items), "items": items})
+
+
 @laser_welding_bp.route("/sub-assembly/rework/pending", methods=["POST"])
 @require_access("lw")
 @require_plus_access("lw_plus")
@@ -957,6 +1197,7 @@ def sub_assembly_rework_weld() -> Any:
             consumptions=consumptions,
             operator_id=int(operator_id) if operator_id else None,
             processed_by=user.get("userId"),
+            ot_flag=body.get("otFlag"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

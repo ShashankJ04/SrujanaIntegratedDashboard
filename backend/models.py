@@ -1458,11 +1458,45 @@ def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
 # DPR — Daily Production Review
 # ══════════════════════════════════════════════════════════════════════════
 
+def _dpr_operator_label(row: Dict[str, Any]) -> str:
+    name = str(row.get("name") or "").strip()
+    ecno = str(row.get("ecno") or "").strip()
+    if name and ecno and name.lower() != ecno.lower():
+        return f"{name} ({ecno})"
+    return name or ecno
+
+
+def get_dpr_operator_options() -> List[Dict[str, Any]]:
+    """Active press operators (OP_OTID = 1) for DPR line assignment."""
+    rows = fetch_all(
+        """
+        SELECT
+            OP_ID AS id,
+            COALESCE(OP_ECNO, '') AS ecno,
+            COALESCE(OP_NAME, '') AS name
+        FROM operators
+        WHERE OP_ACTIVEYN = 'Y' AND OP_OTID = 1
+        ORDER BY OP_NAME, OP_ECNO
+        """
+    )
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if not row or row.get("id") is None:
+            continue
+        out.append(
+            {
+                "id": int(row["id"]),
+                "label": _dpr_operator_label(row),
+            }
+        )
+    return out
+
+
 def get_dpr_machine_options() -> List[Dict[str, Any]]:
-    """Machine dropdown options from machinemaster."""
+    """Machine dropdown options from machinemaster (press / MCM_Type = 1)."""
     sql = (
         "SELECT MCM_Id AS id, MCM_Name AS label FROM machinemaster "
-        "WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
+        "WHERE MCM_Type = 1 AND MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
     )
     rows = fetch_all(sql)
     out: List[Dict[str, Any]] = []
@@ -2262,7 +2296,7 @@ def _dpr_row_created_sort_key(created_at: Any, row_id: Any) -> Tuple[int, int]:
 def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     """Load DPR rows for a date; tool/strokes/RM derived from part + planned qty."""
     sql = """
-        SELECT id, review_date, machine_id, part_no, planned_qty, produced_qty, remarks,
+        SELECT id, review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks,
                created_by, updated_by, created_at, updated_at
         FROM dpr_daily_review
         WHERE review_date = %s
@@ -2271,6 +2305,7 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     part_nos = [str(r["part_no"]) for r in rows]
     names = _dpr_part_name_map(part_nos)
     machines = {m["id"]: m["label"] for m in get_dpr_machine_options()}
+    operators = {str(o["id"]): o["label"] for o in get_dpr_operator_options()}
     rm_issued_by_rmid = _dpr_rm_issued_map(review_date)
     strokes_by_tool = _dpr_strokes_consumed_by_tool()
     pm_due_by_tool = _dpr_pm_due_by_tool()
@@ -2279,6 +2314,9 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     enriched: List[Dict[str, Any]] = []
     for r in rows:
         pid = str(r.get("machine_id") or "")
+        op_raw = r.get("op_id")
+        op_id = None if op_raw is None else int(op_raw)
+        op_key = str(op_id) if op_id is not None else ""
         pno = str(r.get("part_no") or "").strip()
         rd = r.get("review_date")
         if hasattr(rd, "isoformat"):
@@ -2306,6 +2344,8 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
                 "reviewDate": review_date_str,
                 "machineId": pid,
                 "machineLabel": machines.get(pid, pid),
+                "operatorId": op_id,
+                "operatorLabel": operators.get(op_key, "") if op_id is not None else "",
                 "partNo": pno,
                 "partName": names.get(pno, ""),
                 "plannedQty": pq,
@@ -2346,6 +2386,15 @@ def get_machine_dpr_payload(qr_token: str, review_date: str) -> Optional[Dict[st
     machine_rows.sort(
         key=lambda r: _dpr_row_created_sort_key(r.get("createdAt"), r.get("id"))
     )
+    operator_id: Optional[int] = None
+    operator_label = ""
+    for r in machine_rows:
+        oid = r.get("operatorId")
+        if oid is not None:
+            operator_id = int(oid)
+            operator_label = str(r.get("operatorLabel") or "")
+            break
+
     out_rows: List[Dict[str, Any]] = []
     for r in machine_rows:
         out_rows.append(
@@ -2365,6 +2414,8 @@ def get_machine_dpr_payload(qr_token: str, review_date: str) -> Optional[Dict[st
         "date": review_date,
         "machineId": mid,
         "machineLabel": label,
+        "operatorId": operator_id,
+        "operatorLabel": operator_label,
         "rows": out_rows,
     }
 
@@ -2378,6 +2429,7 @@ def upsert_dpr_row(
     remarks: Optional[str],
     updated_by: Optional[str],
     row_id: Optional[int] = None,
+    op_id: Optional[int] = None,
 ) -> int:
     """Insert or update a DPR row. Returns row id."""
     machine_id = str(machine_id or "").strip()
@@ -2388,13 +2440,23 @@ def upsert_dpr_row(
     if row_id:
         sql = """
             UPDATE dpr_daily_review
-            SET review_date = %s, machine_id = %s, part_no = %s,
+            SET review_date = %s, machine_id = %s, op_id = %s, part_no = %s,
                 planned_qty = %s, produced_qty = %s, remarks = %s, updated_by = %s
             WHERE id = %s
         """
         execute(
             sql,
-            (review_date, machine_id, part_no, planned_qty, produced_qty, remarks or "", updated_by, row_id),
+            (
+                review_date,
+                machine_id,
+                op_id,
+                part_no,
+                planned_qty,
+                produced_qty,
+                remarks or "",
+                updated_by,
+                row_id,
+            ),
         )
         one = fetch_one("SELECT id FROM dpr_daily_review WHERE id = %s", (row_id,))
         if not one:
@@ -2403,9 +2465,10 @@ def upsert_dpr_row(
 
     sql = """
         INSERT INTO dpr_daily_review
-            (review_date, machine_id, part_no, planned_qty, produced_qty, remarks, created_by, updated_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks, created_by, updated_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
+            op_id = VALUES(op_id),
             planned_qty = VALUES(planned_qty),
             produced_qty = VALUES(produced_qty),
             remarks = VALUES(remarks),
@@ -2416,6 +2479,7 @@ def upsert_dpr_row(
         (
             review_date,
             machine_id,
+            op_id,
             part_no,
             planned_qty,
             produced_qty,

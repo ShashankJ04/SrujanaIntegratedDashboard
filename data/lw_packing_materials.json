@@ -1,0 +1,37 @@
+{
+  "trays": [
+    { "itemCode": "SE-1-S-7C-1" },
+    { "itemCode": "SE-1-S-7C-2" },
+    { "itemCode": "SE-1-S-7C-3" },
+    { "itemCode": "SE-1-S-6C-1" },
+    { "itemCode": "SE-1-S-14C-3" },
+    { "itemCode": "SE-1-S-24C-1" },
+    { "itemCode": "SE-1-S-20C-1" },
+    { "itemCode": "SE-1-S-15C-1" },
+    { "itemCode": "SE-1-S-12C-1" },
+    { "itemCode": "SE-1-S-18C-1" },
+    { "itemCode": "SE-1-S-16C-1" },
+    { "itemCode": "SE-1-S-25C-1" },
+    { "itemCode": "SE-1-2P-6C-1" },
+    { "itemCode": "SE-1-S-8C-1" },
+    { "itemCode": "SE-1-S-6C-2" },
+    { "itemCode": "SE-1-4P-4C-1" },
+    { "itemCode": "SE-1-S-14C-1" },
+    { "itemCode": "SE-1-S-14C-2" },
+    { "itemCode": "SE-1-S-28C-1" },
+    { "itemCode": "SE-1-S-28C-2" },
+    { "itemCode": "SE-1-S-121C-1" },
+    { "itemCode": "SE-1-2P-14C-1" },
+    { "itemCode": "SE-1-2P-15C-1" },
+    { "itemCode": "SE-2-S-88C-1" },
+    { "itemCode": "SE-2-S-88C-2" },
+    { "itemCode": "SE-2-S-130C-1" }
+  ],
+  "cartons": [
+    { "itemCode": "SE-5PC-1" },
+    { "itemCode": "SE-5PC-2" },
+    { "itemCode": "SE-5PC-3" },
+    { "itemCode": "SE-5PC-4" },
+    { "itemCode": "SE-5PC-5" }
+  ]
+}

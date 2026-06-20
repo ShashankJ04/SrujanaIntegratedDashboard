@@ -26,6 +26,7 @@ from .models import (
     refresh_dashboard_base_cache,
     upsert_buffer_config,
     get_dpr_machine_options,
+    get_dpr_operator_options,
     fetch_dpr_machine_qr_row,
     fetch_dpr_machine_by_qr_token,
     get_dpr_qr_storage_dir,
@@ -253,6 +254,7 @@ def dpr_options() -> Any:
     return jsonify(
         {
             "machines": get_dpr_machine_options(),
+            "operators": get_dpr_operator_options(),
             "parts": get_dpr_part_options(),
         }
     )
@@ -387,6 +389,17 @@ def dpr_rows_save() -> Any:
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid id"}), 400
 
+    op_id_raw = payload.get("operatorId")
+    op_id: Any = None
+    if op_id_raw is not None and op_id_raw != "":
+        try:
+            op_id = int(op_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid operatorId"}), 400
+        valid_ops = {o["id"] for o in get_dpr_operator_options()}
+        if op_id not in valid_ops:
+            return jsonify({"error": "Invalid operator"}), 400
+
     updated_by = str(g.current_user.get("login") or "")
 
     try:
@@ -399,6 +412,7 @@ def dpr_rows_save() -> Any:
             remarks=remarks,
             updated_by=updated_by,
             row_id=rid,
+            op_id=op_id,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

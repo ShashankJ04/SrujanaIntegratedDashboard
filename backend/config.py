@@ -106,6 +106,10 @@ class Config:
         os.environ.get("REPORTS_STORE_FILE", ""),
         os.path.join(APP_DATA_DIR, "reports.json"),
     )
+    LW_PACKING_MATERIALS_FILE = resolve_runtime_path(
+        os.environ.get("LW_PACKING_MATERIALS_FILE", ""),
+        os.path.join(APP_DATA_DIR, "lw_packing_materials.json"),
+    )
 
     DPR_QR_STORAGE_DIR = resolve_runtime_path(
         os.environ.get("DPR_QR_STORAGE_DIR", ""),
@@ -159,6 +163,10 @@ class Config:
         "LW_PART_INSPECTION_PARENT_IDS",
         "1624,1775,1776,1782,1656,1654,1655,1668,1538,1539,1540",
     )
+    LW_PACKING_TRAY_ITEM_CODE = os.environ.get("LW_PACKING_TRAY_ITEM_CODE", "").strip()
+    LW_PACKING_CARTON_ITEM_CODE = os.environ.get("LW_PACKING_CARTON_ITEM_CODE", "").strip()
+    LW_WELDING_MACHINE_TYPE = int(os.environ.get("LW_WELDING_MACHINE_TYPE", "3"))
+    LW_SUB_ASSEMBLY_MACHINE_TYPE = int(os.environ.get("LW_SUB_ASSEMBLY_MACHINE_TYPE", "4"))
 
 
 def get_config():
