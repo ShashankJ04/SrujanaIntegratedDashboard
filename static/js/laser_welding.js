@@ -3,6 +3,14 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 window.LaserWeldingPage = (() => {
+  const GRID_PRIMARY_QTY_LABELS = {
+    inspection: 'Inspected',
+    sa_cleaning: 'Inspected',
+    lw_cleaning: 'Inspected',
+    qa: 'Disposition',
+    packing: 'Consumed',
+  };
+
   const TAB_LABELS = {
     inspection: 'Inspection',
     sub_assembly: 'Sub-Assembly',
@@ -196,6 +204,50 @@ window.LaserWeldingPage = (() => {
     };
   }
 
+  function sumLinesQaScrap(lines) {
+    let qa = 0;
+    let scrap = 0;
+    (lines || []).forEach(ln => {
+      qa += Number(ln.qaQty) || 0;
+      scrap += Number(ln.scrapQty) || 0;
+    });
+    return { qa, scrap };
+  }
+
+  function formatQtyDisplay(n) {
+    const v = Number(n) || 0;
+    return v > 0 ? String(v) : '—';
+  }
+
+  function primaryQtyCellHtml(row) {
+    return formatQtyDisplay(row.totalQty ?? row.weldQty);
+  }
+
+  function qaTotalCellHtml(row) {
+    if (!row.isProcessed) return '—';
+    const { qa } = sumLinesQaScrap(row.lines);
+    return formatQtyDisplay(qa);
+  }
+
+  function scrapTotalCellHtml(row) {
+    if (!row.isProcessed) return '—';
+    const { scrap } = sumLinesQaScrap(row.lines);
+    return formatQtyDisplay(scrap);
+  }
+
+  function qtyMetaPlaceholderCells() {
+    return '<td class="lw-col-qa">—</td><td class="lw-col-scrap">—</td>';
+  }
+
+  function packLotCellHtml(row) {
+    if (!row.packLotNo) return '—';
+    return `<span class="lw-lot-badge" title="Packed output lot">${escapeHtml(row.packLotNo)}</span>`;
+  }
+
+  function lotPackPlaceholderCell() {
+    return '<td class="lw-col-lot lw-col-lot--pack">—</td>';
+  }
+
   function lotAvailableQty(lot) {
     if (!lot) return 0;
     const avail = Number(lot.availableQty);
@@ -244,6 +296,13 @@ window.LaserWeldingPage = (() => {
     _reworkTargetLotsCache = {};
     _qaLotsCache = {};
     _packingLotsCache = {};
+  }
+
+  function updateGridTableHeaders() {
+    const primaryTh = document.querySelector('#lw-table-head .lw-col-qty-primary');
+    if (primaryTh) {
+      primaryTh.textContent = GRID_PRIMARY_QTY_LABELS[_tab] || 'Inspected';
+    }
   }
 
   function isLaserWeldingVisible() {
@@ -324,47 +383,7 @@ window.LaserWeldingPage = (() => {
   }
 
   function tableDisplayRows() {
-    const rows = filteredRows();
-    const map = new Map();
-    const order = [];
-    rows.forEach(row => {
-      const gk = groupDisplayKey(row);
-      if (!map.has(gk)) {
-        map.set(gk, {
-          rowKey: `${_tab}:group:${gk}`,
-          partNumber: row.partNumber || row.partNo,
-          partName: row.partName,
-          productName: row.productName,
-          bomId: row.bomId,
-          operatorId: row.operatorId,
-          operatorName: row.operatorName,
-          isDraft: !!row.isDraft,
-          isProcessed: !!row.isProcessed,
-          draftLineId: row.isDraft ? (row.draftLineId || row.lineId) : null,
-          lineId: row.isDraft ? (row.draftLineId || row.lineId) : null,
-          timeTakenMinutes: row.timeTakenMinutes ?? null,
-          totalQty: row.totalQty ?? 0,
-          lines: [...(row.lines || [])],
-          batchMode: row.batchMode,
-          isSubAssembly: row.isSubAssembly,
-          subAssemblyPartNo: row.subAssemblyPartNo,
-          _hasOt: rowHasOt(row),
-        });
-        order.push(gk);
-        return;
-      }
-      mergeGroupedDisplayRow(map.get(gk), row);
-    });
-    return order.map(gk => {
-      const g = map.get(gk);
-      if (g.lines?.length) {
-        g.totalQty = g.lines.reduce((sum, ln) => {
-          return sum + (Number(ln.inspectedQty) || Number(ln.qaQty) || Number(ln.packQty) || 0);
-        }, 0);
-      }
-      if (g._hasOt) g.otFlag = 'Y';
-      return g;
-    });
+    return filteredRows();
   }
 
   function findRow(rowKey) {
@@ -418,21 +437,60 @@ window.LaserWeldingPage = (() => {
     return withTime ? formatTimeTaken(withTime.timeTakenMinutes) : '';
   }
 
+  function detailRemarkColumnsForTab(tab) {
+    const t = tab || _tab;
+    if (t === 'qa') return { scrap: true, rework: true };
+    if (ASM_TABS.has(t) || SA_TABS.has(t)) return { scrap: true, rework: false };
+    return { scrap: true, rework: false };
+  }
+
+  function detailRemarkColCount(tab) {
+    const cols = detailRemarkColumnsForTab(tab);
+    return (cols.scrap ? 1 : 0) + (cols.rework ? 1 : 0);
+  }
+
+  function detailRemarkHeaderHtml(tab) {
+    const cols = detailRemarkColumnsForTab(tab);
+    let html = '';
+    if (cols.scrap) html += '<th class="lw-detail-col-remark">Scrap remark</th>';
+    if (cols.rework) html += '<th class="lw-detail-col-remark">Rework remark</th>';
+    return html;
+  }
+
+  function detailRemarkCellsHtml(ln, tab) {
+    const cols = detailRemarkColumnsForTab(tab);
+    let html = '';
+    if (cols.scrap) {
+      const scrap = Number(ln.scrapQty) || 0;
+      const remark = String(ln.scrapRemark || '').trim();
+      html += `<td class="lw-detail-col-remark">${scrap > 0 && remark ? escapeHtml(remark) : '—'}</td>`;
+    }
+    if (cols.rework) {
+      const rework = Number(ln.reworkQty) || 0;
+      const remark = String(ln.reworkRemark || '').trim();
+      html += `<td class="lw-detail-col-remark">${rework > 0 && remark ? escapeHtml(remark) : '—'}</td>`;
+    }
+    return html;
+  }
+
   function detailLinesHtml(row) {
     const lines = row.lines || [];
+    const remarkCols = detailRemarkColCount(_tab);
+    let baseCols = 4;
     let html = '<table class="ti-table lw-detail-table"><thead><tr>';
     if (_tab === 'qa') {
-      html += '<th>Lot No</th><th class="text-right">Passed</th><th class="text-right">Scrap</th><th class="text-right">Rework</th>';
+      html += '<th>Lot No</th><th>Passed</th><th>Scrap</th><th>Rework</th>';
     } else if (_tab === 'packing') {
-      html += '<th>Lot No</th><th class="text-right">Packed</th>';
+      html += '<th>Lot No</th><th>Consumed</th><th>QA</th><th>Scrap</th>';
     } else {
       html += '<th>Lot No</th>';
-      html += '<th class="text-right">Inspected QTY</th><th class="text-right">QA</th><th class="text-right">Scrap</th>';
+      html += '<th>Inspected QTY</th><th>QA</th><th>Scrap</th>';
     }
+    html += detailRemarkHeaderHtml(_tab);
     html += '</tr></thead><tbody>';
 
     if (!lines.length) {
-      html += '<tr><td colspan="4" class="lw-detail-empty">No lot lines saved.</td></tr>';
+      html += `<tr><td colspan="${baseCols + remarkCols}" class="lw-detail-empty">No lot lines saved.</td></tr>`;
     }
 
     lines.forEach(ln => {
@@ -442,24 +500,43 @@ window.LaserWeldingPage = (() => {
         const passed = Number(ln.qaQty) || 0;
         const scrap = Number(ln.scrapQty) || 0;
         const rework = Number(ln.reworkQty) || 0;
-        html += `<td class="text-right">${passed > 0 ? passed : '—'}</td>`;
-        html += `<td class="text-right">${scrap > 0 ? scrap : '—'}</td>`;
-        html += `<td class="text-right">${rework > 0 ? rework : '—'}</td>`;
+        html += `<td>${passed > 0 ? passed : '—'}</td>`;
+        html += `<td>${scrap > 0 ? scrap : '—'}</td>`;
+        html += `<td>${rework > 0 ? rework : '—'}</td>`;
       } else if (_tab === 'packing') {
-        const packed = Number(ln.inspectedQty) || Number(ln.packQty) || 0;
-        html += `<td class="text-right">${packed > 0 ? packed : '—'}</td>`;
+        const consumed = Number(ln.inspectedQty) || Number(ln.packQty) || 0;
+        const qa = Number(ln.qaQty) || 0;
+        const scrap = Number(ln.scrapQty) || 0;
+        html += `<td>${consumed > 0 ? consumed : '—'}</td>`;
+        html += `<td>${qa > 0 ? qa : '—'}</td>`;
+        html += `<td>${scrap > 0 ? scrap : '—'}</td>`;
       } else {
         const insp = Number(ln.inspectedQty) || 0;
         const qa = Number(ln.qaQty) || 0;
         const scrap = Number(ln.scrapQty) || 0;
-        html += `<td class="text-right">${insp > 0 ? insp : '—'}</td>`;
-        html += `<td class="text-right">${qa > 0 ? qa : '—'}</td>`;
-        html += `<td class="text-right">${scrap > 0 ? scrap : '—'}</td>`;
+        html += `<td>${insp > 0 ? insp : '—'}</td>`;
+        html += `<td>${qa > 0 ? qa : '—'}</td>`;
+        html += `<td>${scrap > 0 ? scrap : '—'}</td>`;
       }
+      html += detailRemarkCellsHtml(ln, _tab);
       html += '</tr>';
     });
 
     html += '</tbody></table>';
+
+    if (_tab === 'packing' && row.packMaterials?.length) {
+      html += '<table class="ti-table lw-detail-table lw-detail-table--materials"><thead><tr>';
+      html += '<th>Material</th><th>Qty</th>';
+      html += '</tr></thead><tbody>';
+      row.packMaterials.forEach(ln => {
+        html += '<tr>';
+        html += `<td>${escapeHtml(ln.partNumber || '—')}</td>`;
+        html += `<td>${Number(ln.inspectedQty) || '—'}</td>`;
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+
     return html;
   }
 
@@ -520,13 +597,15 @@ window.LaserWeldingPage = (() => {
     const partName = row.partName || partNameFor(partNo);
     const operatorName = row.operatorName || '—';
     const timeStr = rowTimeTakenDisplay(row) || '—';
-    const qty = Number(row.totalQty) || 0;
 
     tr.innerHTML = `
       <td class="lw-col-part val-bold" title="${escapeAttr(partNo)}">${escapeHtml(partNo)}</td>
       <td class="lw-col-name" title="${escapeAttr(partName)}">${escapeHtml(partName || '—')}</td>
       <td class="lw-col-operator" title="${escapeAttr(operatorName)}">${escapeHtml(operatorName)}</td>
-      <td class="lw-col-qty text-right">${qty > 0 ? qty : '—'}</td>
+      <td class="lw-col-qty">${primaryQtyCellHtml(row)}</td>
+      <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
+      <td class="lw-col-scrap">${scrapTotalCellHtml(row)}</td>
+      <td class="lw-col-lot lw-col-lot--pack">${packLotCellHtml(row)}</td>
       <td class="lw-col-time">${escapeHtml(timeStr)}</td>
       <td class="lw-col-ot">${otBadgeHtml(row)}</td>
       <td class="lw-col-actions lw-actions-cell">${buildActionsHtml(row)}</td>
@@ -540,7 +619,7 @@ window.LaserWeldingPage = (() => {
     tr.dataset.detailFor = row.rowKey;
 
     const td = document.createElement('td');
-    td.colSpan = 7;
+    td.colSpan = 10;
     td.className = 'lw-detail-cell';
     td.innerHTML = `<div class="lw-detail-inline lw-detail-body" data-row-key="${escapeAttr(row.rowKey)}">${detailLinesHtml(row)}</div>`;
     tr.appendChild(td);
@@ -601,6 +680,8 @@ window.LaserWeldingPage = (() => {
         <select class="ti-input lw-new-operator">${operatorSelectHtml()}</select>
       </td>
       <td class="lw-col-qty">—</td>
+      ${qtyMetaPlaceholderCells()}
+      ${lotPackPlaceholderCell()}
       <td class="lw-col-time">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
@@ -638,6 +719,8 @@ window.LaserWeldingPage = (() => {
         <select class="ti-input lw-new-operator">${operatorSelectHtml()}</select>
       </td>
       <td class="lw-col-qty">—</td>
+      ${qtyMetaPlaceholderCells()}
+      ${lotPackPlaceholderCell()}
       <td class="lw-col-time">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
@@ -929,7 +1012,9 @@ window.LaserWeldingPage = (() => {
         && Number(ln?.qaPassed) <= 0 && Number(ln?.scrapQty) <= 0 && Number(ln?.reworkQty) <= 0;
     }
     if (_prodModalMode === 'packing') {
-      return !ln?.targetLotId && Number(ln?.packQty) <= 0;
+      return !ln?.targetLotId
+        && Number(ln?.inspectedQty) <= 0 && Number(ln?.packQty) <= 0
+        && Number(ln?.qaQty) <= 0 && Number(ln?.scrapQty) <= 0;
     }
     return !ln?.sourceLotNo && !ln?.targetLotId
       && Number(ln?.inspectedQty) <= 0 && Number(ln?.qaQty) <= 0 && Number(ln?.scrapQty) <= 0;
@@ -1086,16 +1171,43 @@ window.LaserWeldingPage = (() => {
   }
 
   function syncPackLineCaps(idx) {
-    const packInp = $(`.lw-prod-line-pack[data-idx="${idx}"]`);
-    if (!packInp) return;
-    let pack = parseInt(packInp.value, 10) || 0;
-    const max = Number(packInp.max) || 0;
-    if (max > 0 && pack > max) {
-      pack = max;
-      packInp.value = String(pack);
-      showSnackbar('Pack QTY cannot exceed available quantity', 'warning');
+    const consumedInp = $(`.lw-prod-line-pack[data-idx="${idx}"]`);
+    const qaInp = $(`.lw-prod-line-qa[data-idx="${idx}"]`);
+    const scrapInp = $(`.lw-prod-line-scrap[data-idx="${idx}"]`);
+    if (!consumedInp) return;
+
+    const max = Number(consumedInp.max) || 0;
+    let consumed = parseInt(consumedInp.value, 10) || 0;
+    let qa = parseInt(qaInp?.value, 10) || 0;
+    let scrap = parseInt(scrapInp?.value, 10) || 0;
+
+    if (max > 0 && consumed > max) {
+      consumed = max;
+      consumedInp.value = String(consumed);
+      showSnackbar('Consumed cannot exceed available quantity', 'warning');
     }
-    if (_prodModalLines[idx]) _prodModalLines[idx].packQty = pack;
+    if (qa + scrap > consumed) {
+      const remainder = consumed;
+      if (qa > remainder) qa = remainder;
+      scrap = Math.min(scrap, remainder - qa);
+      showSnackbar('QA + Scrap cannot exceed Consumed', 'warning');
+    }
+
+    consumedInp.value = String(consumed);
+    if (qaInp) qaInp.max = String(consumed);
+    if (scrapInp) scrapInp.max = String(Math.max(0, consumed - qa));
+    if (qaInp) qaInp.value = String(qa);
+    if (scrapInp) scrapInp.value = String(scrap);
+
+    const scrapWrap = $(`.lw-prod-scrap-remark-wrap[data-idx="${idx}"]`);
+    if (scrapWrap) scrapWrap.style.display = scrap > 0 ? '' : 'none';
+
+    if (_prodModalLines[idx]) {
+      _prodModalLines[idx].packQty = consumed;
+      _prodModalLines[idx].inspectedQty = consumed;
+      _prodModalLines[idx].qaQty = qa;
+      _prodModalLines[idx].scrapQty = scrap;
+    }
   }
 
   function renderProductionModalLines() {
@@ -1114,17 +1226,19 @@ window.LaserWeldingPage = (() => {
     let html = '<table class="ti-table lw-prod-modal-table"><thead><tr>';
 
     if (_prodModalMode === 'qa') {
-      html += '<th>Lot</th><th class="text-right">QA QTY</th>';
-      html += '<th class="text-right">Passed</th><th class="text-right">Scrap</th><th class="text-right">Rework</th>';
+      html += '<th>Lot</th><th>QA QTY</th>';
+      html += '<th>Passed</th><th>Scrap</th><th>Rework</th>';
       html += '<th class="lw-prod-col-remark">Scrap remark</th><th class="lw-prod-col-remark">Rework remark</th><th class="lw-prod-col-action"></th>';
     } else if (_prodModalMode === 'packing') {
-      html += '<th>Lot</th><th class="text-right">Available</th><th class="text-right">Pack QTY</th><th></th>';
+      html += '<th>Lot</th><th>Available</th><th>Consumed</th>';
+      html += '<th>QA</th><th>Scrap</th>';
+      html += '<th class="lw-prod-col-remark">Scrap remark</th><th></th>';
     } else if (isBo) {
-      html += '<th class="text-right">Available</th>';
-      html += '<th class="text-right">Inspected</th><th class="text-right">Scrap</th><th class="lw-prod-col-remark">Scrap remark</th>';
+      html += '<th>Available</th>';
+      html += '<th>Inspected</th><th>Scrap</th><th class="lw-prod-col-remark">Scrap remark</th>';
     } else {
-      html += '<th>Lot No</th><th class="text-right">Available</th>';
-      html += '<th class="text-right">Inspected</th><th class="text-right">QA</th><th class="text-right">Scrap</th>';
+      html += '<th>Lot No</th><th>Available</th>';
+      html += '<th>Inspected</th><th>QA</th><th>Scrap</th>';
       html += '<th class="lw-prod-col-remark">Scrap remark</th><th class="lw-prod-col-action"></th>';
     }
     html += '</tr></thead><tbody>';
@@ -1137,9 +1251,9 @@ window.LaserWeldingPage = (() => {
       const scrap = Number(ln.scrapQty) || 0;
       const remark = escapeAttr(ln.scrapRemark || '');
       html += '<tr>';
-      html += `<td class="text-right lw-prod-line-comp" data-idx="0">${max || '—'}</td>`;
-      html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-insp" data-idx="0" min="0" max="${max}" value="${insp}" /></td>`;
-      html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="0" min="0" max="${insp}" value="${scrap}" /></td>`;
+      html += `<td class="lw-prod-line-comp" data-idx="0">${max || '—'}</td>`;
+      html += `<td><input type="number" class="ti-input lw-prod-line-insp" data-idx="0" min="0" max="${max}" value="${insp}" /></td>`;
+      html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="0" min="0" max="${insp}" value="${scrap}" /></td>`;
       html += `<td><div class="lw-prod-scrap-remark-wrap" data-idx="0" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="0" value="${remark}" placeholder="Scrap remark" /></div></td>`;
       html += '</tr>';
     } else {
@@ -1155,10 +1269,10 @@ window.LaserWeldingPage = (() => {
           html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
           html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
           html += '</select></td>';
-          html += `<td class="text-right lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-          html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-passed" data-idx="${idx}" min="0" max="${max}" value="${passed}" /></td>`;
-          html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" value="${scrap}" /></td>`;
-          html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-rework" data-idx="${idx}" min="0" value="${rework}" /></td>`;
+          html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-passed" data-idx="${idx}" min="0" max="${max}" value="${passed}" /></td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" value="${scrap}" /></td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-rework" data-idx="${idx}" min="0" value="${rework}" /></td>`;
           html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remark" /></div></td>`;
           html += `<td class="lw-prod-col-remark"><div class="lw-prod-rework-remark-wrap" data-idx="${idx}" style="display:${rework > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-rework-remark" data-idx="${idx}" value="${escapeAttr(ln.reworkRemark || '')}" placeholder="Rework remark" /></div></td>`;
           html += !isTrailingEmpty
@@ -1170,13 +1284,19 @@ window.LaserWeldingPage = (() => {
 
         if (_prodModalMode === 'packing') {
           const max = lotAvailableQty(ln);
-          const pack = Number(ln.packQty) || 0;
+          const consumed = Number(ln.inspectedQty) || Number(ln.packQty) || 0;
+          const qa = Number(ln.qaQty) || 0;
+          const scrap = Number(ln.scrapQty) || 0;
+          const scrapMax = Math.max(0, consumed - qa);
           html += '<tr>';
           html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
           html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
           html += '</select></td>';
-          html += `<td class="text-right lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-          html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-pack" data-idx="${idx}" min="0" max="${max}" value="${pack}" /></td>`;
+          html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-pack" data-idx="${idx}" min="0" max="${max}" value="${consumed}" /></td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${consumed}" value="${qa}" /></td>`;
+          html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
+          html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remark" /></div></td>`;
           html += !isTrailingEmpty
             ? `<td><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
             : '<td></td>';
@@ -1193,10 +1313,10 @@ window.LaserWeldingPage = (() => {
         html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
         html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
         html += '</select></td>';
-        html += `<td class="text-right lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-        html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-insp" data-idx="${idx}" min="0" max="${max}" value="${insp}" /></td>`;
-        html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${insp}" value="${qa}" /></td>`;
-        html += `<td class="text-right"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
+        html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+        html += `<td><input type="number" class="ti-input lw-prod-line-insp" data-idx="${idx}" min="0" max="${max}" value="${insp}" /></td>`;
+        html += `<td><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${insp}" value="${qa}" /></td>`;
+        html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
         html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remark" /></div></td>`;
         html += !isTrailingEmpty
           ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
@@ -1375,15 +1495,27 @@ window.LaserWeldingPage = (() => {
       $$('.lw-prod-line-lot').forEach(sel => {
         const idx = Number(sel.getAttribute('data-idx'));
         const targetLotId = parseInt(sel.value, 10) || null;
-        const packQty = parseInt($(`.lw-prod-line-pack[data-idx="${idx}"]`)?.value, 10) || 0;
+        const consumed = parseInt($(`.lw-prod-line-pack[data-idx="${idx}"]`)?.value, 10) || 0;
+        const qa = parseInt($(`.lw-prod-line-qa[data-idx="${idx}"]`)?.value, 10) || 0;
+        const scrap = parseInt($(`.lw-prod-line-scrap[data-idx="${idx}"]`)?.value, 10) || 0;
+        const scrapRemark = ($(`.lw-prod-line-scrap-remark[data-idx="${idx}"]`)?.value || '').trim();
         const match = packLots.find(l => Number(l.lotId) === targetLotId);
         const lotNo = match?.newLotNo || '';
         const max = Number(match?.totalOkayed || match?.noOfComp) || 0;
-        if (packQty > max && max > 0) {
-          throw new Error(`Pack QTY cannot exceed available (${max}) for lot ${lotNo}`);
+        if (consumed > max && max > 0) {
+          throw new Error(`Consumed cannot exceed available (${max}) for lot ${lotNo}`);
         }
-        if (targetLotId && packQty > 0) {
-          lines.push({ targetLotId, packQty, inspectedQty: packQty });
+        if (qa + scrap > consumed) {
+          throw new Error(`QA + Scrap cannot exceed Consumed for lot ${lotNo || targetLotId}`);
+        }
+        if (targetLotId && consumed > 0) {
+          lines.push({
+            targetLotId,
+            inspectedQty: consumed,
+            qaQty: qa,
+            scrapQty: scrap,
+            scrapRemark: scrap > 0 ? scrapRemark : undefined,
+          });
         }
       });
       return lines;
@@ -1502,7 +1634,7 @@ window.LaserWeldingPage = (() => {
       }
     } else if (_prodModalMode === 'packing') {
       if (!lines.length) {
-        showSnackbar('Enter at least one lot with Pack QTY > 0', 'warning');
+        showSnackbar('Enter at least one lot with Consumed > 0', 'warning');
         return;
       }
     } else {
@@ -1555,7 +1687,9 @@ window.LaserWeldingPage = (() => {
         sa_cleaning: 'SA cleaning inspection saved',
         lw_cleaning: 'LW cleaning inspection saved',
         qa: 'QA disposition saved',
-        packing: 'Packing saved',
+        packing: data.packLotNo
+          ? `Packing saved — PCK lot: ${data.packLotNo}`
+          : 'Packing saved',
       };
       showSnackbar(successMsgs[_prodModalMode] || 'Saved', 'success');
       closeProductionModal();
@@ -1618,10 +1752,12 @@ window.LaserWeldingPage = (() => {
     const inspInp = $(`.lw-prod-line-insp[data-idx="${idx}"]`);
     const passedInp = $(`.lw-prod-line-passed[data-idx="${idx}"]`);
     const packInp = $(`.lw-prod-line-pack[data-idx="${idx}"]`);
+    const qaInp = $(`.lw-prod-line-qa[data-idx="${idx}"]`);
     if (compEl) compEl.textContent = String(_prodModalLines[idx].noOfComp || '—');
     if (inspInp) inspInp.max = String(_prodModalLines[idx].noOfComp || 0);
     if (passedInp) passedInp.max = String(_prodModalLines[idx].noOfComp || 0);
     if (packInp) packInp.max = String(_prodModalLines[idx].noOfComp || 0);
+    if (qaInp && _prodModalMode === 'packing') qaInp.max = String(packInp?.value || _prodModalLines[idx].noOfComp || 0);
     syncProdLineQtyCaps(idx, 'insp');
 
     const hasLot = (_prodModalMode === 'production')
@@ -1816,7 +1952,8 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-name" title="${escapeAttr(product)}">${escapeHtml(product || '—')}</td>
       <td class="lw-col-operator lw-edit-cell">${operatorCell}</td>
       <td class="lw-col-machine lw-edit-cell">${machineCell}</td>
-      <td class="lw-col-qty text-right">${pendingQty > 0 ? pendingQty : '—'}</td>
+      <td class="lw-col-qty">${pendingQty > 0 ? pendingQty : '—'}</td>
+      ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
@@ -1854,7 +1991,8 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-part" title="${escapeAttr(saPart)}">${escapeHtml(saPart)}</td>
       <td class="lw-col-operator lw-edit-cell">${operatorCell}</td>
       <td class="lw-col-machine lw-edit-cell">${machineCell}</td>
-      <td class="lw-col-qty text-right">${pendingQty > 0 ? pendingQty : '—'}</td>
+      <td class="lw-col-qty">${pendingQty > 0 ? pendingQty : '—'}</td>
+      ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
@@ -1886,7 +2024,9 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-part val-bold" title="${escapeAttr(partNo)}">${escapeHtml(partNo)}</td>
       <td class="lw-col-name" title="${escapeAttr(partName)}">${escapeHtml(partName || '—')}</td>
       <td class="lw-col-operator lw-edit-cell">${operatorCell}</td>
-      <td class="lw-col-qty text-right">${pendingQty > 0 ? pendingQty : '—'}</td>
+      <td class="lw-col-qty">${pendingQty > 0 ? pendingQty : '—'}</td>
+      ${qtyMetaPlaceholderCells()}
+      ${lotPackPlaceholderCell()}
       <td class="lw-col-time">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
@@ -1979,22 +2119,27 @@ window.LaserWeldingPage = (() => {
 
   function asmDetailLinesHtml(row) {
     const lines = row.lines || [];
+    const baseCols = 5;
+    const remarkCols = detailRemarkColCount(_tab);
+    const totalCols = baseCols + remarkCols;
     let html = '<table class="ti-table lw-detail-table"><thead><tr>';
-    html += '<th>Child Part</th><th>Child Lot</th><th class="text-right">Consumed</th><th class="text-right">QA</th><th class="text-right">Scrap</th>';
+    html += '<th>Child Part</th><th>Child Lot</th><th>Consumed</th><th>QA</th><th>Scrap</th>';
+    html += detailRemarkHeaderHtml(_tab);
     html += '</tr></thead><tbody>';
     if (!lines.length) {
-      html += '<tr><td colspan="5" class="lw-detail-empty">No consumption lines.</td></tr>';
+      html += `<tr><td colspan="${totalCols}" class="lw-detail-empty">No consumption lines.</td></tr>`;
     }
     lines.forEach(ln => {
       html += '<tr>';
       html += `<td>${escapeHtml(ln.partNumber || '—')}</td>`;
       html += `<td>${escapeHtml(ln.sourceLotNo || '—')}</td>`;
-      html += `<td class="text-right">${Number(ln.inspectedQty) || 0}</td>`;
-      html += `<td class="text-right">${Number(ln.qaQty) || 0}</td>`;
-      html += `<td class="text-right">${Number(ln.scrapQty) || 0}</td>`;
+      html += `<td>${Number(ln.inspectedQty) || 0}</td>`;
+      html += `<td>${Number(ln.qaQty) || 0}</td>`;
+      html += `<td>${Number(ln.scrapQty) || 0}</td>`;
+      html += detailRemarkCellsHtml(ln, _tab);
       html += '</tr>';
       if (ln.nestedLines?.length) {
-        html += '<tr class="lw-nested-detail-row"><td colspan="5">';
+        html += `<tr class="lw-nested-detail-row"><td colspan="${totalCols}">`;
         html += nestedLinesTable(ln.nestedLines);
         html += '</td></tr>';
       }
@@ -2028,14 +2173,15 @@ window.LaserWeldingPage = (() => {
     const operatorName = row.operatorName || '—';
     const machineName = row.machineName || '—';
     const customerName = row.customerName || '—';
-    const qty = Number(row.weldQty ?? row.totalQty) || 0;
     tr.innerHTML = `
       <td class="lw-col-customer" title="${escapeAttr(customerName)}">${escapeHtml(customerName)}</td>
       <td class="lw-col-bom val-bold" title="${escapeAttr(row.partNumber)}">${escapeHtml(row.partNumber)}</td>
       <td class="lw-col-name" title="${escapeAttr(product)}">${escapeHtml(product || '—')}</td>
       <td class="lw-col-operator" title="${escapeAttr(operatorName)}">${escapeHtml(operatorName)}</td>
       <td class="lw-col-machine" title="${escapeAttr(machineName)}">${escapeHtml(machineName)}</td>
-      <td class="lw-col-qty text-right">${qty > 0 ? qty : '—'}</td>
+      <td class="lw-col-qty">${primaryQtyCellHtml(row)}</td>
+      <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
+      <td class="lw-col-scrap">${scrapTotalCellHtml(row)}</td>
       <td class="lw-col-lot">${row.newLotNo ? `<span class="lw-lot-badge">${escapeHtml(row.newLotNo)}</span>` : '—'}</td>
       <td class="lw-col-ot">${otBadgeHtml(row)}</td>
       <td class="lw-col-actions lw-actions-cell">${buildAsmActionsHtml(row)}</td>
@@ -2048,7 +2194,7 @@ window.LaserWeldingPage = (() => {
     tr.className = 'lw-detail-row';
     tr.dataset.detailFor = row.rowKey;
     const td = document.createElement('td');
-    td.colSpan = 9;
+    td.colSpan = 11;
     td.className = 'lw-detail-cell';
     td.innerHTML = `<div class="lw-detail-inline lw-detail-body">${asmDetailLinesHtml(row)}</div>`;
     tr.appendChild(td);
@@ -2120,6 +2266,7 @@ window.LaserWeldingPage = (() => {
         <select class="ti-input lw-asm-new-machine">${machineSelectHtml()}</select>
       </td>
       <td class="lw-col-qty">—</td>
+      ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
@@ -2286,14 +2433,15 @@ window.LaserWeldingPage = (() => {
       + (row.isDraft ? ' lw-data-row--draft' : '');
     tr.dataset.rowKey = row.rowKey;
     const saPart = row.subAssemblyPartNo || row.partName || '—';
-    const qty = Number(row.weldQty ?? row.totalQty) || 0;
     tr.innerHTML = `
       <td class="lw-col-customer" title="${escapeAttr(row.customerName || '')}">${escapeHtml(row.customerName || '—')}</td>
       <td class="lw-col-bom val-bold" title="${escapeAttr(row.partNumber)}">${escapeHtml(row.partNumber || '—')}</td>
       <td class="lw-col-part" title="${escapeAttr(saPart)}">${escapeHtml(saPart)}</td>
       <td class="lw-col-operator" title="${escapeAttr(row.operatorName || '')}">${escapeHtml(row.operatorName || '—')}</td>
       <td class="lw-col-machine" title="${escapeAttr(row.machineName || '')}">${escapeHtml(row.machineName || '—')}</td>
-      <td class="lw-col-qty text-right">${qty > 0 ? qty : '—'}</td>
+      <td class="lw-col-qty">${primaryQtyCellHtml(row)}</td>
+      <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
+      <td class="lw-col-scrap">${scrapTotalCellHtml(row)}</td>
       <td class="lw-col-lot">${row.newLotNo ? `<span class="lw-lot-badge">${escapeHtml(row.newLotNo)}</span>` : '—'}</td>
       <td class="lw-col-ot">${otBadgeHtml(row)}</td>
       <td class="lw-col-actions lw-actions-cell">${buildAsmActionsHtml(row, isReworkSubAssemblyMode())}</td>
@@ -2306,7 +2454,7 @@ window.LaserWeldingPage = (() => {
     tr.className = 'lw-detail-row';
     tr.dataset.detailFor = row.rowKey;
     const td = document.createElement('td');
-    td.colSpan = 9;
+    td.colSpan = 11;
     td.className = 'lw-detail-cell';
     td.innerHTML = `<div class="lw-detail-inline lw-detail-body">${asmDetailLinesHtml(row)}</div>`;
     tr.appendChild(td);
@@ -2435,6 +2583,7 @@ window.LaserWeldingPage = (() => {
         <select class="ti-input lw-sa-new-machine">${saMachineSelectHtml()}</select>
       </td>
       <td class="lw-col-qty">—</td>
+      ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
@@ -2878,9 +3027,9 @@ window.LaserWeldingPage = (() => {
 
       html += '<table class="ti-table lw-weld-part-table"><thead><tr>';
       html += '<th class="lw-weld-col-lot">Child Lot</th>';
-      html += '<th class="text-right lw-weld-col-num">Consumed</th>';
-      html += '<th class="text-right lw-weld-col-num">QA</th>';
-      html += '<th class="text-right lw-weld-col-num">Scrap</th>';
+      html += '<th class="lw-weld-col-num">Consumed</th>';
+      html += '<th class="lw-weld-col-num">QA</th>';
+      html += '<th class="lw-weld-col-num">Scrap</th>';
       html += '<th class="lw-weld-col-remark">Scrap remark</th>';
       html += '<th class="lw-weld-col-action"></th></tr></thead><tbody>';
 
@@ -2902,13 +3051,13 @@ window.LaserWeldingPage = (() => {
           html += `<option value="${l.lotId}"${sel}>${escapeHtml(l.newLotNo)} (ok: ${l.totalOkayed})</option>`;
         });
         html += '</select></td>';
-        html += `<td class="text-right lw-weld-col-num"><input type="number" class="ti-input lw-weld-consumed" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" value="${consumed}" /></td>`;
+        html += `<td class="lw-weld-col-num"><input type="number" class="ti-input lw-weld-consumed" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" value="${consumed}" /></td>`;
         if (ch.isBoPart) {
-          html += '<td class="text-right lw-weld-col-num lw-weld-qa-placeholder">—</td>';
+          html += '<td class="lw-weld-col-num lw-weld-qa-placeholder">—</td>';
         } else {
-          html += `<td class="text-right lw-weld-col-num"><input type="number" class="ti-input lw-weld-qa" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${consumed}" value="${qa}" /></td>`;
+          html += `<td class="lw-weld-col-num"><input type="number" class="ti-input lw-weld-qa" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${consumed}" value="${qa}" /></td>`;
         }
-        html += `<td class="text-right lw-weld-col-num"><input type="number" class="ti-input lw-weld-scrap" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
+        html += `<td class="lw-weld-col-num"><input type="number" class="ti-input lw-weld-scrap" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
         html += `<td class="lw-weld-col-remark"><div class="lw-weld-scrap-remark-wrap" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-weld-scrap-remark" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remark" /></div></td>`;
         html += !isTrailing
           ? `<td class="lw-weld-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-weld-line-remove" data-part-idx="${partIdx}" data-line-idx="${lineIdx}">✕</button></td>`
@@ -3224,6 +3373,9 @@ window.LaserWeldingPage = (() => {
     });
 
     showPanel(tab);
+    const root = $('#lw-root');
+    if (root) root.classList.toggle('lw-tab--packing', tab === 'packing');
+    updateGridTableHeaders();
     const subtitle = $('#lw-subtitle');
     if (subtitle) subtitle.textContent = TAB_LABELS[tab] || '';
 

@@ -5823,7 +5823,7 @@ body.dpr-col-resizing {
 .ti-laser-welding .lw-col-qty {
   width: 72px;
   min-width: 72px;
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5922,11 +5922,33 @@ body.dpr-col-resizing {
 }
 
 .ti-laser-welding .lw-col-qty {
-  width: 72px;
-  min-width: 56px;
-  text-align: right;
+  width: 80px;
+  min-width: 64px;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.ti-laser-welding .lw-col-qa,
+.ti-laser-welding .lw-col-scrap {
+  width: 56px;
+  min-width: 48px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .text-right {
+  text-align: left;
+}
+
+.ti-laser-welding:not(.lw-tab--packing) #lw-table .lw-col-lot--pack {
+  display: none;
+}
+
+.ti-laser-welding.lw-tab--packing #lw-table .lw-col-lot--pack {
+  width: 118px;
+  min-width: 96px;
 }
 
 .ti-laser-welding .lw-col-ot {
@@ -6125,8 +6147,8 @@ body.dpr-col-resizing {
 
 .ti-laser-welding .lw-qty-input {
   width: 90px;
-  margin-left: auto;
-  text-align: right;
+  margin-left: 0;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -6213,6 +6235,17 @@ body.dpr-col-resizing {
   border: 1px solid color-mix(in srgb, #1565c0 35%, var(--ti-border));
   border-radius: 8px;
   overflow: hidden;
+}
+
+.ti-laser-welding .lw-detail-table .lw-detail-col-remark {
+  min-width: 120px;
+  max-width: 220px;
+  word-break: break-word;
+}
+
+.ti-laser-welding .lw-detail-table th,
+.ti-laser-welding .lw-detail-table td {
+  text-align: left;
 }
 
 .ti-laser-welding .lw-detail-loading,
@@ -6351,6 +6384,17 @@ body.dpr-col-resizing {
   width: 11%;
 }
 
+.ti-laser-welding .lw-prod-modal-table th:nth-child(6),
+.ti-laser-welding .lw-prod-modal-table td:nth-child(6) {
+  width: 10%;
+}
+
+.ti-laser-welding .lw-prod-modal-table th:nth-child(7),
+.ti-laser-welding .lw-prod-modal-table td:nth-child(7) {
+  width: 40px;
+  min-width: 40px;
+}
+
 .ti-laser-welding .lw-prod-modal-table th.lw-prod-col-remark,
 .ti-laser-welding .lw-prod-modal-table td.lw-prod-col-remark {
   width: 24%;
@@ -6405,7 +6449,7 @@ body.dpr-col-resizing {
   max-width: 80px;
   min-width: 0;
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -6557,6 +6601,13 @@ body.dpr-col-resizing {
 .ti-laser-welding #lw-sa-table col.lw-col-qty,
 .ti-laser-welding #lw-asm-table col.lw-col-qty {
   width: 56px;
+}
+
+.ti-laser-welding #lw-sa-table col.lw-col-qa,
+.ti-laser-welding #lw-asm-table col.lw-col-qa,
+.ti-laser-welding #lw-sa-table col.lw-col-scrap,
+.ti-laser-welding #lw-asm-table col.lw-col-scrap {
+  width: 48px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-lot,
@@ -6740,7 +6791,7 @@ body.dpr-col-resizing {
   min-width: 64px;
   padding-left: 8px;
   padding-right: 8px;
-  text-align: right;
+  text-align: left;
 }
 
 .ti-laser-welding .lw-store-modal-qty {
@@ -6811,7 +6862,7 @@ body.dpr-col-resizing {
 .ti-laser-welding .lw-col-insp,
 .ti-laser-welding .lw-col-qa,
 .ti-laser-welding .lw-col-status {
-  text-align: right;
+  text-align: left;
   white-space: nowrap;
 }
 

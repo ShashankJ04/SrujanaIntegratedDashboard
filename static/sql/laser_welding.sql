@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_lot (
 
 CREATE TABLE IF NOT EXISTS laser_welding_line (
   line_id             INT AUTO_INCREMENT PRIMARY KEY,
+  cd_line_id          INT NULL,
   part_number         VARCHAR(100) NOT NULL,
   lot_id              INT NULL,
   child_lot_id        INT NULL,
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_line (
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_lwl_line_draft (part_number, line_type, source_lot_no, production_date),
+  INDEX idx_lwl_line_cd (cd_line_id),
   INDEX idx_lwl_line_rework_day (lot_id, line_type, production_date),
   INDEX idx_lwl_line_lot (lot_id),
   CONSTRAINT fk_lwl_line_lot FOREIGN KEY (lot_id) REFERENCES laser_welding_lot(lot_id) ON DELETE CASCADE
