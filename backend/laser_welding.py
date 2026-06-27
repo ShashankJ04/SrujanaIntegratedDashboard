@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -12,6 +11,7 @@ from .db import execute, execute_insert, fetch_all, fetch_one, get_cursor
 from . import bo_inventory
 from . import erp_component_stock as erp_stock
 from . import packing_inventory as pack_inv
+from . import lw_packing_materials as pack_mat
 
 LINE_PART_INSPECTION = "Part_Inspection"
 LINE_ASSEMBLY_INSPECTION = "Assembly_Inspection"
@@ -132,97 +132,17 @@ def _produced_qty_from_consume_lines(
     return min(produced) if produced else 0
 
 
-_packing_materials_cache: Optional[Dict[str, List[Dict[str, str]]]] = None
-
-
-def _packing_materials_file_path() -> str:
-    return str(getattr(Config, "LW_PACKING_MATERIALS_FILE", "") or "").strip()
-
-
-def _normalize_packing_material_entries(
-    entries: Any,
-    *,
-    fallback_code: str = "",
-) -> List[Dict[str, str]]:
-    result: List[Dict[str, str]] = []
-    seen: Set[str] = set()
-    for entry in entries or []:
-        if isinstance(entry, str):
-            code = entry.strip()
-            label = code
-        elif isinstance(entry, dict):
-            code = str(entry.get("itemCode") or entry.get("item_code") or "").strip()
-            label = str(entry.get("label") or code).strip() or code
-        else:
-            continue
-        if not code or code in seen:
-            continue
-        seen.add(code)
-        result.append({"itemCode": code, "label": label})
-    if not result and fallback_code:
-        result.append({"itemCode": fallback_code, "label": fallback_code})
-    return result
-
-
-def _load_packing_materials_catalog() -> Dict[str, List[Dict[str, str]]]:
-    global _packing_materials_cache
-    if _packing_materials_cache is not None:
-        return _packing_materials_cache
-
-    trays: List[Dict[str, str]] = []
-    cartons: List[Dict[str, str]] = []
-    path = _packing_materials_file_path()
-    if path and os.path.isfile(path):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                raw = json.load(fh)
-            if isinstance(raw, dict):
-                trays = _normalize_packing_material_entries(raw.get("trays"))
-                cartons = _normalize_packing_material_entries(raw.get("cartons"))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            trays = []
-            cartons = []
-
-    if not trays:
-        trays = _normalize_packing_material_entries(
-            [],
-            fallback_code=str(getattr(Config, "LW_PACKING_TRAY_ITEM_CODE", "") or "").strip(),
-        )
-    if not cartons:
-        cartons = _normalize_packing_material_entries(
-            [],
-            fallback_code=str(getattr(Config, "LW_PACKING_CARTON_ITEM_CODE", "") or "").strip(),
-        )
-
-    _packing_materials_cache = {"trays": trays, "cartons": cartons}
-    return _packing_materials_cache
-
-
 def _all_packing_material_codes() -> Set[str]:
-    cat = _load_packing_materials_catalog()
-    codes: Set[str] = set()
-    for group in (cat.get("trays") or [], cat.get("cartons") or []):
-        for entry in group:
-            code = str(entry.get("itemCode") or "").strip()
-            if code:
-                codes.add(code)
-    return codes
+    return pack_mat.all_packing_material_codes()
 
 
-def _resolve_packing_material_code(item_code: Optional[str], kind: str) -> str:
-    code = str(item_code or "").strip()
-    if not code:
-        raise ValueError(f"Select a {kind} item code")
-    cat = _load_packing_materials_catalog()
-    group_key = "trays" if kind == "tray" else "cartons"
-    allowed = {
-        str(entry.get("itemCode") or "").strip()
-        for entry in (cat.get(group_key) or [])
-        if str(entry.get("itemCode") or "").strip()
-    }
-    if code not in allowed:
-        raise ValueError(f"Invalid {kind} item code: {code}")
-    return code
+def _resolve_packing_material_code(
+    item_code: Optional[str],
+    kind: str,
+    part_number: str,
+) -> str:
+    return pack_mat.resolve_packing_material_for_part(item_code, kind, part_number)
+
 
 # Part Inspection ERP writes (strict):
 # SS (plant 1): reduce_stock (txn 18, insp-qa / stock insp) + fg_segregate (QA, stage 6).
@@ -529,6 +449,10 @@ def _is_final_assembly_lot_row(lot: Dict[str, Any], bom_no: Optional[str] = None
     part_no = str(lot.get("part_number") or "").strip()
     bn = bom_no if bom_no is not None else _bom_no_for_id(bom_id)
     return bool(bn and part_no == bn)
+
+
+def _is_packing_output_lot_row(lot: Dict[str, Any]) -> bool:
+    return str(lot.get("new_lot_no") or "").strip().startswith("PCK/")
 
 
 def _validate_lw_consumable_child_lot(child: Dict[str, Any], part_no: str) -> None:
@@ -1523,6 +1447,9 @@ def _session_row_from_cd_group(
     if batch_mode == "cleaning":
         row.update(_cleaning_sub_assembly_flags(first.get("part_number"), row.get("partNumber")))
         row["isAssembly"] = True
+        row["lines"] = _enrich_packing_product_lines(line_dicts)
+    if batch_mode == "qa":
+        row["lines"] = _enrich_packing_product_lines(line_dicts)
     if batch_mode == "packing":
         material_codes = _all_packing_material_codes()
         product_lines = [
@@ -1533,7 +1460,7 @@ def _session_row_from_cd_group(
             ln for ln in line_dicts
             if str(ln.get("partNumber") or "").strip() in material_codes
         ]
-        row["lines"] = product_lines
+        row["lines"] = _enrich_packing_product_lines(product_lines)
         row["packMaterials"] = material_lines
         row["totalQty"] = sum(int(ln.get("inspectedQty") or 0) for ln in product_lines)
         if pack_lot_no:
@@ -2502,6 +2429,58 @@ def get_lot_by_id(lot_id: int) -> Optional[Dict[str, Any]]:
     return _fetch_lot(lot_id)
 
 
+def _lot_consume_trace_lines(lot_id: int) -> List[Dict[str, Any]]:
+    lot = fetch_one(
+        """
+        SELECT l.*, b.bom_no
+        FROM laser_welding_lot l
+        LEFT JOIN bom b ON b.bom_id = l.bom_id AND b.is_latest_version = 'Y'
+        WHERE l.lot_id = %s
+        """,
+        (int(lot_id),),
+    )
+    if not lot or _is_packing_output_lot_row(lot):
+        return []
+    bom_no = str(lot.get("bom_no") or "").strip()
+    if _is_final_assembly_lot_row(lot, bom_no):
+        line_type = LINE_WELDING_CONSUME
+    elif _is_sub_assembly_lot_row(lot, bom_no):
+        line_type = LINE_SUB_ASSEMBLY_CONSUME
+    else:
+        return []
+    lines = fetch_all(
+        """
+        SELECT * FROM laser_welding_line
+        WHERE lot_id = %s AND line_type = %s
+        ORDER BY line_id
+        """,
+        (int(lot_id), line_type),
+    )
+    return _enrich_consume_lines_with_nested_sa([_line_to_dict(ln) for ln in lines])
+
+
+def _enrich_packing_product_lines(
+    line_dicts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    enriched: List[Dict[str, Any]] = []
+    for ln in line_dicts:
+        out = dict(ln)
+        lot_id = out.get("lotId")
+        if lot_id:
+            out["sourceTrace"] = _lot_consume_trace_lines(int(lot_id))
+            lot = fetch_one(
+                "SELECT part_number, product_name, bom_id FROM laser_welding_lot WHERE lot_id = %s",
+                (int(lot_id),),
+            )
+            if lot:
+                out["sourcePartNumber"] = str(lot.get("part_number") or "").strip()
+                out["sourceProductName"] = str(lot.get("product_name") or "").strip()
+                if lot.get("bom_id"):
+                    out["sourceBomId"] = str(lot.get("bom_id"))
+        enriched.append(out)
+    return enriched
+
+
 def _enrich_consume_lines_with_nested_sa(
     line_dicts: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -2569,9 +2548,10 @@ def get_qa_source_lots(part_number: str) -> List[Dict[str, Any]]:
         SELECT lot_id, new_lot_no, total_qa, part_number
         FROM laser_welding_lot
         WHERE TRIM(part_number) = %s AND total_qa > 0 AND new_lot_no IS NOT NULL
+          AND new_lot_no NOT LIKE %s
         ORDER BY lot_id DESC
         """,
-        (part,),
+        (part, "PCK/%"),
     )
     return [
         {
@@ -2581,16 +2561,17 @@ def get_qa_source_lots(part_number: str) -> List[Dict[str, Any]]:
             "noOfComp": int(r["total_qa"] or 0),
         }
         for r in rows
+        if not str(r.get("new_lot_no") or "").startswith("PCK/")
     ]
 
 
 def get_qa_eligible_parts(work_date: Optional[str] = None) -> List[Dict[str, Any]]:
     month_sql = ""
-    params: Tuple[Any, ...] = ()
+    params: Tuple[Any, ...] = ("PCK/%",)
     if work_date:
         month_start, month_end = _month_range_from_work_date(work_date)
         month_sql = " AND l.work_date BETWEEN %s AND %s"
-        params = (month_start, month_end)
+        params = ("PCK/%", month_start, month_end)
     rows = fetch_all(
         f"""
         SELECT
@@ -2602,12 +2583,13 @@ def get_qa_eligible_parts(work_date: Optional[str] = None) -> List[Dict[str, Any
             ON TRIM(c.CO_PARTNO) = TRIM(l.part_number) AND c.CO_ACTIVEYN = 'Y'
         WHERE l.new_lot_no IS NOT NULL
           AND l.total_qa > 0
+          AND l.new_lot_no NOT LIKE %s
           {month_sql}
         GROUP BY TRIM(l.part_number)
         HAVING SUM(l.total_qa) > 0
         ORDER BY part_no
         """,
-        params if params else None,
+        params,
     )
     result: List[Dict[str, Any]] = []
     for r in rows:
@@ -2927,13 +2909,16 @@ def _packing_rows_query_rows() -> List[Dict[str, Any]]:
           AND TRIM(l.new_lot_no) != ''
           AND l.new_lot_no NOT LIKE %s
           AND l.new_lot_no NOT LIKE %s
+          AND l.new_lot_no NOT LIKE %s
         ORDER BY l.processed_at DESC, l.lot_id DESC
         """,
-        ("SA/%", "LBO/%"),
+        ("SA/%", "LBO/%", "PCK/%"),
     )
 
 
 def _packing_entry_from_lot_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if _is_packing_output_lot_row(row):
+        return None
     part_no = str(row.get("part_number") or "").strip()
     bom_no = str(row.get("bom_no") or "").strip()
     if _is_final_assembly_lot_row(row, bom_no):
@@ -2983,6 +2968,85 @@ def get_packing_parts_catalog() -> List[Dict[str, Any]]:
     return sorted(seen.values(), key=lambda x: x["partNo"])
 
 
+def _catalog_key(part_no: str, cust_id: Optional[int]) -> str:
+    pn = str(part_no or "").strip().upper()
+    cid = int(cust_id) if cust_id is not None and str(cust_id).strip() != "" else 0
+    return f"{pn}|{cid}"
+
+
+def get_trays_carton_parts_catalog(cust_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """All latest BOMs + whitelist parts (customer from parent CO_CUSTID).
+
+    Same BOM number may exist for multiple customers — keep one row per (part, cust).
+    """
+    seen: Dict[str, Dict[str, Any]] = {}
+
+    for bom in get_boms(None):
+        part_no = str(bom.get("bomNo") or "").strip()
+        if not part_no:
+            continue
+        bom_cust = bom.get("custId")
+        bom_id = bom.get("bomId")
+        resolved = pack_mat.resolve_part_for_mapping(
+            part_no,
+            cust_id=bom_cust,
+            bom_id=bom_id,
+        )
+        seen[_catalog_key(part_no, bom_cust)] = {
+            "partNo": part_no,
+            "partName": bom.get("productName") or part_no,
+            "custId": bom_cust,
+            "bomId": (resolved or {}).get("bomId") or bom_id,
+            "customerName": bom.get("customerName") or "",
+            "coId": (resolved or {}).get("coId"),
+            "partSource": "bom",
+        }
+
+    parent_ids = _part_inspection_parent_ids()
+    if parent_ids:
+        placeholders = _part_inspection_parent_id_placeholders()
+        rows = fetch_all(
+            f"""
+            SELECT c.CO_ID AS co_id,
+                   TRIM(c.CO_PARTNO) AS part_no,
+                   TRIM(c.CO_PARTNAME) AS part_name,
+                   p.CO_CUSTID AS cust_id,
+                   COALESCE(cu.CU_Name, '') AS customer_name
+            FROM components c
+            INNER JOIN components p
+                ON p.CO_ID = c.CO_PARENTID AND p.CO_ACTIVEYN = 'Y'
+            LEFT JOIN customer cu ON cu.CU_Id = p.CO_CUSTID
+            WHERE c.CO_ACTIVEYN = 'Y'
+              AND c.CO_PARENTID IN ({placeholders})
+            ORDER BY c.CO_PARTNO
+            """,
+            parent_ids,
+        )
+        for r in rows:
+            part_no = str(r.get("part_no") or "").strip()
+            if not part_no:
+                continue
+            wl_cust = int(r["cust_id"]) if r.get("cust_id") is not None else None
+            key = _catalog_key(part_no, wl_cust)
+            if key in seen:
+                continue
+            seen[key] = {
+                "partNo": part_no,
+                "partName": r.get("part_name") or part_no,
+                "custId": wl_cust,
+                "customerName": r.get("customer_name") or "",
+                "coId": int(r["co_id"]) if r.get("co_id") is not None else None,
+                "bomId": None,
+                "partSource": "whitelist",
+            }
+
+    out = list(seen.values())
+    if cust_id is not None:
+        cid = int(cust_id)
+        out = [p for p in out if int(p.get("custId") or 0) == cid]
+    return sorted(out, key=lambda x: (str(x.get("partNo") or ""), int(x.get("custId") or 0)))
+
+
 def get_packing_source_lots(part_number: str) -> List[Dict[str, Any]]:
     part = str(part_number or "").strip()
     if not part:
@@ -3017,31 +3081,11 @@ def _pack_material_available_qty(item_code: str) -> int:
     return int(float((row or {}).get("qty") or 0))
 
 
-def get_packing_pack_materials() -> Dict[str, Any]:
-    cat = _load_packing_materials_catalog()
-    trays = [
-        {
-            "type": "tray",
-            "itemCode": entry["itemCode"],
-            "label": entry.get("label") or entry["itemCode"],
-            "availableQty": _pack_material_available_qty(entry["itemCode"]),
-        }
-        for entry in (cat.get("trays") or [])
-    ]
-    cartons = [
-        {
-            "type": "carton",
-            "itemCode": entry["itemCode"],
-            "label": entry.get("label") or entry["itemCode"],
-            "availableQty": _pack_material_available_qty(entry["itemCode"]),
-        }
-        for entry in (cat.get("cartons") or [])
-    ]
-    return {
-        "trays": trays,
-        "cartons": cartons,
-        "materials": trays + cartons,
-    }
+def get_packing_pack_materials(part_number: Optional[str] = None) -> Dict[str, Any]:
+    part = str(part_number or "").strip()
+    if not part:
+        return {"trays": [], "cartons": [], "materials": [], "hasMapping": False}
+    return pack_mat.get_pack_materials_for_part(part)
 
 
 def _reduce_pack_material_qty(cursor: Any, item_code: str, qty: int) -> None:
@@ -3230,7 +3274,11 @@ def _pack_inventory_inward(
     new_lot_no = str(lot.get("new_lot_no") or "").strip()
     if not new_lot_no:
         raise ValueError("Lot has no LW lot number")
-    if new_lot_no.startswith("SA/") or new_lot_no.startswith("LBO/"):
+    if (
+        new_lot_no.startswith("SA/")
+        or new_lot_no.startswith("LBO/")
+        or new_lot_no.startswith("PCK/")
+    ):
         raise ValueError("This lot is not eligible for packing")
 
     part_no = str(lot.get("part_number") or "").strip()
@@ -3342,10 +3390,6 @@ def inspect_packing(
     session_ot = _normalize_ot_flag(ot_flag)
     tray_code = ""
     carton_code = ""
-    if int(tray_qty or 0) > 0:
-        tray_code = _resolve_packing_material_code(tray_item_code, "tray")
-    if int(carton_qty or 0) > 0:
-        carton_code = _resolve_packing_material_code(carton_item_code, "carton")
 
     validated = [
         _validate_line(it, require_lot=False)
@@ -3381,6 +3425,11 @@ def inspect_packing(
         draft_wd = pd.strftime("%Y-%m-%d") if hasattr(pd, "strftime") else str(pd or "")[:10]
         if draft_wd != wd:
             raise ValueError("Work date does not match the pending row")
+
+        if int(tray_qty or 0) > 0:
+            tray_code = _resolve_packing_material_code(tray_item_code, "tray", part)
+        if int(carton_qty or 0) > 0:
+            carton_code = _resolve_packing_material_code(carton_item_code, "carton", part)
 
         updated_lots: List[Dict[str, Any]] = []
         line_specs: List[Dict[str, Any]] = []
@@ -3862,11 +3911,14 @@ def get_assembly_rows(work_date: str) -> List[Dict[str, Any]]:
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
         WHERE l.work_date = %s AND l.bom_id IS NOT NULL AND l.new_lot_no IS NOT NULL
           AND TRIM(l.part_number) = TRIM(b.bom_no)
+          AND l.new_lot_no NOT LIKE %s
         ORDER BY l.lot_id DESC
         """,
-        (wd,),
+        (wd, "PCK/%"),
     )
     for lot in lots:
+        if _is_packing_output_lot_row(lot):
+            continue
         result.append(_assembly_row_from_lot(lot))
 
     return result
@@ -5005,11 +5057,14 @@ def get_sub_assembly_rows(work_date: str) -> List[Dict[str, Any]]:
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
         WHERE l.work_date = %s AND l.bom_id IS NOT NULL AND l.new_lot_no IS NOT NULL
           AND TRIM(l.part_number) != TRIM(COALESCE(b.bom_no, ''))
+          AND l.new_lot_no NOT LIKE %s
         ORDER BY l.lot_id DESC
         """,
-        (wd,),
+        (wd, "PCK/%"),
     )
     for lot in lots:
+        if _is_packing_output_lot_row(lot):
+            continue
         if not _is_sub_assembly_lot_row(lot, str(lot.get("bom_no") or "")):
             continue
         result.append(_sub_assembly_row_from_lot(lot))
@@ -5997,7 +6052,7 @@ def _cleaning_row_from_lot(
     lot: Dict[str, Any],
     lines: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    line_dicts = [_line_to_dict(ln) for ln in lines]
+    line_dicts = _enrich_packing_product_lines([_line_to_dict(ln) for ln in lines])
     d = _lot_to_dict(lot, line_dicts)
     d["rowKey"] = f"clean:lot:{lot['lot_id']}"
     d["isDraft"] = False
@@ -6035,9 +6090,10 @@ def get_cleaning_source_lots(
             FROM laser_welding_lot
             WHERE bom_id = %s AND TRIM(part_number) = %s
               AND new_lot_no IS NOT NULL AND inspection_pending > 0
+              AND new_lot_no NOT LIKE %s
             ORDER BY lot_id DESC
             """,
-            (bid, sa_part),
+            (bid, sa_part, "PCK/%"),
         )
     else:
         rows = fetch_all(
@@ -6047,9 +6103,10 @@ def get_cleaning_source_lots(
             INNER JOIN bom b ON b.bom_id = l.bom_id
             WHERE l.bom_id = %s AND l.new_lot_no IS NOT NULL AND l.inspection_pending > 0
               AND TRIM(l.part_number) = TRIM(b.bom_no)
+              AND l.new_lot_no NOT LIKE %s
             ORDER BY l.lot_id DESC
             """,
-            (bid,),
+            (bid, "PCK/%"),
         )
     return [
         {

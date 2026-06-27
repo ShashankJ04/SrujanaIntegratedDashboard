@@ -59,15 +59,22 @@ def global_search():
         for r in comps:
             add_result(r)
 
-    # 3. Search Sales Orders
+    # 3. Search customer schedule entries by part
     if can_production:
-        sos = fetch_all("""
-            SELECT SO_NO as id, CONCAT('SO: ', SO_NO, ' for ', PART_NO) as label, 'Order' as type, '/app?section=production' as link
-            FROM sales_order
-            WHERE SO_NO LIKE %s OR PART_NO LIKE %s
+        schedules = fetch_all("""
+            SELECT
+                CONCAT(sc.CS_Id, '-', TRIM(c.CO_PARTNO)) AS id,
+                CONCAT('Schedule: ', TRIM(c.CO_PARTNO), ' qty ', sc.CS_QTY) AS label,
+                'Schedule' AS type,
+                '/app?section=hub' AS link
+            FROM scheduled_customer sc
+            INNER JOIN schedule_details sd ON sd.SC_ID = sc.CS_SCID
+            INNER JOIN components c ON c.CO_ID = sd.SC_COMPID
+            WHERE TRIM(c.CO_PARTNO) LIKE %s OR TRIM(c.CO_PARTNAME) LIKE %s
+            ORDER BY sc.CS_DATE DESC
             LIMIT 10
         """, (q_like, q_like))
-        for r in sos:
+        for r in schedules:
             add_result(r)
 
     # 4. Search report definitions (opens exact report in Reports section)

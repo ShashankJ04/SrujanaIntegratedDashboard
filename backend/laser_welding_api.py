@@ -452,8 +452,9 @@ def packing_parts_catalog() -> Any:
 @laser_welding_bp.route("/packing/pack-materials", methods=["GET"])
 @require_access("lw")
 def packing_pack_materials() -> Any:
+    part_no = request.args.get("partNo", "").strip()
     try:
-        catalog = lw.get_packing_pack_materials()
+        catalog = lw.get_packing_pack_materials(part_no or None)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     materials = catalog.get("materials") or []
@@ -462,7 +463,154 @@ def packing_pack_materials() -> Any:
         "trays": catalog.get("trays") or [],
         "cartons": catalog.get("cartons") or [],
         "materials": materials,
+        "hasMapping": catalog.get("hasMapping", False),
+        "mapping": catalog.get("mapping"),
     })
+
+
+@laser_welding_bp.route("/packing/trays-carton", methods=["GET"])
+@require_access("lw")
+def trays_carton_list() -> Any:
+    try:
+        from . import lw_packing_materials as pm
+        rows = pm.list_part_maps()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({
+        "count": len(rows),
+        "rows": rows,
+        "cartons": pm.list_all_cartons(),
+    })
+
+
+@laser_welding_bp.route("/packing/trays-carton/legend", methods=["GET"])
+@require_access("lw")
+def trays_carton_legend() -> Any:
+    from . import lw_packing_materials as pm
+    return jsonify(pm.get_legend())
+
+
+@laser_welding_bp.route("/packing/trays-carton/preview", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def trays_carton_preview() -> Any:
+    from . import lw_packing_materials as pm
+    body = request.get_json(silent=True) or {}
+    kind = str(body.get("kind") or "tray").strip().lower()
+    try:
+        if kind == "tray":
+            result = pm.preview_tray(body)
+        elif kind in ("carton", "bin", "box"):
+            result = pm.preview_box(body)
+        else:
+            result = pm.preview_box(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
+
+
+@laser_welding_bp.route("/packing/trays-carton/parts", methods=["GET"])
+@require_access("lw")
+def trays_carton_parts_catalog() -> Any:
+    cust_id = request.args.get("custId", "").strip()
+    try:
+        parts = lw.get_trays_carton_parts_catalog(int(cust_id) if cust_id else None)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"count": len(parts), "parts": parts})
+
+
+@laser_welding_bp.route("/packing/trays-carton/matching-trays", methods=["GET"])
+@require_access("lw")
+def trays_carton_matching_trays() -> Any:
+    from . import lw_packing_materials as pm
+    cust_id = request.args.get("custId", "").strip()
+    tray_type = request.args.get("trayType", "").strip()
+    cavity = request.args.get("cavity", "").strip()
+    if not tray_type or not cavity:
+        return jsonify({"items": []})
+    try:
+        items = pm.list_matching_trays(
+            int(cust_id) if cust_id else None,
+            tray_type,
+            int(cavity),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"items": items})
+
+
+@laser_welding_bp.route("/packing/trays-carton/matching-boxes", methods=["GET"])
+@require_access("lw")
+def trays_carton_matching_boxes() -> Any:
+    from . import lw_packing_materials as pm
+    cust_id = request.args.get("custId", "").strip()
+    box_type = request.args.get("boxType", "C").strip()
+    try:
+        items = pm.list_matching_boxes(
+            int(cust_id) if cust_id else None,
+            box_type,
+            int(request.args.get("lengthMm", "0")),
+            int(request.args.get("widthMm", "0")),
+            int(request.args.get("heightMm", "0")),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"items": items})
+
+
+@laser_welding_bp.route("/packing/trays-carton/resolve-part", methods=["GET"])
+@require_access("lw")
+def trays_carton_resolve_part() -> Any:
+    from . import lw_packing_materials as pm
+    part_no = request.args.get("partNo", "").strip()
+    if not part_no:
+        return jsonify({"error": "partNo is required"}), 400
+    cust_raw = request.args.get("custId", "").strip()
+    bom_id = request.args.get("bomId", "").strip() or None
+    cust_id = int(cust_raw) if cust_raw else None
+    resolved = pm.resolve_part_for_mapping(
+        part_no,
+        cust_id=cust_id,
+        bom_id=bom_id,
+    )
+    if not resolved:
+        return jsonify({"error": f"Part {part_no} not found in components or BOM"}), 404
+    return jsonify(resolved)
+
+
+@laser_welding_bp.route("/packing/trays-carton", methods=["POST"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def trays_carton_create() -> Any:
+    from . import lw_packing_materials as pm
+    body = request.get_json(silent=True) or {}
+    user = g.get("current_user") or {}
+    try:
+        result = pm.create_trays_carton_mapping(body, created_by=user.get("userId"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
+
+
+@laser_welding_bp.route("/packing/trays-carton/<int:map_id>", methods=["PUT"])
+@require_access("lw")
+@require_plus_access("lw_plus")
+def trays_carton_update(map_id: int) -> Any:
+    from . import lw_packing_materials as pm
+    body = request.get_json(silent=True) or {}
+    user = g.get("current_user") or {}
+    try:
+        result = pm.update_trays_carton_mapping(map_id, body, updated_by=user.get("userId"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(result)
 
 
 @laser_welding_bp.route("/packing/pending", methods=["POST"])

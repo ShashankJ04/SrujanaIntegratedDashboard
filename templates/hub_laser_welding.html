@@ -21,13 +21,14 @@
   <div class="lw-tabs lw-tabs--scroll" role="tablist" aria-label="Laser Welding tabs">
     <button type="button" class="lw-tab lw-tab--active" data-tab="inspection" role="tab" aria-selected="true">Inspection</button>
     <button type="button" class="lw-tab" data-tab="sub_assembly" role="tab" aria-selected="false">Sub-Assembly</button>
-    <button type="button" class="lw-tab" data-tab="sa_cleaning" role="tab" aria-selected="false">SA Cleaning</button>
+    <button type="button" class="lw-tab" data-tab="sa_cleaning" role="tab" aria-selected="false">SA Inspection</button>
     <button type="button" class="lw-tab" data-tab="sa_rework" role="tab" aria-selected="false">SA Re-Work</button>
     <button type="button" class="lw-tab" data-tab="laser_welding" role="tab" aria-selected="false">Laser Welding</button>
-    <button type="button" class="lw-tab" data-tab="lw_cleaning" role="tab" aria-selected="false">LW Cleaning</button>
+    <button type="button" class="lw-tab" data-tab="lw_cleaning" role="tab" aria-selected="false">LW Cleaning/Inspection</button>
     <button type="button" class="lw-tab" data-tab="lw_rework" role="tab" aria-selected="false">LW Re-Work</button>
     <button type="button" class="lw-tab" data-tab="packing" role="tab" aria-selected="false">Packing</button>
     <button type="button" class="lw-tab" data-tab="qa" role="tab" aria-selected="false">QA</button>
+    <button type="button" class="lw-tab" data-tab="trays_carton" role="tab" aria-selected="false">Trays/Carton</button>
   </div>
 
   <!-- Inspection / Cleaning / QA / Packing grids -->
@@ -139,6 +140,35 @@
     </div>
   </div>
 
+  <!-- Trays / Carton setup -->
+  <div id="lw-trays-carton-panel" class="lw-panel">
+    <div class="lw-trays-carton-toolbar">
+      <button type="button" class="ti-btn ti-btn-primary ti-btn-sm" id="lw-trays-carton-add">Add mapping</button>
+    </div>
+    <div id="lw-tc-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-tc-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-tc-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-tc-table">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Part No</th>
+            <th>Part Name</th>
+            <th>Tray</th>
+            <th>Carton/Bin</th>
+            <th>Cavity</th>
+            <th>Tray Cap</th>
+            <th>Carton Cap</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lw-tc-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <datalist id="lw-parts-datalist"></datalist>
 
   <!-- Production / Cleaning / QA / Packing modal -->
@@ -241,6 +271,107 @@
       <div class="ti-modal-footer">
         <button type="button" class="ti-btn ti-btn-outline" id="lw-weld-modal-cancel">Cancel</button>
         <button type="button" class="ti-btn ti-btn-primary" id="lw-weld-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trays/Carton mapping modal -->
+  <div class="ti-modal-overlay" id="lw-tc-modal-overlay" aria-hidden="true">
+    <div class="ti-modal ti-modal-lg lw-tc-modal" role="dialog" aria-labelledby="lw-tc-modal-title">
+      <div class="ti-modal-header">
+        <h3 id="lw-tc-modal-title">Trays / Carton mapping</h3>
+      </div>
+      <div class="ti-modal-body">
+        <input type="hidden" id="lw-tc-map-id" value="" />
+        <div class="lw-tc-form-grid">
+          <div class="lw-tc-field">
+            <label for="lw-tc-cust">Customer</label>
+            <select id="lw-tc-cust" class="ti-input"></select>
+          </div>
+          <div class="lw-tc-field">
+            <label for="lw-tc-part">Part No</label>
+            <select id="lw-tc-part" class="ti-input"></select>
+          </div>
+          <div class="lw-tc-field lw-tc-field--wide">
+            <label for="lw-tc-part-name">Part Name</label>
+            <input type="text" id="lw-tc-part-name" class="ti-input" readonly />
+          </div>
+        </div>
+        <fieldset class="lw-tc-fieldset">
+          <legend>Tray</legend>
+          <div class="lw-tc-form-grid lw-tc-form-grid--4">
+            <div class="lw-tc-field">
+              <label for="lw-tc-type-mode">Type</label>
+              <select id="lw-tc-type-mode" class="ti-input">
+                <option value="S">Single (S)</option>
+                <option value="P">Multiple parts (nP)</option>
+              </select>
+            </div>
+            <div class="lw-tc-field" id="lw-tc-no-parts-wrap" style="display:none">
+              <label for="lw-tc-no-parts">No. parts</label>
+              <input type="number" id="lw-tc-no-parts" class="ti-input" min="2" step="1" placeholder="e.g. 2, 4" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-tray-cavity">Cavity</label>
+              <input type="number" id="lw-tc-tray-cavity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-tray-capacity">Tray capacity</label>
+              <input type="number" id="lw-tc-tray-capacity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field lw-tc-field--wide" id="lw-tc-tray-existing-wrap" style="display:none">
+              <label for="lw-tc-tray-existing">Use existing tray</label>
+              <select id="lw-tc-tray-existing" class="ti-input">
+                <option value="">Generate new code</option>
+              </select>
+            </div>
+            <div class="lw-tc-field lw-tc-field--preview">
+              <label>Tray code preview</label>
+              <span id="lw-tc-tray-preview" class="lw-rework-readonly lw-tc-preview">—</span>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="lw-tc-fieldset">
+          <legend>Carton / Bin</legend>
+          <div class="lw-tc-form-grid lw-tc-form-grid--4">
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-type">Type</label>
+              <select id="lw-tc-box-type" class="ti-input">
+                <option value="C">Carton (SE-C)</option>
+                <option value="B">Bin (SE-B)</option>
+              </select>
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-l">L (mm)</label>
+              <input type="number" id="lw-tc-box-l" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-w">W (mm)</label>
+              <input type="number" id="lw-tc-box-w" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-h">H (mm)</label>
+              <input type="number" id="lw-tc-box-h" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field" id="lw-tc-bin-seq-wrap" style="display:none">
+              <label for="lw-tc-bin-seq">Bin seq</label>
+              <input type="number" id="lw-tc-bin-seq" class="ti-input" min="1" step="1" />
+              <span class="lw-tc-hint" id="lw-tc-bin-seq-hint"></span>
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-carton-capacity">Carton capacity</label>
+              <input type="number" id="lw-tc-carton-capacity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field lw-tc-field--preview">
+              <label>Carton / bin code preview</label>
+              <span id="lw-tc-box-preview" class="lw-rework-readonly lw-tc-preview">—</span>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <div class="ti-modal-footer">
+        <button type="button" class="ti-btn ti-btn-outline" id="lw-tc-modal-cancel">Cancel</button>
+        <button type="button" class="ti-btn ti-btn-primary" id="lw-tc-modal-save">Save</button>
       </div>
     </div>
   </div>

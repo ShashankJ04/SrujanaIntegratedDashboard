@@ -236,194 +236,18 @@ def _dashboard_row_sort_key(val: Any) -> Tuple[int, Any]:
         return (1, str(val).lower())
 
 
-def _get_dashboard_base_sql() -> str:
-    """Base SQL for dashboard metrics (without buffer calculations).
+def _build_inventory_rows_for_dispatch_period(month: int, year: int) -> List[Dict[str, Any]]:
+    """Inventory metrics for parts on the customer dispatch schedule for a month."""
+    from .dispatch_calendar import get_dispatch_schedule_by_part
 
-    This mirrors vw_bharat_dashboard and returns:
-    part_no, part_name, sales_order_qty (hidden), wip, fg, total_stock, produced_qty,
-    plus feb (Total Requirement) overlaid from dispatch scheduled qty at cache refresh.
-    plus raw-material fields: rm_rawmt_part_no, rm_conval, rm_inward_accepted_qty,
-    current_acceptedqty (actual RM stock from inward).
-    """
-    # Note: date logic and joins are kept aligned with static/sql/vw_bharat_dashboard.sql
-    return """
-        SELECT
-            x.PART_NO AS part_no,
-            x.PART_NAME AS part_name,
-            x.QTY AS sales_order_qty,
-            IFNULL(y_wip.csQty, 0) AS wip,
-            IFNULL(y_fg.csQty, 0) AS fg,
-            (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
-            IFNULL(z.pdProdQty, 0) AS produced_qty,
-            rm.rm_rawmt_part_no,
-            IFNULL(rm.rm_conval, 0) AS rm_conval,
-            IFNULL(rm.rm_inward_accepted_qty, 0) AS rm_inward_accepted_qty,
-            IFNULL(rm.current_acceptedqty, 0) AS current_acceptedqty
-        FROM (
-            SELECT trim(PART_NAME) as PART_NAME, trim(PART_NO) as PART_NO, SUM(QTY) AS QTY
-            FROM (
-                SELECT trim(PART_NAME) as PART_NAME, trim(PART_NO) as PART_NO, SUM(QTY) AS qty
-                FROM sales_order
-                WHERE DLV_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-                  AND CATEGORY_ID = 1
-                  AND SO_TYPE_ID IN (1, 2)
-                  AND STATUS_ID IN (1, 7)
-                GROUP BY trim(PART_NAME), trim(PART_NO)
-                UNION ALL
-                SELECT trim(b.PART_NAME) as PART_NAME, trim(b.PART_NO) as PART_NO, SUM(a.QTY * b.QTY) AS qty
-                FROM sales_order a
-                JOIN bom_lin_item b
-                  ON b.bom_id IN (
-                      SELECT c.bom_id
-                      FROM bom c
-                      WHERE c.bom_no = a.bom_no
-                        AND c.is_latest_version = 'Y'
-                  )
-                WHERE a.DLV_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-                  AND a.CATEGORY_ID = 2
-                  AND a.SO_TYPE_ID IN (1, 2)
-                  AND a.STATUS_ID IN (1, 7)
-                  AND category_code = 'SS'
-                GROUP BY trim(b.PART_NAME), trim(b.PART_NO)
-            ) a
-            GROUP BY trim(PART_NAME), trim(PART_NO)
-        ) x
-        LEFT JOIN (
-            SELECT trim(c.CO_PARTNO) as PART_NO, SUM(a.csQty) AS csQty
-            FROM (
-                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
-                FROM comp_stockhistory
-                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
-                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
-                  AND CH_StageId = 6
-                  AND CH_WEEK = 0
-            ) a
-            JOIN components c ON a.csCompId = c.CO_id
-            WHERE c.CO_ACTIVEYN = 'Y'
-            GROUP BY trim(c.CO_PARTNO)
-        ) y_fg ON x.PART_NO = y_fg.PART_NO
-        LEFT JOIN (
-            SELECT trim(c.CO_PARTNO) as PART_NO, SUM(a.csQty) AS csQty
-            FROM (
-                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
-                FROM comp_stockhistory
-                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
-                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
-                  AND CH_StageId != 6
-                  AND CH_WEEK = 0
-            ) a
-            JOIN components c ON a.csCompId = c.CO_id
-            WHERE c.CO_ACTIVEYN = 'Y'
-            GROUP BY trim(c.CO_PARTNO)
-        ) y_wip ON x.PART_NO = y_wip.PART_NO 
-        LEFT JOIN (
-            SELECT trim(CO_partNo) as PART_NO, SUM(PD_PRODQTY) AS pdProdQty
-            FROM scheduled_production
-            INNER JOIN production_details ON PS_ID = PD_PSID
-            INNER JOIN schedule_master ON SM_Id = PS_SMID
-            INNER JOIN components ON CO_Id = PS_ParentCompId
-            WHERE PD_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-              AND SM_Status = 'S'
-              AND PS_plantId = 2
-            GROUP BY trim(CO_partNo)
-        ) z ON x.PART_NO = z.PART_NO
-        LEFT JOIN (
-            SELECT
-                TRIM(mq.co_partNo) AS PART_NO,
-                mq.mm_rawmtpartNo AS rm_rawmt_part_no,
-                mq.conVal AS rm_conval,
-                IFNULL(iq.total_acceptedqty, 0) AS rm_inward_accepted_qty,
-                IFNULL(inq.current_acceptedqty, 0) AS current_acceptedqty
-            FROM (
-                SELECT rmx.*, rmy.conVal
-                FROM (
-                    SELECT c.co_id, c.co_partNo, c.CO_PARTNAME, mm_rawmtpartNo, mm_id
-                    FROM (
-                        SELECT MIN(co_id) AS co_id,
-                               TRIM(co_partNo) AS co_partNo,
-                               MIN(CO_PARTNAME) AS CO_PARTNAME
-                        FROM components
-                        WHERE co_activeyn = 'Y'
-                          AND TRIM(co_partNo) IN (
-                              SELECT TRIM(PART_NO)
-                              FROM (
-                                  SELECT PART_NAME, PART_NO
-                                  FROM sales_order
-                                  WHERE DLV_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
-                                        AND last_day(current_date)
-                                    AND CATEGORY_ID = 1
-                                    AND SO_TYPE_ID IN (1, 2)
-                                    AND STATUS_ID IN (1, 7)
-                                  GROUP BY PART_NAME, PART_NO
-                                  UNION ALL
-                                  SELECT b.PART_NAME, b.PART_NO
-                                  FROM sales_order a
-                                  JOIN bom_lin_item b
-                                    ON b.bom_id IN (
-                                        SELECT bm.bom_id FROM bom bm
-                                        WHERE bm.bom_no = a.bom_no AND bm.is_latest_version = 'Y'
-                                    )
-                                  WHERE a.DLV_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
-                                        AND last_day(current_date)
-                                    AND a.CATEGORY_ID = 2
-                                    AND a.SO_TYPE_ID IN (1, 2)
-                                    AND a.STATUS_ID IN (1, 7)
-                                    AND category_code = 'SS'
-                                  GROUP BY b.PART_NAME, b.PART_NO
-                              ) rm_so
-                              GROUP BY TRIM(PART_NO)
-                          )
-                        GROUP BY TRIM(co_partNo)
-                    ) c
-                    JOIN (
-                        SELECT ct_compid AS compId, MAX(ct_rmid) AS rmId
-                        FROM components_tool where CT_ACTIVEYN ='Y' GROUP BY ct_compid
-                    ) ct ON c.co_id = ct.compId
-                    JOIN materialmaster ON ct.rmId = mm_id
-                ) rmx
-                LEFT JOIN (
-                    SELECT co_Id, co_partNo, co_partname, ct.rmId, ct_compid, MM_RawMtPartNo,
-                        ROUND(1000 / ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth))
-                            * ((1000 * ct.ctNoOfCavity) / ct.ctPitch)), 10) AS conVal
-                    FROM components
-                    INNER JOIN (
-                        SELECT CT_RMID AS rmId, ct_compid,
-                               CT_NO_OF_CAVITY AS ctNoOfCavity, CT_Pitch AS ctPitch
-                        FROM components_tool
-                        WHERE ct_id IN (
-                            SELECT MAX(ct_id) FROM components_tool
-                            WHERE CT_ActiveYN='Y' AND CT_PPC='Y'
-                              AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
-                            GROUP BY ct_compid
-                        )
-                        AND CT_ActiveYN='Y' AND CT_PPC='Y'
-                        AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
-                    ) ct ON co_id = ct.ct_compid
-                    INNER JOIN materialmaster ON ct.rmId = mm_id
-                    INNER JOIN materialtypemaster ON MM_MTID = MT_Id
-                    WHERE co_activeyn = 'Y' AND co_id = CO_PARENTID
-                ) rmy ON rmx.co_Id = rmy.co_Id
-                     AND rmx.co_partNo = rmy.co_partNo
-                     AND rmx.CO_PARTNAME = rmy.CO_PARTNAME
-            ) mq
-            LEFT JOIN (
-                SELECT RD_RMID,
-round(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
-- SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END) ,2)AS total_acceptedqty
-FROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster
-    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id AND RI_date <= last_day(DATE_ADD(current_date, INTERVAL -1 MONTH))     
-    group by RD_RMID
-            ) iq ON mq.mm_id = iq.RD_rmid
-            LEFT JOIN (
-                SELECT RD_RMID,
-      round(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
-      - SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END) ,2)AS current_acceptedqty
-      FROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster
-    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id   
-    group by RD_RMID
-            ) inq ON mq.mm_id = inq.RD_rmid
-        ) rm ON x.PART_NO = rm.PART_NO
-    """
+    schedule = get_dispatch_schedule_by_part(month, year)
+    part_nos = [
+        str(info.get("partNo") or pk).strip()
+        for pk, info in schedule.items()
+        if float(info.get("scheduledQty") or 0) > 0
+    ]
+    base_rows = _fetch_inventory_metrics_for_parts(part_nos)
+    return _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
 
 
 def _normalize_inventory_part_key(part_no: Any) -> str:
@@ -434,7 +258,6 @@ def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, An
     return {
         "part_no": part_no,
         "part_name": part_name or part_no,
-        "sales_order_qty": 0.0,
         "feb": 0.0,
         "wip": 0.0,
         "fg": 0.0,
@@ -448,7 +271,7 @@ def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, An
 
 
 def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str, Any]]:
-    """Stock and production metrics for parts outside the sales-order base SQL."""
+    """Stock, production, and RM metrics for the given component part numbers."""
     cleaned = [str(p or "").strip() for p in part_nos if str(p or "").strip()]
     if not cleaned:
         return []
@@ -457,7 +280,6 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
         SELECT
             TRIM(c.CO_PARTNO) AS part_no,
             TRIM(c.CO_PARTNAME) AS part_name,
-            0 AS sales_order_qty,
             IFNULL(y_wip.csQty, 0) AS wip,
             IFNULL(y_fg.csQty, 0) AS fg,
             (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
@@ -622,19 +444,14 @@ def _merge_dispatch_schedule_into_inventory_rows(
 
 
 def refresh_dashboard_base_cache() -> Dict[str, Any]:
-    """Run the heavy base SQL once and cache results in memory.
+    """Rebuild dashboard rows from customer schedule + inventory metrics and cache in memory.
 
     This is intended to be called only on explicit hard refresh.
     """
     global _DASHBOARD_BASE_CACHE
 
-    from .dispatch_calendar import get_dispatch_schedule_by_part
-
-    base_sql = _get_dashboard_base_sql()
-    base_rows = fetch_all(base_sql)
     today = date.today()
-    schedule = get_dispatch_schedule_by_part(today.month, today.year)
-    rows = _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
+    rows = _build_inventory_rows_for_dispatch_period(today.month, today.year)
     _DASHBOARD_BASE_CACHE = {
         "rows": rows,
         "last_refreshed": datetime.utcnow(),
@@ -863,11 +680,7 @@ def build_enriched_inventory_rows_for_period(
             refresh_dashboard_base_cache()
             base_rows = _get_cached_base_rows()
     else:
-        from .dispatch_calendar import get_dispatch_schedule_by_part
-
-        base_rows = fetch_all(_get_dashboard_base_sql())
-        schedule = get_dispatch_schedule_by_part(month, year)
-        base_rows = _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
+        base_rows = _build_inventory_rows_for_dispatch_period(month, year)
 
     enriched_all = _enrich_dashboard_buffer_rows(base_rows)
     _normalize_rm_allocation_inputs(enriched_all)
@@ -1737,7 +1550,7 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
         ("dispatch_order", "Dispatch order", ["DO_Date", "dispatch_date", "created_at", "updated_at"], ["DO_QTY", "qty", "order_qty"], ["DO_NO", "dispatch_no", "order_no", "SO_NO", "so_no"]),
         ("inventory_transaction", "Inventory movement", ["IT_Date", "trans_date", "transaction_date", "created_at", "updated_at"], ["IT_Qty", "qty", "quantity"], ["IT_ID", "it_id", "tag_id", "TAG_ID"]),
         ("rm_transaction", "RM movement", ["RT_Date", "trans_date", "created_at", "updated_at"], ["RT_Qty", "qty", "quantity"], ["RT_ID", "rt_id", "RT_BatchNo", "rt_batchno"]),
-        ("sales_order", "Sales order", ["SO_DATE", "DLV_DATE", "created_at", "updated_at"], ["QTY", "SO_QTY", "order_qty"], ["SO_NO", "PART_NO"]),
+        ("scheduled_customer", "Customer schedule", ["CS_DATE", "created_at", "updated_at"], ["CS_QTY", "qty"], ["CS_Id", "CS_SCID"]),
         ("tool_life", "Tool update", ["updated_at", "TL_updated_at", "created_at"], ["TL_tool_life", "TL_preventive_maintenance_strokes"], ["TL_tool_number", "TL_tool_id"]),
     ]
 
