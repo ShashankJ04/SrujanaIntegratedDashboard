@@ -67,6 +67,7 @@ window.MachineDprPage = (() => {
         </div>
         <div class="mdpr-shift-text">
           <p class="mdpr-machine-name">Machine: <strong>${escapeHtml(res.machineLabel || res.machineId || "—")}</strong></p>
+          <p class="mdpr-operator-name">Operator: <strong>${escapeHtml(res.operatorLabel || "—")}</strong></p>
         </div>
       </div>
     `;

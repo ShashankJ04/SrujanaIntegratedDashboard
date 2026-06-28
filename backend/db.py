@@ -102,7 +102,6 @@ class _ConnectionPool:
 
 _pool_lock = threading.Lock()
 _erp_pool: Optional[_ConnectionPool] = None
-_wh_pool: Optional[_ConnectionPool] = None
 
 
 def _pool_size(config_key: str, env_key: str, default: int = 10) -> int:
@@ -229,97 +228,11 @@ def execute(
     return affected
 
 
-# ── Warehouse DB (separate database) ───────────────────────────────────
-
-def _load_warehouse_db_config() -> DBConfig:
-    """Load warehouse_db connection settings from Flask config or env."""
-    host = "localhost"
-    port = 3306
-    user = "root"
-    password = ""
-    db_name = "warehouse_db"
-
-    try:
-        cfg = current_app.config
-        host = cfg.get("WH_DB_HOST", host)
-        port = int(cfg.get("WH_DB_PORT", port))
-        user = cfg.get("WH_DB_USER", user)
-        password = cfg.get("WH_DB_PASSWORD", password)
-        db_name = cfg.get("WH_DB_NAME", db_name)
-    except RuntimeError:
-        host = os.environ.get("WH_DB_HOST", host)
-        port = int(os.environ.get("WH_DB_PORT", port))
-        user = os.environ.get("WH_DB_USER", user)
-        password = os.environ.get("WH_DB_PASSWORD", password)
-        db_name = os.environ.get("WH_DB_NAME", db_name)
-
-    return DBConfig(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        db=db_name,
-    )
-
-
-def _get_wh_pool() -> _ConnectionPool:
-    global _wh_pool
-    if _wh_pool is not None:
-        return _wh_pool
-    with _pool_lock:
-        if _wh_pool is None:
-            max_size = _pool_size("WH_DB_POOL_SIZE", "WH_DB_POOL_SIZE", 5)
-            max_overflow = _pool_overflow("WH_DB_POOL_MAX_OVERFLOW", "WH_DB_POOL_MAX_OVERFLOW", 10)
-
-            def _create() -> pymysql.connections.Connection:
-                return _connect_from_config(_load_warehouse_db_config())
-
-            _wh_pool = _ConnectionPool(_create, max_size, max_overflow)
-    return _wh_pool
-
-
-@contextlib.contextmanager
-def get_warehouse_cursor() -> Iterator[pymysql.cursors.Cursor]:
-    pool = _get_wh_pool()
-    conn = pool.acquire()
-    try:
-        with conn.cursor() as cursor:
-            yield cursor
-        conn.commit()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    finally:
-        pool.release(conn)
-
-
-def wh_fetch_all(
-    sql: str,
-    params: Optional[Sequence[Any]] = None,
-) -> List[Dict[str, Any]]:
-    with get_warehouse_cursor() as cursor:
-        cursor.execute(sql, params or ())
-        rows: List[Dict[str, Any]] = list(cursor.fetchall())
-    return rows
-
-
-def wh_fetch_one(
-    sql: str,
-    params: Optional[Sequence[Any]] = None,
-) -> Optional[Dict[str, Any]]:
-    with get_warehouse_cursor() as cursor:
-        cursor.execute(sql, params or ())
-        row = cursor.fetchone()
-    return row
-
-
-def wh_execute(
+def execute_insert(
     sql: str,
     params: Optional[Sequence[Any]] = None,
 ) -> int:
-    with get_warehouse_cursor() as cursor:
-        affected = cursor.execute(sql, params or ())
-    return affected
+    """Run an INSERT and return the auto-increment id from the same connection."""
+    with get_cursor() as cursor:
+        cursor.execute(sql, params or ())
+        return int(cursor.lastrowid or 0)

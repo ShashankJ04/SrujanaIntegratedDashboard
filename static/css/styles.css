@@ -1395,6 +1395,19 @@ body.machine-dpr-body {
   font-weight: 800;
 }
 
+.mdpr-operator-name {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.mdpr-operator-name strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
 .mdpr-line-top {
   display: flex;
   flex-direction: row;

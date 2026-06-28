@@ -1,0 +1,217 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/production_scheduler.css') }}"/>
+
+<section class="ti-section ti-hub-section-fill" data-section="production-scheduler" id="section-production-scheduler">
+  <!-- Toolbar -->
+  <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one ps-toolbar">
+    <div class="ti-dc-toolbar-left">
+      <button type="button" id="ps-kpi-trigger" class="ti-dc-icon ps-kpi-trigger" aria-label="View performance summary" title="Performance summary">&#128197;</button>
+      <div class="ti-dc-title-block">
+        <h2 class="ti-dc-title ps-font-head">Production Scheduler</h2>
+        <p class="ti-dc-subtitle" id="ps-subtitle">Machine-day planning with explainability</p>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-mid ps-toolbar-center">
+      <div class="ti-dc-legend ti-dc-legend--inline" role="group" aria-label="Utilization filter">
+        <button type="button" class="ti-dc-legend-item ps-legend-filter" data-filter="scheduled" aria-pressed="false">
+          <span class="ti-dc-swatch ps-swatch-scheduled" aria-hidden="true"></span> Scheduled
+        </button>
+        <button type="button" class="ti-dc-legend-item ps-legend-filter" data-filter="produced" aria-pressed="false">
+          <span class="ti-dc-swatch ps-swatch-produced" aria-hidden="true"></span> Produced
+        </button>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-right ti-dc-toolbar-actions" style="gap:10px;flex-wrap:wrap;">
+      <button type="button" id="ps-weights-toggle" class="ti-btn ti-btn-sm ti-btn-outline">Optimization Weights</button>
+      <div class="ti-dc-week-filter" role="group" aria-label="Month">
+        <span class="ti-dc-week-filter-label">Month</span>
+        <input type="month" id="ps-month-input" class="ti-input" style="width:160px" />
+      </div>
+      <div class="ti-dc-week-filter" role="group" aria-label="Scenario">
+        <span class="ti-dc-week-filter-label">Scenario</span>
+        <select id="ps-scenario-select" class="ti-select ti-select--compact" style="min-width:180px">
+          <option value="">New scenario</option>
+        </select>
+      </div>
+      <button type="button" id="ps-run-btn" class="ti-btn ti-btn-primary ti-btn-sm">Run Schedule</button>
+      <button type="button" id="ps-compare-toggle" class="ti-btn ti-btn-sm ti-btn-outline">Compare</button>
+      <button type="button" id="ps-calendar-btn" class="ti-btn ti-btn-sm ti-btn-outline">Calendar</button>
+    </div>
+  </div>
+
+  <!-- Compare bar -->
+  <div id="ps-compare-bar" class="ps-compare-bar" style="display:none">
+    <span style="font-weight:600">Compare runs:</span>
+    <select id="ps-compare-a" class="ti-select ti-select--compact" style="min-width:160px"></select>
+    <span>vs</span>
+    <select id="ps-compare-b" class="ti-select ti-select--compact" style="min-width:160px"></select>
+    <button type="button" id="ps-compare-run" class="ti-btn ti-btn-sm ti-btn-primary">Compare</button>
+  </div>
+
+  <!-- Calendar panel -->
+  <div id="ps-calendar-panel" class="ps-calendar-panel" style="display:none">
+    <h4 class="ps-font-head" style="margin:0 0 10px">Working Calendar</h4>
+    <div id="ps-calendar-grid"></div>
+  </div>
+
+  <!-- Loading / empty -->
+  <div id="ps-loading" class="ps-loading-state" style="display:none">
+    <div class="ti-spinner"></div>
+    <p style="margin-top:12px;color:var(--ps-muted)">Running scheduler…</p>
+  </div>
+  <div id="ps-empty" class="ps-empty-state">
+    Select month and click <strong>Run Schedule</strong> to generate an optimized production plan.
+  </div>
+
+  <!-- Main workspace (shown after run) -->
+  <div class="ps-workspace" id="ps-workspace" style="display:none">
+    <div class="ps-main-canvas">
+      <!-- Schedule-from banner -->
+      <div id="ps-schedule-badge" class="ps-schedule-banner" style="display:none">
+        <span id="ps-badge-text"></span>
+      </div>
+
+      <!-- Gantt (hero) -->
+      <div id="ps-gantt-wrapper" class="ps-gantt-scroll" style="display:none">
+        <div id="ps-gantt"></div>
+      </div>
+
+      <!-- Bottom tabbed panel -->
+      <div id="ps-bottom-panel" class="ps-bottom-panel" style="display:none">
+        <div class="ps-bottom-tabs" role="tablist">
+          <div class="ps-bottom-tabs-left">
+            <button type="button" class="ps-bottom-tab active" data-tab="machines" role="tab">Machine Utilization</button>
+            <button type="button" class="ps-bottom-tab" data-tab="tool" role="tab">Tool Utilization</button>
+            <button type="button" class="ps-bottom-tab" data-tab="improve" role="tab">Improvement Log</button>
+            <button type="button" class="ps-bottom-tab" data-tab="unsched" role="tab">Unscheduled <span id="ps-unsched-count"></span></button>
+          </div>
+          <button type="button" id="ps-bottom-toggle" class="ps-bottom-toggle" aria-label="Minimize panel" title="Minimize panel">&#9660;</button>
+        </div>
+        <div class="ps-bottom-body">
+          <div id="ps-pane-machines" class="ps-bottom-pane active">
+            <table class="ps-data-table ps-sortable-table" id="ps-machine-table">
+              <thead id="ps-machine-thead"></thead>
+              <tbody id="ps-machine-tbody"></tbody>
+            </table>
+          </div>
+          <div id="ps-pane-tool" class="ps-bottom-pane">
+            <table class="ps-data-table ps-sortable-table" id="ps-tool-table">
+              <thead id="ps-tool-thead"></thead>
+              <tbody id="ps-tool-tbody"></tbody>
+            </table>
+          </div>
+          <div id="ps-pane-improve" class="ps-bottom-pane">
+            <ul id="ps-improve-list" class="ps-log-list"></ul>
+            <div id="ps-improve-empty" class="ps-empty-pane" style="display:none">No improvements applied in Pass C.</div>
+          </div>
+          <div id="ps-pane-unsched" class="ps-bottom-pane">
+            <table class="ps-data-table">
+              <thead>
+                <tr><th>Part No</th><th>Part Name</th><th style="text-align:right">Remaining Qty</th><th>Reason</th></tr>
+              </thead>
+              <tbody id="ps-unsched-tbody"></tbody>
+            </table>
+            <div id="ps-unsched-empty" class="ps-empty-pane" style="display:none">All parts scheduled successfully.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drawer backdrop -->
+  <div id="ps-drawer-backdrop" class="ps-drawer-backdrop"></div>
+
+  <!-- Left drawer: weights & what-if -->
+  <aside id="ps-weights-drawer" class="ps-drawer ps-drawer-left" aria-label="Optimization panel">
+    <div class="ps-drawer-header">
+      <h4 class="ps-font-head">Optimization Panel</h4>
+      <button type="button" id="ps-weights-close" class="ps-drawer-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="ps-drawer-body">
+      <p class="ps-section-title">Objective Weights</p>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>Dispatch Urgency</span><span class="ps-w-val ps-mono">0.35</span></div>
+        <input type="range" id="ps-w-urgency" min="0" max="100" value="35">
+      </div>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>Utilization</span><span class="ps-w-val ps-mono">0.20</span></div>
+        <input type="range" id="ps-w-utilize" min="0" max="100" value="20">
+      </div>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>Primary Machine</span><span class="ps-w-val ps-mono">0.15</span></div>
+        <input type="range" id="ps-w-primary" min="0" max="100" value="15">
+      </div>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>PM / Tool Risk</span><span class="ps-w-val ps-mono">0.15</span></div>
+        <input type="range" id="ps-w-pm" min="0" max="100" value="15">
+      </div>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>Changeover</span><span class="ps-w-val ps-mono">0.10</span></div>
+        <input type="range" id="ps-w-changeover" min="0" max="100" value="10">
+      </div>
+      <div class="ps-weight-group">
+        <div class="ps-weight-top"><span>Idle Penalty</span><span class="ps-w-val ps-mono">0.05</span></div>
+        <input type="range" id="ps-w-idle" min="0" max="100" value="5">
+      </div>
+      <p class="ps-hint">Higher weight amplifies that factor when choosing machines and job order.</p>
+      <div class="ps-drawer-actions">
+        <button type="button" id="ps-weights-reset" class="ti-btn ti-btn-sm ti-btn-outline" style="flex:1">Reset</button>
+        <button type="button" id="ps-save-scenario-btn" class="ti-btn ti-btn-sm ti-btn-primary" style="flex:1">Save Scenario</button>
+      </div>
+
+      <hr style="margin:20px 0;border:none;border-top:1px solid var(--ps-outline)">
+
+      <p class="ps-section-title">What-If Overrides</p>
+      <div id="ps-whatif-pins"></div>
+      <div class="ps-whatif-form">
+        <div class="ps-whatif-row-inline">
+          <input type="text" id="ps-whatif-part" class="ti-input" placeholder="Part No" style="flex:1;font-size:12px">
+          <select id="ps-whatif-action" class="ti-select ti-select--compact" style="font-size:12px">
+            <option value="boost">Boost Priority</option>
+            <option value="pin_machine">Pin Machine</option>
+            <option value="pin_day">Pin Day</option>
+          </select>
+        </div>
+        <div class="ps-whatif-row-inline">
+          <input type="text" id="ps-whatif-value" class="ti-input ps-mono" placeholder="Value" style="flex:1;font-size:12px">
+          <button type="button" id="ps-whatif-add" class="ti-btn ti-btn-sm ti-btn-primary">Add</button>
+        </div>
+        <label class="ps-hint" style="margin-top:4px">Block Machines (IDs, comma-separated)</label>
+        <input type="text" id="ps-whatif-blocked" class="ti-input ps-mono" placeholder="e.g. 5, 12" style="width:100%;font-size:12px">
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right drawer: explain -->
+  <aside id="ps-explain-panel" class="ps-drawer ps-drawer-right" aria-label="Assignment details">
+    <div class="ps-drawer-header">
+      <h4 class="ps-font-head" id="ps-explain-title">Assignment Details</h4>
+      <button type="button" id="ps-explain-close" class="ps-drawer-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="ps-explain-tabs" id="ps-explain-tabs" role="tablist">
+      <button type="button" class="ps-explain-tab active" data-tab="assignment" role="tab">Assignment</button>
+      <button type="button" class="ps-explain-tab" data-tab="machine-day" role="tab">Machine Day</button>
+      <button type="button" class="ps-explain-tab" data-tab="part-trace" role="tab">Part Trace</button>
+    </div>
+    <div id="ps-explain-body" class="ps-drawer-body"></div>
+  </aside>
+
+  <!-- KPI / analysis modal (triggered from toolbar icon) -->
+  <div id="ps-stats-modal" class="ti-modal-overlay ps-stats-overlay" role="dialog" aria-modal="true" aria-labelledby="ps-kpi-modal-title">
+    <div class="ti-modal ti-modal-lg ps-stats-modal">
+      <div class="ti-modal-header ps-stats-modal-header">
+        <div>
+          <h3 id="ps-kpi-modal-title">Performance Summary</h3>
+          <p class="ps-stats-subtitle" id="ps-perf-subtitle">—</p>
+        </div>
+        <button type="button" id="ps-stats-close" class="ti-btn ti-btn-sm ti-btn-outline" aria-label="Close">&times;</button>
+      </div>
+      <div class="ti-modal-body ps-stats-modal-body">
+        <div id="ps-kpi-dashboard" class="ps-kpi-dashboard"></div>
+        <div class="ps-stats-insights">
+          <h4 class="ps-section-title">Run insights</h4>
+          <ul id="ps-narrative" class="ps-stats-narrative"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

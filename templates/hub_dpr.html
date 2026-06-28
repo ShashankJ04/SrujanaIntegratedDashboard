@@ -51,7 +51,7 @@
 
   <!-- ── Board row: Production resources + Bottlenecks (Original Dashboard) ── -->
   <div class="ti-dpr-board-row" style="flex-shrink:0">
-    <article class="ti-card ti-dpr-board-card">
+    <article class="ti-card ti-dpr-board-card ti-dpr-board-card--compact">
       <h3 class="ti-dpr-kpi-title">Production Resources</h3>
       <div class="ti-dpr-board-lines">
         <div class="ti-dpr-board-line">
@@ -67,6 +67,10 @@
           <span class="ti-dpr-board-label">Machines (Planned / Total):</span>
           <span id="dpr-machines-read" class="ti-dpr-board-value">—</span>
         </div>
+        <div class="ti-dpr-board-line">
+          <span class="ti-dpr-board-label">Tools Breakdown:</span>
+          <span id="dpr-tools-breakdown-read" class="ti-dpr-board-value">—</span>
+        </div>
       </div>
     </article>
     <article class="ti-card ti-dpr-board-card ti-dpr-board-card--wide">
@@ -74,7 +78,7 @@
       <div id="dpr-board-bottleneck-read-wrap" class="ti-dpr-bottleneck-read-wrap">
         <div id="dpr-bottleneck-grid" class="ti-dpr-bottleneck-grid" aria-label="Bottleneck list"></div>
       </div>
-      <textarea id="dpr-board-bottleneck-input" class="ti-input ti-dpr-bottleneck-input" style="display:none;width:100%;min-height:120px;resize:vertical" rows="6" placeholder="One issue per line"></textarea>
+      <textarea id="dpr-board-bottleneck-input" class="ti-input ti-dpr-bottleneck-input" style="display:none" rows="6" placeholder="One issue per line"></textarea>
     </article>
   </div>
 
@@ -88,6 +92,7 @@
             <th id="dpr-th-actions" data-col-name="actions" class="dpr-col-actions">Actions</th>
             {% endif %}
             <th data-col-name="machine">Machine</th>
+            <th data-col-name="operator">Operator</th>
             <th data-col-name="qr" class="dpr-col-qr">QR</th>
             <th data-col-name="part_no">Part No</th>
             <th data-col-name="part_name">Part Name</th>

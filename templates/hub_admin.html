@@ -16,12 +16,14 @@
       <th class="text-center">Tools</th><th class="text-center">PM</th>
       <th class="text-center">Life</th><th class="text-center">Prod</th>
       <th class="text-center">RM</th>
-      <th class="text-center">Exec</th>
       <th class="text-center">REPT</th>
+      <th class="text-center">SCDL</th>
+      <th class="text-center">LW</th>
       <th class="text-center">PM+</th><th class="text-center">DPR+</th>
       <th class="text-center">Buf+</th>
       <th class="text-center">REPT+</th>
       <th class="text-center">RM+</th>
+      <th class="text-center">LW+</th>
       <th>Actions</th>
     </tr></thead>
     <tbody id="rbacTbody"></tbody>
@@ -30,8 +32,8 @@
 
 <script>
 (function() {
-  const DASH_KEYS = ['tools','preventive_maintenance','life_report','production','rm_variance','executive','rept'];
-  const PLUS_KEYS = ['preventive_maintenance','edit_dpr','edit_buffer','rept_plus','rm_correction_plus'];
+  const DASH_KEYS = ['tools','preventive_maintenance','life_report','production','rm_variance','rept','scdl','lw'];
+  const PLUS_KEYS = ['preventive_maintenance','edit_dpr','edit_buffer','rept_plus','rm_correction_plus','lw_plus'];
 
   let allUsers = [], rbacUsers = [];
 

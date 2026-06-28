@@ -7,8 +7,60 @@
       <span id="inventory-pending-hint" class="ti-inventory-pending-hint" hidden>Pending parts only (balance production qty &gt; 0)</span>
       <button id="hard-refresh-btn" type="button" class="ti-btn-icon" title="Hard refresh data" style="font-size:18px">⟳</button>
     </div>
-    <div class="ti-flex ti-gap-12" style="align-items:center">
-      <input id="global-search" class="ti-input" type="search" placeholder="Search all columns…" style="min-width:220px">
+    <div class="ti-flex ti-gap-12 ti-hub-inventory__actions" style="align-items:center">
+      <div class="ti-hub-inventory__period" id="inventory-period-filters">
+        <div class="ti-dc-week-filter" role="group" aria-label="Inventory month">
+          <span class="ti-dc-week-filter-label" id="inventory-month-lbl">Month</span>
+          <div class="ti-period-select">
+            <button type="button" class="ti-period-select__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="inventory-month-lbl">
+              <span class="ti-period-select__value">Jun</span>
+              <span class="ti-period-select__chev" aria-hidden="true">▾</span>
+            </button>
+            <ul class="ti-period-select__menu" role="listbox" aria-labelledby="inventory-month-lbl">
+              <li class="ti-period-select__option" role="option" data-value="1">Jan</li>
+              <li class="ti-period-select__option" role="option" data-value="2">Feb</li>
+              <li class="ti-period-select__option" role="option" data-value="3">Mar</li>
+              <li class="ti-period-select__option" role="option" data-value="4">Apr</li>
+              <li class="ti-period-select__option" role="option" data-value="5">May</li>
+              <li class="ti-period-select__option" role="option" data-value="6">Jun</li>
+              <li class="ti-period-select__option" role="option" data-value="7">Jul</li>
+              <li class="ti-period-select__option" role="option" data-value="8">Aug</li>
+              <li class="ti-period-select__option" role="option" data-value="9">Sep</li>
+              <li class="ti-period-select__option" role="option" data-value="10">Oct</li>
+              <li class="ti-period-select__option" role="option" data-value="11">Nov</li>
+              <li class="ti-period-select__option" role="option" data-value="12">Dec</li>
+            </ul>
+            <input type="hidden" id="inventory-month" value="6">
+          </div>
+        </div>
+        <div class="ti-dc-week-filter" role="group" aria-label="Inventory year">
+          <span class="ti-dc-week-filter-label" id="inventory-year-lbl">Year</span>
+          <div class="ti-period-select">
+            <button type="button" class="ti-period-select__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="inventory-year-lbl">
+              <span class="ti-period-select__value">2026</span>
+              <span class="ti-period-select__chev" aria-hidden="true">▾</span>
+            </button>
+            <ul class="ti-period-select__menu" role="listbox" aria-labelledby="inventory-year-lbl">
+              <li class="ti-period-select__option" role="option" data-value="2020">2020</li>
+              <li class="ti-period-select__option" role="option" data-value="2021">2021</li>
+              <li class="ti-period-select__option" role="option" data-value="2022">2022</li>
+              <li class="ti-period-select__option" role="option" data-value="2023">2023</li>
+              <li class="ti-period-select__option" role="option" data-value="2024">2024</li>
+              <li class="ti-period-select__option" role="option" data-value="2025">2025</li>
+              <li class="ti-period-select__option" role="option" data-value="2026">2026</li>
+              <li class="ti-period-select__option" role="option" data-value="2027">2027</li>
+              <li class="ti-period-select__option" role="option" data-value="2028">2028</li>
+              <li class="ti-period-select__option" role="option" data-value="2029">2029</li>
+              <li class="ti-period-select__option" role="option" data-value="2030">2030</li>
+              <li class="ti-period-select__option" role="option" data-value="2031">2031</li>
+              <li class="ti-period-select__option" role="option" data-value="2032">2032</li>
+            </ul>
+            <input type="hidden" id="inventory-year" value="2026">
+          </div>
+        </div>
+      </div>
+      <span id="inventory-archive-hint" class="ti-inventory-pending-hint" hidden>Archived snapshot — read only</span>
+      <input id="global-search" class="ti-input sg-search ti-dc-toolbar-search" type="search" placeholder="Search all columns…" autocomplete="off" aria-label="Search all columns">
       <button id="export-btn" class="ti-btn ti-btn-success ti-btn-sm">Export to Excel</button>
     </div>
   </div>
@@ -31,7 +83,140 @@
   let pageSizeSelect, globalSearchInput, exportBtn, hardRefreshBtn;
   let zoomRange, zoomOutBtn, zoomInBtn, zoomDisplay, currentZoom = 100;
   let layoutSaveTimer = null;
+  let inventoryPeriodBound = false;
+  let inventoryPeriodDefaultsSet = false;
   const LAYOUT_STORAGE_PREFIX = 'reportLayout:';
+
+  function getInventoryPeriod() {
+    const monthEl = document.getElementById('inventory-month');
+    const yearEl = document.getElementById('inventory-year');
+    const month = Number(monthEl && monthEl.value);
+    const year = Number(yearEl && yearEl.value);
+    if (!month || !year) return null;
+    return { year, month };
+  }
+
+  function isFutureInventoryPeriod(year, month) {
+    const now = new Date();
+    if (year > now.getFullYear()) return true;
+    if (year === now.getFullYear() && month > now.getMonth() + 1) return true;
+    return false;
+  }
+
+  function inventoryIsReadOnly() {
+    const p = getInventoryPeriod();
+    if (!p) return false;
+    const now = new Date();
+    return p.year !== now.getFullYear() || p.month !== now.getMonth() + 1;
+  }
+
+  function closeAllInventoryPeriodMenus() {
+    document.querySelectorAll('#inventory-period-filters .ti-period-select__menu.is-open').forEach(function(menu) {
+      menu.classList.remove('is-open');
+      const wrap = menu.closest('.ti-period-select');
+      const btn = wrap && wrap.querySelector('.ti-period-select__btn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function setInventoryPeriodValue(hiddenId, value) {
+    const hidden = document.getElementById(hiddenId);
+    if (!hidden) return;
+    const wrap = hidden.closest('.ti-period-select');
+    if (!wrap) return;
+    const valueEl = wrap.querySelector('.ti-period-select__value');
+    const menu = wrap.querySelector('.ti-period-select__menu');
+    hidden.value = String(value);
+    menu.querySelectorAll('.ti-period-select__option').forEach(function(opt) {
+      const on = String(opt.dataset.value) === String(value);
+      opt.classList.toggle('is-selected', on);
+      if (on && valueEl) valueEl.textContent = opt.textContent.trim();
+    });
+  }
+
+  function bindInventoryPeriodSelect(wrap) {
+    if (!wrap || wrap.dataset.bound === '1') return;
+    wrap.dataset.bound = '1';
+    const btn = wrap.querySelector('.ti-period-select__btn');
+    const menu = wrap.querySelector('.ti-period-select__menu');
+    const hidden = wrap.querySelector('input[type="hidden"]');
+    const valueEl = wrap.querySelector('.ti-period-select__value');
+    if (!btn || !menu || !hidden || !valueEl) return;
+
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const isOpen = menu.classList.contains('is-open');
+      closeAllInventoryPeriodMenus();
+      if (!isOpen) {
+        menu.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    menu.querySelectorAll('.ti-period-select__option').forEach(function(opt) {
+      opt.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const nextVal = opt.dataset.value || '';
+        const isMonth = hidden.id === 'inventory-month';
+        const year = isMonth
+          ? Number(document.getElementById('inventory-year') && document.getElementById('inventory-year').value)
+          : Number(nextVal);
+        const month = isMonth
+          ? Number(nextVal)
+          : Number(document.getElementById('inventory-month') && document.getElementById('inventory-month').value);
+        if (isFutureInventoryPeriod(year, month)) return;
+
+        hidden.value = nextVal;
+        valueEl.textContent = opt.textContent.trim();
+        menu.querySelectorAll('.ti-period-select__option').forEach(function(o) {
+          o.classList.toggle('is-selected', o === opt);
+        });
+        closeAllInventoryPeriodMenus();
+        DataTable.setExternalState({ page: 1 });
+        reload();
+      });
+    });
+  }
+
+  function initInventoryPeriodPickers() {
+    document.querySelectorAll('#inventory-period-filters .ti-period-select').forEach(bindInventoryPeriodSelect);
+
+    if (!inventoryPeriodBound) {
+      inventoryPeriodBound = true;
+      document.addEventListener('click', closeAllInventoryPeriodMenus);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeAllInventoryPeriodMenus();
+      });
+    }
+
+    if (!inventoryPeriodDefaultsSet) {
+      const now = new Date();
+      setInventoryPeriodValue('inventory-month', now.getMonth() + 1);
+      setInventoryPeriodValue('inventory-year', now.getFullYear());
+      inventoryPeriodDefaultsSet = true;
+    }
+  }
+
+  function updateInventoryPeriodUi(meta) {
+    const archiveHint = document.getElementById('inventory-archive-hint');
+    const readonly = inventoryIsReadOnly();
+    if (archiveHint) {
+      archiveHint.hidden = !readonly;
+      archiveHint.style.display = readonly ? '' : 'none';
+    }
+    if (hardRefreshBtn) {
+      hardRefreshBtn.hidden = readonly;
+      hardRefreshBtn.style.display = readonly ? 'none' : '';
+    }
+    if (readonly && meta && meta.snapshotAvailable === false) {
+      const c = document.getElementById('table-container');
+      if (c) {
+        const p = getInventoryPeriod();
+        const label = p ? `${p.year}-${String(p.month).padStart(2, '0')}` : 'this period';
+        c.innerHTML = `<div class="ti-placeholder">No archived inventory snapshot for ${label}. Snapshots are saved automatically at 11:59 PM on the last day of each month.</div>`;
+      }
+    }
+  }
 
   function inventoryRowFilter() {
     const v = new URLSearchParams(window.location.search).get('rowFilter');
@@ -50,11 +235,16 @@
     globalSearchInput = document.getElementById('global-search');
     exportBtn = document.getElementById('export-btn');
     hardRefreshBtn = document.getElementById('hard-refresh-btn');
+    initInventoryPeriodPickers();
 
     if (typeof DataTable === 'undefined') {
       console.warn('DataTable not loaded yet');
       return;
     }
+
+    // DataTable is a singleton — reset search each time this section loads.
+    DataTable.setExternalState({ search: '', page: 1 });
+    if (globalSearchInput) globalSearchInput.value = '';
 
     DataTable.init({
       containerId: 'table-container',
@@ -86,7 +276,15 @@
     exportBtn.addEventListener('click', () => {
       const state = DataTable.getState();
       const rf = inventoryRowFilter();
-      const url = ApiClient.buildExportUrl({ search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, rowFilter: rf });
+      const period = getInventoryPeriod();
+      const url = ApiClient.buildExportUrl({
+        search: state.search,
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
+        rowFilter: rf,
+        year: period ? period.year : undefined,
+        month: period ? period.month : undefined,
+      });
       const a = document.createElement('a'); a.href = url; a.download = 'table_export.xlsx';
       document.body.appendChild(a); a.click(); a.remove();
     });
@@ -119,7 +317,21 @@
     if (c) c.classList.add('loading');
     try {
       const rf = inventoryRowFilter();
-      const result = await ApiClient.getDashboardRows({ page: state.page, pageSize: state.pageSize, search: state.search, sortBy: state.sortBy, sortDir: state.sortDir, rowFilter: rf });
+      const period = getInventoryPeriod();
+      const result = await ApiClient.getDashboardRows({
+        page: state.page,
+        pageSize: state.pageSize,
+        search: state.search,
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
+        rowFilter: rf,
+        year: period ? period.year : undefined,
+        month: period ? period.month : undefined,
+      });
+      updateInventoryPeriodUi(result);
+      if (result.isReadOnly && result.snapshotAvailable === false) {
+        return;
+      }
       DataTable.setExternalState({ columns: result.columns, rows: result.rows, page: result.page, pageSize: result.pageSize, totalCount: result.totalCount, totalPages: Math.max(1, Math.ceil(result.totalCount / result.pageSize || 1)) });
       DataTable.renderTable();
     } catch (err) { console.error(err); if (c) c.innerHTML = '<div class="ti-placeholder">Error loading data.</div>'; }
@@ -132,7 +344,7 @@
   }
 
   function renderCell({ row, col, value, td }) {
-    if (col.name !== 'buffer_qty' || !window.BUFFER_EDIT_ALLOWED) return false;
+    if (col.name !== 'buffer_qty' || !window.BUFFER_EDIT_ALLOWED || inventoryIsReadOnly()) return false;
     const wrapper = document.createElement('div'); wrapper.className = 'buffer-cell';
     const input = document.createElement('input'); input.type = 'number'; input.step = '1'; input.className = 'buffer-input';
     input.value = value == null ? '' : String(Number(value));

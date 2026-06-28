@@ -31,17 +31,6 @@ const ApiClient = (() => {
     return res.json();
   }
 
-  async function getColumns() {
-    const res = await fetch(`${BASE}/columns`);
-    return handleResponse(res);
-  }
-
-  async function getRows(params) {
-    const qs = buildQuery(params);
-    const res = await fetch(`${BASE}/rows?${qs}`);
-    return handleResponse(res);
-  }
-
   async function getDashboardRows(params) {
     const qs = buildQuery(params);
     const res = await fetch(`${BASE}/dashboard-rows?${qs}`);
@@ -127,8 +116,6 @@ const ApiClient = (() => {
   }
 
   return {
-    getColumns,
-    getRows,
     getDashboardRows,
     updateBufferConfig,
     refreshDashboard,

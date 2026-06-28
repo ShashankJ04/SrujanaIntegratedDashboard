@@ -17,7 +17,7 @@ const DataTable = (() => {
     columns: [],
     rows: [],
     page: 1,
-    pageSize: window.DASHBOARD_DEFAULT_PAGE_SIZE || 25,
+    pageSize: 25,
     totalCount: 0,
     totalPages: 1,
     search: "",

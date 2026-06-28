@@ -24,6 +24,7 @@
   let _lastPayload = null;
   let _weekFilter = 'full';
   let _legendFilter = '';
+  let _showCompleted = false;
   let _loadFn = null;
 
   // ── Utility helpers ──────────────────────────────────────────────────
@@ -136,10 +137,18 @@
   const QTY_EPS = 1e-4;
 
   function rowMatchesLegend(row, meta, legendFilter, payload) {
-    if (!legendFilter) return true;
+    if (meta && meta.isGrandTotal) return true;
     if (!meta) return false;
-    if (meta.isGrandTotal) return true;
+
     const columns = (payload && payload.columns) || [];
+    const hasPending = columns.some((col) => {
+      const dayNum = parseDayCol(col);
+      return dayNum !== null && toNum(row[col]) > QTY_EPS;
+    });
+
+    if (!hasPending && !_showCompleted) return false;
+
+    if (!legendFilter) return true;
     for (const col of columns) {
       const dayNum = parseDayCol(col);
       if (dayNum === null || toNum(row[col]) <= QTY_EPS) continue;
@@ -156,23 +165,19 @@
   }
 
   function partRowProductionStatus(row, dayNum, payload, raw) {
-    const scheduled = toNum(raw);
-    if (scheduled <= QTY_EPS) return '';
-    const pk = partNoFromRow(row);
-    if (!pk || !payload) return '';
-    const prodBal = prodBalToDate(payload, pk, dayNum);
-    if (prodBal < -QTY_EPS) return 'over';
-    if (Math.abs(prodBal) <= QTY_EPS) return 'exact';
-    if (prodBal >= scheduled - QTY_EPS) return 'none';
-    if (prodBal > QTY_EPS) return 'under';
-    return '';
+    const val = toNum(raw);
+    if (val <= QTY_EPS) return '';
+    const now = new Date();
+    const year = payload.year;
+    const month = payload.month;
+    if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) return 'overdue';
+    if (year === now.getFullYear() && month === now.getMonth() + 1 && dayNum < now.getDate()) return 'overdue';
+    return 'pending';
   }
 
   function productionStatusClass(status) {
-    if (status === 'exact') return 'ti-dc-cell--ok';
-    if (status === 'over') return 'ti-dc-cell--dispatched';
-    if (status === 'none') return 'ti-dc-cell--short';
-    if (status === 'under') return 'ti-dc-cell--partial';
+    if (status === 'pending') return 'ti-dc-cell--short';
+    if (status === 'overdue') return 'ti-dc-cell--partial';
     return '';
   }
 
@@ -197,6 +202,17 @@
         if (_lastPayload && root) renderGrid(root, _lastPayload, _weekFilter);
       });
     });
+
+    const showCompletedCb = document.getElementById('pc-show-completed');
+    if (showCompletedCb && !showCompletedCb.dataset.pcBound) {
+      showCompletedCb.dataset.pcBound = '1';
+      showCompletedCb.checked = _showCompleted;
+      showCompletedCb.addEventListener('change', () => {
+        _showCompleted = showCompletedCb.checked;
+        if (_lastPayload && root) renderGrid(root, _lastPayload, _weekFilter);
+      });
+    }
+
     syncLegendUi();
   }
 
@@ -311,14 +327,24 @@
           return parts.join(' ');
         };
         col.format = (raw, row) => {
-          const text = raw != null && raw !== '' ? fmtNum(raw) : '';
           const meta = row._pcRowMeta;
+          const pk = partNoFromRow(row);
           if (meta && meta.isGrandTotal) {
             const cnt = dayNonZeroCounts[String(dayNum)] || 0;
+            const text = raw != null && raw !== '' ? fmtNum(raw) : '';
             return '<span class="ti-dc-day-cell ti-dc-day-cell--grand-total" data-pc-grand-total="1" data-pc-day="' + dayNum + '">' + text + ' (' + fmtNum(cnt) + ')</span>';
           }
-          const pk = partNoFromRow(row);
-          if (!pk) return text;
+          if (!pk) return raw != null && raw !== '' ? fmtNum(raw) : '';
+          // Show actual produced qty when cell is empty and Show Completed is on
+          if ((raw == null || raw === '' || toNum(raw) <= QTY_EPS) && _showCompleted && pk) {
+            const daily = partDailyProductionMap(payload, pk);
+            const dayProd = daily ? toNum(daily[String(dayNum)]) : 0;
+            if (dayProd > 0) {
+              return '<span class="ti-dc-day-cell ti-dc-day-cell--completed" data-pc-part="' + escapeHtml(pk) + '" data-pc-day="' + dayNum + '">' + fmtNum(dayProd) + '</span>';
+            }
+            return '';
+          }
+          const text = raw != null && raw !== '' ? fmtNum(raw) : '';
           const st = partRowProductionStatus(row, dayNum, payload, raw);
           if (st && _legendFilter && !dayStatusMatchesLegend(st, _legendFilter)) return '';
           return '<span class="ti-dc-day-cell" data-pc-part="' + escapeHtml(pk) + '" data-pc-day="' + dayNum + '">' + text + '</span>';
@@ -518,6 +544,7 @@
 
   function buildDayTipHtml(pk, dayStr, payload) {
     let conVal = 0, rmName = 'N/A', rmAvailable = 0;
+    let originalScheduled = 0;
     if (payload.rows && payload.rowMeta) {
       for (let i = 0; i < payload.rows.length; i++) {
         if (partNoFromRow(payload.rows[i]) === pk) {
@@ -527,24 +554,25 @@
             rmName = meta.partInfo.rmName || 'N/A';
             rmAvailable = toNum(meta.partInfo.rmAvailable);
           }
+          if (meta && meta.originalScheduled) {
+            originalScheduled = toNum(meta.originalScheduled[String(dayStr)]);
+          }
           break;
         }
       }
     }
-    const prodReqToDate = cumulativeProductionRequired(payload, pk, dayStr);
-    const produced = producedQtyForScheduleWindow(payload, pk, dayStr);
     const producedToDate = cumulativeProductionProduced(payload, pk, dayStr);
-    const prodBal = prodBalToDate(payload, pk, dayStr);
-    const rmRequired = conVal > 0 ? fmtNum(Math.max(0, prodBal / conVal)) : '0';
+    const daily = partDailyProductionMap(payload, pk);
+    const totalProduced = daily ? Object.values(daily).reduce((s, v) => s + toNum(v), 0) : 0;
+
+    const rmRequired = conVal > 0 && originalScheduled > 0 ? fmtNum(Math.max(0, originalScheduled / conVal)) : '0';
     return (
       '<div class="ti-dc-stock-tip-inner">' +
-      '<div class="ti-dc-stock-tip-head">RM Requirement</div>' +
+      '<div class="ti-dc-stock-tip-head">Production Details</div>' +
       '<div class="ti-dc-stock-tip-rows">' +
+      (originalScheduled > 0 ? '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Dispatch Scheduled Qty</span><strong class="ti-dc-stock-tip-val">' + fmtNum(originalScheduled) + '</strong></div>' : '') +
+      '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Produced (Month)</span><strong class="ti-dc-stock-tip-val">' + fmtNum(totalProduced) + '</strong></div>' +
       '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM</span><strong class="ti-dc-stock-tip-val">' + escapeHtml(rmName) + '</strong></div>' +
-      '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Prod Since Last Req</span><strong class="ti-dc-stock-tip-val">' + fmtNum(produced) + '</strong></div>' +
-      '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Prod Req To Date</span><strong class="ti-dc-stock-tip-val">' + fmtNum(prodReqToDate) + '</strong></div>' +
-      '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Prod To Date</span><strong class="ti-dc-stock-tip-val">' + fmtNum(producedToDate) + '</strong></div>' +
-      '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Prod Bal To Date</span><strong class="ti-dc-stock-tip-val">' + fmtNum(prodBal) + '</strong></div>' +
       '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">RM Required</span><strong class="ti-dc-stock-tip-val">' + rmRequired + '</strong></div>' +
       '<div class="ti-dc-stock-tip-row"><span class="ti-dc-stock-tip-label">Total RM Available</span><strong class="ti-dc-stock-tip-val">' + fmtNum(rmAvailable) + '</strong></div>' +
       '</div></div>'

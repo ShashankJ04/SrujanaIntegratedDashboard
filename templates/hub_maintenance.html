@@ -22,6 +22,62 @@
     <span id="lifeStatusCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
     <input type="text" class="ti-input" id="lifeSearch" placeholder="Filter tool no…" style="width:min(200px,32vw)" autocomplete="off"/>
   </div>
+  <div class="ti-tabs__inline ti-tabs__inline--breakdown" id="maint-inline-breakdown" hidden>
+    <div class="ti-breakdown-status-tabs" id="breakdown-tabs" role="tablist" aria-label="Breakdown status">
+      <button type="button" class="ti-breakdown-tab active" data-breakdown-tab="active" role="tab" aria-selected="true">Active</button>
+      <button type="button" class="ti-breakdown-tab" data-breakdown-tab="closed" role="tab" aria-selected="false">Closed</button>
+    </div>
+    <div class="ti-dc-week-filter" role="group" aria-label="Breakdown month">
+      <span class="ti-dc-week-filter-label" id="breakdown-month-lbl">Month</span>
+      <div class="ti-period-select">
+        <button type="button" class="ti-period-select__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="breakdown-month-lbl">
+          <span class="ti-period-select__value">Jun</span>
+          <span class="ti-period-select__chev" aria-hidden="true">▾</span>
+        </button>
+        <ul class="ti-period-select__menu" role="listbox" aria-labelledby="breakdown-month-lbl">
+          <li class="ti-period-select__option" role="option" data-value="1">Jan</li>
+          <li class="ti-period-select__option" role="option" data-value="2">Feb</li>
+          <li class="ti-period-select__option" role="option" data-value="3">Mar</li>
+          <li class="ti-period-select__option" role="option" data-value="4">Apr</li>
+          <li class="ti-period-select__option" role="option" data-value="5">May</li>
+          <li class="ti-period-select__option" role="option" data-value="6">Jun</li>
+          <li class="ti-period-select__option" role="option" data-value="7">Jul</li>
+          <li class="ti-period-select__option" role="option" data-value="8">Aug</li>
+          <li class="ti-period-select__option" role="option" data-value="9">Sep</li>
+          <li class="ti-period-select__option" role="option" data-value="10">Oct</li>
+          <li class="ti-period-select__option" role="option" data-value="11">Nov</li>
+          <li class="ti-period-select__option" role="option" data-value="12">Dec</li>
+        </ul>
+        <input type="hidden" id="breakdown-month" value="6">
+      </div>
+    </div>
+    <div class="ti-dc-week-filter" role="group" aria-label="Breakdown year">
+      <span class="ti-dc-week-filter-label" id="breakdown-year-lbl">Year</span>
+      <div class="ti-period-select">
+        <button type="button" class="ti-period-select__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="breakdown-year-lbl">
+          <span class="ti-period-select__value">2026</span>
+          <span class="ti-period-select__chev" aria-hidden="true">▾</span>
+        </button>
+        <ul class="ti-period-select__menu" role="listbox" aria-labelledby="breakdown-year-lbl">
+          <li class="ti-period-select__option" role="option" data-value="2020">2020</li>
+          <li class="ti-period-select__option" role="option" data-value="2021">2021</li>
+          <li class="ti-period-select__option" role="option" data-value="2022">2022</li>
+          <li class="ti-period-select__option" role="option" data-value="2023">2023</li>
+          <li class="ti-period-select__option" role="option" data-value="2024">2024</li>
+          <li class="ti-period-select__option" role="option" data-value="2025">2025</li>
+          <li class="ti-period-select__option" role="option" data-value="2026">2026</li>
+          <li class="ti-period-select__option" role="option" data-value="2027">2027</li>
+          <li class="ti-period-select__option" role="option" data-value="2028">2028</li>
+          <li class="ti-period-select__option" role="option" data-value="2029">2029</li>
+          <li class="ti-period-select__option" role="option" data-value="2030">2030</li>
+          <li class="ti-period-select__option" role="option" data-value="2031">2031</li>
+          <li class="ti-period-select__option" role="option" data-value="2032">2032</li>
+        </ul>
+        <input type="hidden" id="breakdown-year" value="2026">
+      </div>
+    </div>
+    <button type="button" class="ti-btn ti-btn-outline ti-btn-sm" id="breakdownExportBtn">⬇ Export</button>
+  </div>
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════════
@@ -115,13 +171,6 @@
      TAB 4: BREAKDOWN
      ════════════════════════════════════════════════════════════════════ -->
 <div class="ti-tab-panel" id="panel-breakdown">
-  <div class="ti-tabs ti-tabs--maint ti-breakdown-tabs" id="breakdown-tabs">
-    <div class="ti-tabs__nav">
-      <button class="ti-tab active" data-breakdown-tab="active">Active</button>
-      <button class="ti-tab" data-breakdown-tab="closed">Closed</button>
-    </div>
-  </div>
-
   <div id="breakdownLoading" class="ti-loading" style="display:none"><div class="ti-spinner"></div></div>
 
   <div id="breakdownActivePanel" class="ti-breakdown-panel active">
@@ -275,11 +324,16 @@ window._breakdownLoaded = false;
   function setMaintInlineTools(tabName) {
     const pm = document.getElementById('maint-inline-pm');
     const life = document.getElementById('maint-inline-life');
+    const breakdown = document.getElementById('maint-inline-breakdown');
     if (pm) pm.hidden = tabName !== 'pm';
     if (life) life.hidden = tabName !== 'life';
+    if (breakdown) breakdown.hidden = tabName !== 'breakdown';
+    if (tabName === 'breakdown' && typeof initBreakdownPeriodPickers === 'function') {
+      initBreakdownPeriodPickers();
+    }
   }
 
-  const tabs = Array.from(document.querySelectorAll('#maint-tabs .ti-tab'));
+  const tabs = Array.from(document.querySelectorAll('#maint-tabs .ti-tabs__nav .ti-tab'));
   tabs.forEach(tab => {
     const key = tabAccessMap[tab.dataset.tab];
     const allowed = key ? access.has(key) : true;
@@ -293,9 +347,9 @@ window._breakdownLoaded = false;
   const visibleTabs = tabs.filter(t => t.style.display !== 'none');
   if (!visibleTabs.length) return;
 
-  document.querySelectorAll('#maint-tabs .ti-tab').forEach(tab => {
+  document.querySelectorAll('#maint-tabs .ti-tabs__nav .ti-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('#maint-tabs .ti-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('#maint-tabs .ti-tabs__nav .ti-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       document.querySelectorAll('.ti-tab-panel').forEach(p => p.classList.remove('active'));
       const panel = document.getElementById('panel-' + tab.dataset.tab);
@@ -311,7 +365,7 @@ window._breakdownLoaded = false;
     });
   });
 
-  document.querySelectorAll('#maint-tabs .ti-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#maint-tabs .ti-tabs__nav .ti-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.ti-tab-panel').forEach(p => p.classList.remove('active'));
   const firstTab = visibleTabs[0];
   firstTab.classList.add('active');
@@ -786,6 +840,95 @@ var _breakdownClosed = [];
 var _breakdownEditId = null;
 var _breakdownCompleteId = null;
 var _breakdownCanEdit = ((window.CURRENT_PERMISSIONS && window.CURRENT_PERMISSIONS.plusAccess) || []).includes('preventive_maintenance');
+var _breakdownPeriodBound = false;
+var _breakdownTab = 'active';
+
+var _breakdownPeriodDefaultsSet = false;
+
+function closeAllBreakdownPeriodMenus() {
+  document.querySelectorAll('#maint-inline-breakdown .ti-period-select__menu.is-open').forEach(function(menu) {
+    menu.classList.remove('is-open');
+    const wrap = menu.closest('.ti-period-select');
+    const btn = wrap && wrap.querySelector('.ti-period-select__btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function setBreakdownPeriodValue(hiddenId, value) {
+  const hidden = document.getElementById(hiddenId);
+  if (!hidden) return;
+  const wrap = hidden.closest('.ti-period-select');
+  if (!wrap) return;
+  const valueEl = wrap.querySelector('.ti-period-select__value');
+  const menu = wrap.querySelector('.ti-period-select__menu');
+  hidden.value = String(value);
+  menu.querySelectorAll('.ti-period-select__option').forEach(function(opt) {
+    const on = String(opt.dataset.value) === String(value);
+    opt.classList.toggle('is-selected', on);
+    if (on && valueEl) valueEl.textContent = opt.textContent.trim();
+  });
+}
+
+function bindBreakdownPeriodSelect(wrap) {
+  if (!wrap || wrap.dataset.bound === '1') return;
+  wrap.dataset.bound = '1';
+  const btn = wrap.querySelector('.ti-period-select__btn');
+  const menu = wrap.querySelector('.ti-period-select__menu');
+  const hidden = wrap.querySelector('input[type="hidden"]');
+  const valueEl = wrap.querySelector('.ti-period-select__value');
+  if (!btn || !menu || !hidden || !valueEl) return;
+
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const isOpen = menu.classList.contains('is-open');
+    closeAllBreakdownPeriodMenus();
+    if (!isOpen) {
+      menu.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  menu.querySelectorAll('.ti-period-select__option').forEach(function(opt) {
+    opt.addEventListener('click', function(e) {
+      e.stopPropagation();
+      hidden.value = opt.dataset.value || '';
+      valueEl.textContent = opt.textContent.trim();
+      menu.querySelectorAll('.ti-period-select__option').forEach(function(o) {
+        o.classList.toggle('is-selected', o === opt);
+      });
+      closeAllBreakdownPeriodMenus();
+      loadBreakdownData({ quiet: true });
+    });
+  });
+}
+
+function initBreakdownPeriodPickers() {
+  document.querySelectorAll('#maint-inline-breakdown .ti-period-select').forEach(bindBreakdownPeriodSelect);
+
+  if (!_breakdownPeriodBound) {
+    _breakdownPeriodBound = true;
+    document.addEventListener('click', closeAllBreakdownPeriodMenus);
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeAllBreakdownPeriodMenus();
+    });
+  }
+
+  if (!_breakdownPeriodDefaultsSet) {
+    const now = new Date();
+    setBreakdownPeriodValue('breakdown-month', now.getMonth() + 1);
+    setBreakdownPeriodValue('breakdown-year', now.getFullYear());
+    _breakdownPeriodDefaultsSet = true;
+  }
+}
+
+function breakdownPeriodQuery() {
+  const monthHidden = document.getElementById('breakdown-month');
+  const yearHidden = document.getElementById('breakdown-year');
+  const month = monthHidden ? parseInt(monthHidden.value, 10) : NaN;
+  const year = yearHidden ? parseInt(yearHidden.value, 10) : NaN;
+  if (!Number.isFinite(month) || !Number.isFinite(year)) return '';
+  return 'month=' + encodeURIComponent(month) + '&year=' + encodeURIComponent(year);
+}
 
 function breakdownEscape(value) {
   return String(value || '')
@@ -993,33 +1136,63 @@ function renderBreakdownGrids() {
   }
 }
 
-async function loadBreakdownData() {
+async function loadBreakdownData(opts) {
+  opts = opts || {};
+  initBreakdownPeriodPickers();
   const loader = document.getElementById('breakdownLoading');
-  if (loader) loader.style.display = 'flex';
+  const activeGrid = document.getElementById('breakdownActiveGrid');
+  const closedGrid = document.getElementById('breakdownClosedGrid');
+  if (opts.quiet) {
+    if (activeGrid) activeGrid.classList.add('breakdown-grid-loading');
+    if (closedGrid) closedGrid.classList.add('breakdown-grid-loading');
+  } else if (loader) {
+    loader.style.display = 'flex';
+  }
   try {
     await Promise.all([loadBreakdownOperators(), loadBreakdownCompleteOperators()]);
+    const periodQs = breakdownPeriodQuery();
+    const suffix = periodQs ? '&' + periodQs : '';
     [_breakdownActive, _breakdownClosed] = await Promise.all([
-      apiFetch('/api/tool-breakdowns?status=active'),
-      apiFetch('/api/tool-breakdowns?status=closed'),
+      apiFetch('/api/tool-breakdowns?status=active' + suffix),
+      apiFetch('/api/tool-breakdowns?status=closed' + suffix),
     ]);
     renderBreakdownGrids();
+    setBreakdownTab(_breakdownTab);
   } catch (err) {
     showSnackbar(err.message || 'Failed to load breakdowns');
   } finally {
-    if (loader) loader.style.display = 'none';
+    if (loader && !opts.quiet) loader.style.display = 'none';
+    if (activeGrid) activeGrid.classList.remove('breakdown-grid-loading');
+    if (closedGrid) closedGrid.classList.remove('breakdown-grid-loading');
   }
 }
 
 function setBreakdownTab(name) {
-  document.querySelectorAll('#breakdown-tabs .ti-tab').forEach(t => t.classList.remove('active'));
-  const btn = document.querySelector(`#breakdown-tabs .ti-tab[data-breakdown-tab="${name}"]`);
-  if (btn) btn.classList.add('active');
+  _breakdownTab = name || 'active';
+  document.querySelectorAll('#breakdown-tabs .ti-breakdown-tab').forEach(function(t) {
+    const on = t.dataset.breakdownTab === _breakdownTab;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   document.getElementById('breakdownActivePanel').classList.toggle('active', name === 'active');
   document.getElementById('breakdownClosedPanel').classList.toggle('active', name === 'closed');
 }
 
-document.querySelectorAll('#breakdown-tabs .ti-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
+document.getElementById('breakdownExportBtn').addEventListener('click', function() {
+  const periodQs = breakdownPeriodQuery();
+  const statusQs = 'status=' + encodeURIComponent(_breakdownTab);
+  const url = '/api/tool-breakdowns/export?' + statusQs + (periodQs ? '&' + periodQs : '');
+  const monthHidden = document.getElementById('breakdown-month');
+  const yearHidden = document.getElementById('breakdown-year');
+  const m = monthHidden ? monthHidden.value : '';
+  const y = yearHidden ? yearHidden.value : '';
+  const fname = 'tool_breakdown_' + (y || '') + '_' + String(m || '').padStart(2, '0') + '_' + _breakdownTab + '.xlsx';
+  apiDownloadGet(url, fname);
+});
+
+document.querySelectorAll('#breakdown-tabs .ti-breakdown-tab').forEach(function(tab) {
+  tab.addEventListener('click', function(e) {
+    e.stopPropagation();
     setBreakdownTab(tab.dataset.breakdownTab || 'active');
   });
 });
@@ -1070,4 +1243,6 @@ document.getElementById('breakdownCompleteSubmit').addEventListener('click', asy
     showSnackbar(e.message || 'Failed to complete breakdown');
   }
 });
+
+initBreakdownPeriodPickers();
 </script>

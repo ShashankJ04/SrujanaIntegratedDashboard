@@ -85,8 +85,6 @@ const Hub = (() => {
       return sp.toString();
     },
     buildExportUrl(params) { return `/api/export?${this.buildQuery(params)}`; },
-    getColumns()          { return this.get('/api/columns'); },
-    getRows(params)       { return this.get(`/api/rows?${this.buildQuery(params)}`); },
     getDashboardRows(p)   { return this.get(`/api/dashboard-rows?${this.buildQuery(p)}`); },
     refreshDashboard()    { return this.post('/api/dashboard-refresh'); },
     updateBufferConfig(pn, q) { return this.put(`/api/buffer-config/${encodeURIComponent(pn)}`, { buffer_qty: q }); },
@@ -119,11 +117,29 @@ const Hub = (() => {
       if (abs >= 1_000)       return neg + (abs / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
       return neg + String(Math.round(abs));
     },
-    snackbar(msg, dur = 4000) {
+    snackbar(msg, typeOrDur = 4000, durOverride) {
+      const types = ['error', 'warning', 'success', 'info'];
+      let type = '';
+      let dur = 4000;
+      if (typeof typeOrDur === 'string' && types.includes(typeOrDur)) {
+        type = typeOrDur;
+        dur = type === 'error' || type === 'warning' ? 8000 : 4000;
+      } else if (typeof typeOrDur === 'number') {
+        dur = typeOrDur;
+      }
+      if (typeof durOverride === 'number') dur = durOverride;
+
       let el = document.getElementById('ti-snackbar');
-      if (!el) { el = document.createElement('div'); el.id = 'ti-snackbar'; el.className = 'ti-snackbar'; document.body.appendChild(el); }
-      el.textContent = msg; el.classList.add('show');
-      clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), dur);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'ti-snackbar';
+        el.className = 'ti-snackbar';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.className = 'ti-snackbar show' + (type ? ` ti-snackbar--${type}` : '');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), dur);
     },
     varianceChip(val, opts = {}) {
       const r = Math.round(val * 100) / 100;
@@ -157,8 +173,10 @@ const Hub = (() => {
     'rm-calculator': { title: 'RM Calculator', icon: '⚖️' },
     dpr:         { title: 'Daily Production Review',             icon: '📝' },
     'dispatch-calendar': { title: 'Dispatch Calendar', icon: '📅' },
-    'production-calendar': { title: 'Production Calendar', icon: '🏗️' },
-    executive:   { title: 'Executive View',  icon: '🎯' },
+    'production-calendar': { title: 'Production Calendar', icon: '⏱️' },
+    'machine-planning': { title: 'Machine Planning', icon: '⚒️' },
+    'production-scheduler': { title: 'Production Scheduler', icon: '🗓️' },
+    'laser-welding': { title: 'Laser Welding', icon: '⚡' },
     reports:     { title: 'Reports',         icon: '📋' },
     'reports-manage': { title: 'Report management', icon: '🗂️' },
     admin:       { title: 'Administration',  icon: '⚙️' },
@@ -176,11 +194,13 @@ const Hub = (() => {
     if (section === 'dpr') return ACCESS.has('rept');
     if (section === 'dispatch-calendar') return ACCESS.has('rept');
     if (section === 'production-calendar') return ACCESS.has('rept');
+    if (section === 'machine-planning') return ACCESS.has('rept');
+    if (section === 'production-scheduler') return ACCESS.has('scdl');
+    if (section === 'laser-welding') return ACCESS.has('lw');
     if (section === 'inventory') return ACCESS.has('rept');
     if (section === 'rm-calculator') return ACCESS.has('rept');
     if (section === 'rm-variance') return RM_VARIANCE_HUB_ENABLED && ACCESS.has('rm_variance');
     if (section === 'rm-correction') return ACCESS.has('rm_correction') || ACCESS.has('rm_variance');
-    if (section === 'executive') return ACCESS.has('executive');
     if (section === 'reports') return ACCESS.has('rept');
     if (section === 'reports-manage') return PLUS_ACCESS.has('rept_plus');
     if (section === 'maintenance') {
@@ -190,7 +210,7 @@ const Hub = (() => {
   }
 
   function getDefaultSection() {
-    const order = ['overview', 'production', 'maintenance', 'executive', 'reports', 'admin'];
+    const order = ['overview', 'production', 'maintenance', 'reports', 'admin'];
     return order.find(canAccessSection) || 'overview';
   }
 
@@ -515,6 +535,18 @@ const Hub = (() => {
 
       if (section === 'production-calendar' && typeof window.ProductionCalendarPage?.init === 'function') {
         window.ProductionCalendarPage.init();
+      }
+
+      if (section === 'machine-planning' && typeof window.MachinePlanningPage?.init === 'function') {
+        window.MachinePlanningPage.init();
+      }
+
+      if (section === 'production-scheduler' && typeof window.ProductionSchedulerPage?.init === 'function') {
+        window.ProductionSchedulerPage.init();
+      }
+
+      if (section === 'laser-welding' && typeof window.LaserWeldingPage?.init === 'function') {
+        window.LaserWeldingPage.init();
       }
 
       if (section === 'reports') {

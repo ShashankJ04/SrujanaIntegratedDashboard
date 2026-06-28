@@ -120,6 +120,38 @@ def _is_safe_drilldown_column_name(name: str) -> bool:
     return bool(re.fullmatch(r"[a-zA-Z0-9_ .()/%-]+", str(name or "")))
 
 
+BUILTIN_REPORT_HANDLERS: Tuple[str, ...] = (
+    "lw_activity",
+    "lw_stock",
+    "lw_qa",
+    "lw_scrap",
+)
+
+
+def _normalize_handler(value: Any) -> str:
+    handler = str(value or "").strip()
+    if not handler:
+        return ""
+    if handler not in BUILTIN_REPORT_HANDLERS:
+        raise ValueError(f"Invalid report handler: {handler}")
+    return handler
+
+
+def _normalize_filter_column(value: Any) -> str:
+    col = str(value or "").strip()
+    if not col:
+        return ""
+    if not _is_safe_drilldown_column_name(col):
+        raise ValueError("Invalid filter column name")
+    return col
+
+
+def _default_variables_for_handler(handler: str) -> List[str]:
+    if handler == "lw_stock":
+        return []
+    return ["from_date", "to_date"]
+
+
 def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     report_by_id = {
         str(r.get("id")): r
@@ -141,6 +173,19 @@ def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             next_report["drilldowns"] = drilldowns
         else:
             next_report.pop("drilldowns", None)
+        handler = str(report.get("handler") or "").strip()
+        if handler:
+            if handler in BUILTIN_REPORT_HANDLERS:
+                next_report["handler"] = handler
+            else:
+                next_report.pop("handler", None)
+        else:
+            next_report.pop("handler", None)
+        filter_col = str(report.get("filterColumn") or "").strip()
+        if filter_col and _is_safe_drilldown_column_name(filter_col):
+            next_report["filterColumn"] = filter_col
+        else:
+            next_report.pop("filterColumn", None)
         normalized.append(next_report)
     return normalized
 
@@ -521,19 +566,24 @@ def create_report(
     query_template: str,
     drilldowns: Optional[List[Dict[str, Any]]] = None,
     pinned: bool = False,
+    handler: str = "",
+    filter_column: str = "",
+    variables: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     group_id = group_id.strip()
     name = name.strip()
     query_template = query_template.strip()
+    handler_key = _normalize_handler(handler)
 
     if not group_id:
         raise ValueError("groupId is required")
     if not name:
         raise ValueError("Report name is required")
-    if not query_template:
+    if not handler_key and not query_template:
         raise ValueError("queryTemplate is required")
 
-    assert_read_only_query(query_template)
+    if not handler_key:
+        assert_read_only_query(query_template)
 
     store = _read_store()
     if not any(g["id"] == group_id for g in store["groups"]):
@@ -549,13 +599,17 @@ def create_report(
         for r in store["reports"]
         if isinstance(r, dict) and isinstance(r.get("id"), str)
     }
-    report_vars = _extract_variables(query_template)
+    if handler_key:
+        report_vars = list(variables) if variables else _default_variables_for_handler(handler_key)
+    else:
+        report_vars = _extract_variables(query_template)
     normalized_drilldowns = _validate_and_normalize_drilldowns_from_input(
         drilldowns or [],
         report_by_id,
         source_report_vars=report_vars,
     )
-    report = {
+    filter_col = _normalize_filter_column(filter_column)
+    report: Dict[str, Any] = {
         "id": str(uuid.uuid4()),
         "groupId": group_id,
         "name": name,
@@ -566,6 +620,10 @@ def create_report(
         "createdAt": now,
         "updatedAt": now,
     }
+    if handler_key:
+        report["handler"] = handler_key
+    if filter_col:
+        report["filterColumn"] = filter_col
     store["reports"].append(report)
     _write_store(store)
     return report
@@ -577,16 +635,13 @@ def update_report(
     query_template: str,
     drilldowns: Optional[List[Dict[str, Any]]] = None,
     pinned: Optional[bool] = None,
+    filter_column: Optional[str] = None,
 ) -> Dict[str, Any]:
     name = name.strip()
     query_template = query_template.strip()
 
     if not name:
         raise ValueError("Report name is required")
-    if not query_template:
-        raise ValueError("queryTemplate is required")
-
-    assert_read_only_query(query_template)
 
     store = _read_store()
     idx = next(
@@ -597,6 +652,16 @@ def update_report(
         raise ValueError("Report not found")
 
     current = store["reports"][idx]
+    handler_key = str(current.get("handler") or "").strip()
+
+    if handler_key:
+        if not query_template:
+            query_template = str(current.get("queryTemplate") or "")
+    elif not query_template:
+        raise ValueError("queryTemplate is required")
+    else:
+        assert_read_only_query(query_template)
+
     for r in store["reports"]:
         if (
             r["id"] != report_id
@@ -610,14 +675,17 @@ def update_report(
         for r in store["reports"]
         if isinstance(r, dict) and isinstance(r.get("id"), str)
     }
-    report_vars = _extract_variables(query_template)
+    if handler_key:
+        report_vars = list(current.get("variables") or _default_variables_for_handler(handler_key))
+    else:
+        report_vars = _extract_variables(query_template)
     normalized_drilldowns = _validate_and_normalize_drilldowns_from_input(
         drilldowns or [],
         report_by_id,
         source_report_vars=report_vars,
     )
 
-    updated = {
+    updated: Dict[str, Any] = {
         **current,
         "name": name,
         "queryTemplate": query_template,
@@ -626,6 +694,12 @@ def update_report(
         "drilldowns": normalized_drilldowns,
         "updatedAt": _iso_now(),
     }
+    if filter_column is not None:
+        filter_col = _normalize_filter_column(filter_column)
+        if filter_col:
+            updated["filterColumn"] = filter_col
+        else:
+            updated.pop("filterColumn", None)
     store["reports"][idx] = updated
     _write_store(store)
     return updated

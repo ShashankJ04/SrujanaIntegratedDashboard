@@ -11,6 +11,7 @@ window.DprPage = (() => {
   /** @see backend/config.py DPR_POLL_INTERVAL_MS_DEFAULT */
   const DPR_POLL_FALLBACK_MS = 500000;
   let machines = [];
+  let operators = [];
   let parts = [];
   let pendingRows = [];
   let monthlyKpi = null;
@@ -43,6 +44,7 @@ window.DprPage = (() => {
 
   const SORTABLE_COLS = new Set([
     "machine",
+    "operator",
     "part_no",
     "part_name",
     "planned_qty",
@@ -62,6 +64,7 @@ window.DprPage = (() => {
   const DPR_DEFAULT_COL_ORDER = [
     "actions",
     "machine",
+    "operator",
     "qr",
     "part_no",
     "part_name",
@@ -558,6 +561,10 @@ window.DprPage = (() => {
         "dpr-machines-read",
         `${formatCellNumber(monthlyKpi.plannedMachines)} / ${formatCellNumber(monthlyKpi.totalMachines)}`,
       );
+      setSnapshotValue(
+        "dpr-tools-breakdown-read",
+        formatCellNumber(monthlyKpi.activeToolBreakdowns ?? 0),
+      );
       setSnapshotValue("dpr-board-last-planned", formatKpiQty(monthlyKpi.lastDayPlanned));
       setSnapshotValue("dpr-board-last-produced", formatKpiQty(monthlyKpi.lastDayProduced));
       setKpiProducedPctEl("dpr-board-last-achievement", monthlyKpi.lastDayAchievementPct);
@@ -573,6 +580,7 @@ window.DprPage = (() => {
       setKpiProducedPctEl("dpr-kpi-monthly-produced-pct", null);
       setSnapshotValue("dpr-operators-read", "—");
       setSnapshotValue("dpr-machines-read", "—");
+      setSnapshotValue("dpr-tools-breakdown-read", "—");
       setSnapshotValue("dpr-board-last-planned", "—");
       setSnapshotValue("dpr-board-last-produced", "—");
       setKpiProducedPctEl("dpr-board-last-achievement", null);
@@ -721,6 +729,11 @@ window.DprPage = (() => {
     return String(m?.label || mid || "");
   }
 
+  function labelByOperatorId(oid) {
+    const o = operators.find((x) => String(x.id) === String(oid));
+    return String(o?.label || "");
+  }
+
   const COL_TO_ROW_KEY = {
     rm_issued: "rmIssued",
     rm_available: "rmAvailable",
@@ -738,6 +751,12 @@ window.DprPage = (() => {
     switch (col) {
       case "machine":
         return (row.machineLabel || labelByMachineId(row.machineId) || row.machineId || "").toLowerCase();
+      case "operator":
+        return (
+          row.operatorLabel ||
+          labelByOperatorId(row.operatorId) ||
+          (row.operatorId != null ? String(row.operatorId) : "")
+        ).toLowerCase();
       case "part_no":
         return String(row.partNo || "").toLowerCase();
       case "part_name":
@@ -1053,6 +1072,8 @@ window.DprPage = (() => {
       id: null,
       machineId: machineId || "",
       machineLabel: machineLabel || machineId || "",
+      operatorId: null,
+      operatorLabel: "",
       partNo: "",
       partName: "",
       plannedQty: null,
@@ -1183,7 +1204,7 @@ window.DprPage = (() => {
     applyPendingSort();
     const allRows = [...pendingRows];
     const colActions = editable ? 1 : 0;
-    const numCols = 16 + colActions;
+    const numCols = 17 + colActions;
 
     tbody.innerHTML = "";
 
@@ -1199,7 +1220,7 @@ window.DprPage = (() => {
         sel.dataset.field = "machineId";
         const opt0 = document.createElement("option");
         opt0.value = "";
-        opt0.textContent = machines.length ? "Select machine" : "No machines (set DPR_MACHINE_LIST_SQL)";
+        opt0.textContent = machines.length ? "Select machine" : "No machines found";
         sel.appendChild(opt0);
         machines.forEach((m) => {
           const o = document.createElement("option");
@@ -1215,6 +1236,36 @@ window.DprPage = (() => {
         machineCell.appendChild(sel);
       } else {
         machineCell.textContent = row.machineLabel || row.machineId || "—";
+      }
+
+      const operatorCell = document.createElement("td");
+      operatorCell.dataset.colName = "operator";
+      if (editable) {
+        const sel = document.createElement("select");
+        sel.className = "ti-dpr-select dpr-select";
+        sel.dataset.field = "operatorId";
+        const opt0 = document.createElement("option");
+        opt0.value = "";
+        opt0.textContent = operators.length ? "Select operator" : "No operators found";
+        sel.appendChild(opt0);
+        operators.forEach((o) => {
+          const opt = document.createElement("option");
+          opt.value = String(o.id);
+          opt.textContent = o.label || String(o.id);
+          sel.appendChild(opt);
+        });
+        sel.value =
+          row.operatorId === null || row.operatorId === undefined ? "" : String(row.operatorId);
+        sel.addEventListener("change", async () => {
+          const raw = sel.value.trim();
+          pendingRows[idx].operatorId = raw === "" ? null : Number(raw);
+          pendingRows[idx].operatorLabel = raw === "" ? "" : labelByOperatorId(raw);
+          await autoSaveReadyRow(idx, dateVal);
+        });
+        operatorCell.appendChild(sel);
+      } else {
+        operatorCell.textContent =
+          row.operatorLabel || labelByOperatorId(row.operatorId) || "—";
       }
 
       const qrCell = document.createElement("td");
@@ -1380,6 +1431,7 @@ window.DprPage = (() => {
       }
 
       tr.appendChild(machineCell);
+      tr.appendChild(operatorCell);
       tr.appendChild(qrCell);
       tr.appendChild(partNoCell);
       tr.appendChild(partNameCell);
@@ -1428,6 +1480,8 @@ window.DprPage = (() => {
         id: row.id || null,
         reviewDate: dateVal,
         machineId: row.machineId || "",
+        operatorId:
+          row.operatorId === null || row.operatorId === undefined ? null : row.operatorId,
         partNo: row.partNo || "",
         plannedQty: row.plannedQty === null || row.plannedQty === undefined ? 0 : row.plannedQty,
         producedQty:
@@ -1580,6 +1634,7 @@ window.DprPage = (() => {
     try {
       const opt = await Api.options();
       machines = opt.machines || [];
+      operators = opt.operators || [];
       parts = opt.parts || [];
       ensurePartDatalist();
     } catch (e) {
@@ -1693,6 +1748,12 @@ window.DprPage = (() => {
             breakdownModalState = null;
             setBreakdownWarning("");
             setBreakdownModalSuccess(true);
+            try {
+              monthlyKpi = await Api.summary(dateVal);
+              updateKpiStrip();
+            } catch (sumErr) {
+              console.warn(sumErr);
+            }
           } catch (e) {
             console.error(e);
             notify(e.message || "Failed to raise breakdown.", true);

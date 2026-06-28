@@ -119,6 +119,17 @@
       "pinned": true
     },
     {
+      "id": "a8f3c2e1-9b4d-4a7e-8f1c-2d6e5b0a3c91",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Part Machine Mapping",
+      "queryTemplate": "SELECT\n  c.CO_PARTNO AS 'Part No',\n  c.CO_Id as 'Component ID',\n  c.CO_PARTNAME AS 'Part Name',\n  CASE WHEN m.is_supplier = 1 THEN 'SUPPLIER' ELSE mm.MCM_Name END AS 'Primary Machine',\n  GROUP_CONCAT(mm2.MCM_Name ORDER BY a.alt_rank SEPARATOR ', ') AS 'Alt Machines',\n  m.spm AS 'SPM',\n  m.cavity AS 'Cavity',\n  CASE WHEN m.is_supplier = 1 THEN 'Yes' ELSE '' END AS 'Supplier'\nFROM part_machine_mapping m\nINNER JOIN components c ON c.CO_Id = m.component_id\nLEFT JOIN machinemaster mm ON mm.MCM_Id = m.machine_id\nLEFT JOIN part_machine_alternate a ON a.mapping_id = m.mapping_id\nLEFT JOIN machinemaster mm2 ON mm2.MCM_Id = a.machine_id\nGROUP BY m.mapping_id\nORDER BY c.CO_PARTNO, mm.MCM_Name;",
+      "variables": [],
+      "createdAt": "2026-06-08T20:30:00.000Z",
+      "updatedAt": "2026-06-12T18:54:54.350105+00:00",
+      "pinned": true,
+      "drilldowns": []
+    },
+    {
       "id": "c65ce59b-550d-4193-abc8-f703c772054b",
       "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
       "name": "Suppliers",
@@ -218,13 +229,13 @@
       "id": "a491c9dc-b8a5-4d9c-92f2-073926e837e0",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
       "name": "Dispatch between dates",
-      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  CS_PLANTID AS 'Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  SD_LOTSIZE AS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\nDS_NAME as 'Status'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n AND CS_DATE BETWEEN {fromDate}\nAND {toDate};",
+      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  CS_PLANTID AS 'Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  SD_LOTSIZE AS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\nDS_NAME as 'Status'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE CS_DATE BETWEEN {fromDate}\nAND {toDate};",
       "variables": [
         "fromDate",
         "toDate"
       ],
       "createdAt": "2026-03-30T13:26:07.878Z",
-      "updatedAt": "2026-05-17T16:01:07.302312+00:00",
+      "updatedAt": "2026-06-06T07:45:28.739971+00:00",
       "pinned": true
     },
     {
@@ -264,8 +275,8 @@
     {
       "id": "e695d045-de3f-4fe0-b03f-d8b658e41a4e",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "SalesOrder vs CustSchedule vs plan vs Produced",
-      "queryTemplate": "SELECT\n  c.CO_PARTNO    AS 'Part No',\n  c.CO_PARTNAME  AS 'Part Name',\n  COALESCE(so.soQty ,0) AS 'SalesOrder Qty',\n  COALESCE(cs.custSchd, 0) AS 'Customer Scheduled',\n  COALESCE(pl.planqty, 0)  AS 'Planned Qty',\n  COALESCE(pr.prodqty, 0)  AS 'Produced Qty'\nFROM schedule_master sm\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd\n    ON pd.PD_PSID = sp.PS_ID\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr\n  ON pr.smid = sm.SM_ID\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(sp.PS_QTY)     AS planqty\n  FROM scheduled_production sp\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pl\n  ON pl.smid = pr.smid\n AND pl.comp = pr.comp\nJOIN components c\n  ON c.CO_ID = pr.comp\nLEFT JOIN (\n  SELECT\n    sd.SC_SMID          AS smid,\n    c2.CO_PARENTID      AS comp,\n    SUM(sd.SC_CUSTQTY)  AS custSchd\n  FROM schedule_details sd\n  LEFT JOIN components c2\n    ON c2.CO_ID = sd.SC_COMPID\n  GROUP BY sd.SC_SMID, c2.CO_PARENTID\n) cs\n  ON cs.smid = sm.SM_ID\n AND cs.comp = pr.comp\nLEFT JOIN (\n  SELECT\n    cc.CO_PARENTID      AS pocomp,\n    SUM(so.QTY)         AS soQty,\n    MONTH(so.DLV_DATE )   AS pomonth,\n    YEAR(so.DLV_DATE )    AS poyear\n  FROM sales_order so    \n  LEFT JOIN components cc\n    ON TRIM(cc.CO_PARTNO) = TRIM(so.PART_NO)\n   AND cc.CO_CUSTID = so.CUST_ID and CATEGORY_ID = 1\n                  AND SO_TYPE_ID IN (1, 2)\n                  AND STATUS_ID IN (1, 7)\n  GROUP BY cc.CO_PARENTID, MONTH(so.DLV_DATE), YEAR(so.DLV_DATE)\n) so\n  ON so.pocomp = pr.comp\n AND so.pomonth = sm.SM_MONTH\n AND so.poyear  = sm.SM_YEAR\nWHERE sm.SM_MONTH = {month}\n  AND sm.SM_YEAR  = {year}\nORDER BY c.CO_PARTNO;",
+      "name": "CustSchedule vs plan vs Produced",
+      "queryTemplate": "SELECT\n  c.CO_PARTNO    AS 'Part No',\n  c.CO_PARTNAME  AS 'Part Name',\n  COALESCE(cs.custSchd, 0) AS 'Customer Scheduled',\n  COALESCE(pl.planqty, 0)  AS 'Planned Qty',\n  COALESCE(pr.prodqty, 0)  AS 'Produced Qty'\nFROM schedule_master sm\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd\n    ON pd.PD_PSID = sp.PS_ID\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr\n  ON pr.smid = sm.SM_ID\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(sp.PS_QTY)     AS planqty\n  FROM scheduled_production sp\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pl\n  ON pl.smid = pr.smid\n AND pl.comp = pr.comp\nJOIN components c\n  ON c.CO_ID = pr.comp\nLEFT JOIN (\n  SELECT\n    sd.SC_SMID          AS smid,\n    c2.CO_PARENTID      AS comp,\n    SUM(sd.SC_CUSTQTY)  AS custSchd\n  FROM schedule_details sd\n  LEFT JOIN components c2\n    ON c2.CO_ID = sd.SC_COMPID\n  GROUP BY sd.SC_SMID, c2.CO_PARENTID\n) cs\n  ON cs.smid = sm.SM_ID\n AND cs.comp = pr.comp\nWHERE sm.SM_MONTH = {month}\n  AND sm.SM_YEAR  = {year}\nORDER BY c.CO_PARTNO;",
       "variables": [
         "month",
         "year"
@@ -725,8 +736,7 @@
       ],
       "pinned": true,
       "createdAt": "2026-05-28T09:57:41.589136+00:00",
-      "updatedAt": "2026-05-28T12:53:35.295960+00:00",
-      "drilldowns": []
+      "updatedAt": "2026-05-28T12:53:35.295960+00:00"
     }
   ]
 }

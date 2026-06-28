@@ -1,0 +1,614 @@
+<!-- Laser Welding — unified tab workflow -->
+<section class="ti-section ti-hub-section-fill ti-laser-welding" id="lw-root" data-section="laser-welding">
+
+  <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one lw-toolbar">
+    <div class="ti-dc-toolbar-left">
+      <img src="{{ url_for('static', filename='img/laser-welding-icon.png') }}" alt="" class="ti-dc-icon lw-brand-icon" width="32" height="32" />
+      <div class="ti-dc-title-block">
+        <h2 class="ti-dc-title">Laser Welding</h2>
+        <p class="ti-dc-subtitle" id="lw-subtitle">Inspection</p>
+      </div>
+    </div>
+    <div class="ti-dc-toolbar-right ti-dc-toolbar-actions lw-toolbar-actions">
+      <div id="lw-track-toolbar-tools" class="lw-track-toolbar-tools" hidden>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Customer</span>
+          <select id="lw-track-cust" class="ti-input lw-track-select">
+            <option value="">All customers</option>
+          </select>
+        </label>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Phase</span>
+          <select id="lw-track-phase" class="ti-input lw-track-select">
+            <option value="">All phases</option>
+            <optgroup label="Child parts">
+              <option value="erp_stock">ERP stock</option>
+              <option value="inspected_ready">Inspected ready</option>
+              <option value="qa_pending">QA pending</option>
+              <option value="consumed">Consumed</option>
+            </optgroup>
+            <optgroup label="Sub-assembly / FG">
+              <option value="awaiting_clean">Awaiting clean</option>
+              <option value="ready_for_weld">Ready for weld</option>
+              <option value="ready_to_pack">Ready to pack</option>
+              <option value="rework_pending">Rework pending</option>
+            </optgroup>
+          </select>
+        </label>
+        <label class="lw-track-filter lw-track-filter--inline lw-track-filter--search">
+          <span>Search</span>
+          <input type="search" id="lw-track-search" class="ti-input" placeholder="Part, BOM, lot…" autocomplete="off" />
+        </label>
+        <button type="button" class="ti-btn ti-btn-sm" id="lw-track-refresh">Refresh</button>
+      </div>
+      <div id="lw-reports-toolbar-tools" class="lw-reports-toolbar-tools" hidden>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Report</span>
+          <select id="lw-report-view" class="ti-input lw-track-select" aria-label="Report view">
+            <!-- <option value="pipeline">Pipeline</option> -->
+            <!-- <option value="capacity">Capacity</option> -->
+            <!-- <option value="actions">Actions</option> -->
+            <option value="history">Activity</option>
+            <option value="stock">Stock</option>
+            <option value="qa">QA</option>
+            <option value="scrap">Scrap</option>
+          </select>
+        </label>
+        <div id="lw-history-toolbar-filters" class="lw-history-toolbar-filters" hidden>
+          <label id="lw-report-date-from" class="lw-track-filter lw-track-filter--inline">
+            <span>From</span>
+            <input type="date" id="lw-history-from" class="ti-input" />
+          </label>
+          <label id="lw-report-date-to" class="lw-track-filter lw-track-filter--inline">
+            <span>To</span>
+            <input type="date" id="lw-history-to" class="ti-input" />
+          </label>
+          <label id="lw-report-step-filter" class="lw-track-filter lw-track-filter--inline">
+            <span>Step</span>
+            <select id="lw-history-step" class="ti-input lw-track-select">
+              <option value="">All steps</option>
+              <option value="inspection">Inspection</option>
+              <option value="sub_assembly">Sub-Assembly</option>
+              <option value="sa_cleaning">SA Inspection</option>
+              <option value="sa_rework">SA Re-Work</option>
+              <option value="laser_welding">Laser Welding</option>
+              <option value="lw_cleaning">LW Cleaning/Inspection</option>
+              <option value="lw_rework">LW Re-Work</option>
+              <option value="packing">Packing</option>
+              <option value="qa">QA</option>
+            </select>
+          </label>
+          <label class="lw-track-filter lw-track-filter--inline lw-track-filter--search">
+            <span>Search</span>
+            <input type="search" id="lw-history-search" class="ti-input" placeholder="Part, lot, operator…" autocomplete="off" />
+          </label>
+          <button type="button" class="ti-btn ti-btn-sm" id="lw-history-refresh">Refresh</button>
+          <button type="button" class="ti-btn ti-btn-sm" id="lw-history-export" title="Export report">Export</button>
+          <span id="lw-report-count" class="lw-track-history-count"></span>
+        </div>
+      </div>
+      <label class="lw-date-label" for="lw-work-date">Date</label>
+      <input type="date" class="ti-input lw-work-date" id="lw-work-date" aria-label="Work date" />
+      <span class="lw-count" id="lw-item-count">—</span>
+      <input type="search" class="ti-input lw-grid-search" id="lw-grid-search"
+             placeholder="Filter rows…" autocomplete="off" aria-label="Filter table" />
+    </div>
+  </div>
+
+  <div class="lw-tabs lw-tabs--scroll" role="tablist" aria-label="Laser Welding tabs">
+    <button type="button" class="lw-tab lw-tab--active" data-tab="inspection" role="tab" aria-selected="true">Inspection</button>
+    <button type="button" class="lw-tab" data-tab="sub_assembly" role="tab" aria-selected="false">Sub-Assembly</button>
+    <button type="button" class="lw-tab" data-tab="sa_cleaning" role="tab" aria-selected="false">SA Inspection</button>
+    <button type="button" class="lw-tab" data-tab="sa_rework" role="tab" aria-selected="false">SA Re-Work</button>
+    <button type="button" class="lw-tab" data-tab="laser_welding" role="tab" aria-selected="false">Laser Welding</button>
+    <button type="button" class="lw-tab" data-tab="lw_cleaning" role="tab" aria-selected="false">LW Cleaning/Inspection</button>
+    <button type="button" class="lw-tab" data-tab="lw_rework" role="tab" aria-selected="false">LW Re-Work</button>
+    <button type="button" class="lw-tab" data-tab="packing" role="tab" aria-selected="false">Packing</button>
+    <button type="button" class="lw-tab" data-tab="qa" role="tab" aria-selected="false">QA</button>
+    <button type="button" class="lw-tab" data-tab="trays_carton" role="tab" aria-selected="false">Trays/Carton</button>
+    <!-- <button type="button" class="lw-tab" data-tab="tracking" role="tab" aria-selected="false">Tracking</button> -->
+    <button type="button" class="lw-tab" data-tab="reports" role="tab" aria-selected="false">Reports</button>
+  </div>
+
+  <!-- Inspection / Cleaning / QA / Packing grids -->
+  <div id="lw-grid-panel" class="lw-panel lw-panel--active">
+    <div id="lw-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-table">
+        <thead id="lw-table-head">
+          <tr>
+            <th class="lw-col-part">Part No</th>
+            <th class="lw-col-name">Part Name</th>
+            <th class="lw-col-operator">Operator</th>
+            <th class="lw-col-qty lw-col-qty-primary">Inspected</th>
+            <th class="lw-col-qa">QA</th>
+            <th class="lw-col-scrap">Scrap</th>
+            <th class="lw-col-lot lw-col-lot--pack">PCK Lot</th>
+            <th class="lw-col-time">Time taken</th>
+            <th class="lw-col-ot">OT</th>
+            <th class="lw-col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lw-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Sub-Assembly -->
+  <div id="lw-sa-panel" class="lw-panel">
+    <div id="lw-sa-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-sa-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-sa-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-sa-table">
+        <colgroup>
+          <col class="lw-col-customer" />
+          <col class="lw-col-bom" />
+          <col class="lw-col-part" />
+          <col class="lw-col-operator" />
+          <col class="lw-col-machine" />
+          <col class="lw-col-qty" />
+          <col class="lw-col-qa" />
+          <col class="lw-col-scrap" />
+          <col class="lw-col-lot" />
+          <col class="lw-col-time" />
+          <col class="lw-col-ot" />
+          <col class="lw-col-actions" />
+        </colgroup>
+        <thead id="lw-sa-table-head">
+          <tr>
+            <th class="lw-col-customer">Customer</th>
+            <th class="lw-col-bom">BOM No</th>
+            <th class="lw-col-part">Sub-Assembly Part</th>
+            <th class="lw-col-operator">Operator</th>
+            <th class="lw-col-machine">Machine</th>
+            <th class="lw-col-qty">Produced</th>
+            <th class="lw-col-qa">QA</th>
+            <th class="lw-col-scrap">Scrap</th>
+            <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-time">Time taken</th>
+            <th class="lw-col-ot">OT</th>
+            <th class="lw-col-actions">Action</th>
+          </tr>
+        </thead>
+        <tbody id="lw-sa-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Laser Welding assembly -->
+  <div id="lw-asm-panel" class="lw-panel">
+    <div id="lw-asm-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-asm-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-asm-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-asm-table">
+        <colgroup>
+          <col class="lw-col-customer" />
+          <col class="lw-col-bom" />
+          <col class="lw-col-name" />
+          <col class="lw-col-operator" />
+          <col class="lw-col-machine" />
+          <col class="lw-col-qty" />
+          <col class="lw-col-qa" />
+          <col class="lw-col-scrap" />
+          <col class="lw-col-lot" />
+          <col class="lw-col-time" />
+          <col class="lw-col-ot" />
+          <col class="lw-col-actions" />
+        </colgroup>
+        <thead id="lw-asm-table-head">
+          <tr>
+            <th class="lw-col-customer">Customer</th>
+            <th class="lw-col-bom">BOM No</th>
+            <th class="lw-col-name">Product</th>
+            <th class="lw-col-operator">Operator</th>
+            <th class="lw-col-machine">Machine</th>
+            <th class="lw-col-qty">Produced</th>
+            <th class="lw-col-qa">QA</th>
+            <th class="lw-col-scrap">Scrap</th>
+            <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-time">Time taken</th>
+            <th class="lw-col-ot">OT</th>
+            <th class="lw-col-actions">Action</th>
+          </tr>
+        </thead>
+        <tbody id="lw-asm-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Trays / Carton setup -->
+  <div id="lw-trays-carton-panel" class="lw-panel">
+    <div class="lw-trays-carton-toolbar">
+      <button type="button" class="ti-btn ti-btn-primary ti-btn-sm" id="lw-trays-carton-add">Add mapping</button>
+    </div>
+    <div id="lw-tc-loading" class="ti-dc-loading" style="display:none">
+      <div class="ti-spinner"></div><span>Loading…</span>
+    </div>
+    <div id="lw-tc-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-tc-table-wrap" class="ti-dc-scroll-wrap lw-table-wrap">
+      <table class="ti-excel-table ti-excel-table--original" id="lw-tc-table">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Part No</th>
+            <th>Part Name</th>
+            <th>Tray</th>
+            <th>Carton/Bin</th>
+            <th>Cavity</th>
+            <th>Tray Cap</th>
+            <th>Carton Cap</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="lw-tc-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="lw-tracking-panel" class="lw-panel">
+    <div id="lw-tracking-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-track-dash-shell" class="lw-track-dash-shell">
+        <div id="lw-track-skeleton" class="lw-track-skeleton" aria-hidden="true">
+          <div class="lw-track-skeleton-hero lw-track-skeleton-block"></div>
+          <div class="lw-track-skeleton-secondary">
+            <div class="lw-track-skeleton-block"></div>
+            <div class="lw-track-skeleton-block"></div>
+            <div class="lw-track-skeleton-block"></div>
+          </div>
+        </div>
+        <div id="lw-track-dash-content" class="lw-track-dash-grid">
+          <section class="lw-track-hero" aria-label="Pipeline overview">
+            <div class="lw-track-hero-flow">
+              <header class="lw-track-hero-head">
+                <div class="lw-track-hero-head-text">
+                  <h3 class="lw-track-hero-title">Material flow</h3>
+                  <p class="lw-track-hero-sub">Same workflow as the tabs above — click a step to filter; Alt+click to open that tab</p>
+                </div>
+              </header>
+              <div id="lw-track-exec-flow" class="lw-track-exec-flow"></div>
+            </div>
+            <div class="lw-track-hero-divider" aria-hidden="true"></div>
+            <div class="lw-track-hero-wip">
+              <header class="lw-track-hero-head">
+                <div class="lw-track-hero-head-text">
+                  <h3 class="lw-track-hero-title">WIP distribution</h3>
+                  <p class="lw-track-hero-sub">Lot volume flowing between stages — wider bands mean more WIP at that step</p>
+                </div>
+              </header>
+              <div id="lw-track-sankey" class="lw-track-sankey-chart"></div>
+              <p id="lw-track-sankey-insight" class="lw-track-sankey-insight" hidden></p>
+            </div>
+          </section>
+
+          <section class="lw-track-dash-secondary" aria-label="Capacity, queues, and phase detail">
+            <div class="lw-track-dash-card lw-track-dash-capacity">
+              <header class="lw-track-dash-card-head lw-track-dash-card-head--compact">
+                <h3 class="lw-track-dash-section-title">Build capacity</h3>
+              </header>
+              <div id="lw-track-capacity-list" class="lw-track-capacity-list"></div>
+            </div>
+            <div class="lw-track-dash-card lw-track-dash-queues">
+              <header class="lw-track-dash-card-head lw-track-dash-card-head--compact">
+                <h3 class="lw-track-dash-section-title">Queues</h3>
+              </header>
+              <div id="lw-track-queue-tiles" class="lw-track-queue-tiles"></div>
+            </div>
+            <details class="lw-track-dash-card lw-track-dash-phase lw-track-phase-details">
+              <summary class="lw-track-phase-details-summary">
+                <span class="lw-track-dash-section-title">Phase detail by track</span>
+                <span class="lw-track-phase-details-hint">Expand to filter by phase</span>
+              </summary>
+              <div id="lw-track-phase-grid" class="lw-track-phase-grid"></div>
+            </details>
+          </section>
+        </div>
+      </div>
+  </div>
+
+  <div id="lw-reports-panel" class="lw-panel">
+    <div id="lw-reports-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+
+    <div id="lw-track-pipeline-view" class="lw-track-report-view">
+      <div class="lw-track-pipeline" id="lw-track-pipeline"></div>
+    </div>
+
+    <div id="lw-track-capacity-view" class="lw-track-report-view">
+      <div class="lw-track-capacity-wrap">
+        <table class="ti-excel-table lw-track-capacity-table" id="lw-track-capacity-table">
+          <thead>
+            <tr>
+              <th>BOM</th>
+              <th>Product</th>
+              <th>Customer</th>
+              <th class="lw-track-num">Max build</th>
+              <th>Bottleneck</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-capacity-body"></tbody>
+        </table>
+        <h3 class="lw-panel-heading lw-track-sa-cap-heading">Sub-assembly capacity</h3>
+        <table class="ti-excel-table lw-track-capacity-table" id="lw-track-sa-capacity-table">
+          <thead>
+            <tr>
+              <th>BOM</th>
+              <th>SA Part</th>
+              <th class="lw-track-num">Max build</th>
+              <th>Bottleneck</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-sa-capacity-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="lw-track-actions-view" class="lw-track-report-view">
+      <div class="lw-track-actions-head">
+        <span id="lw-track-actions-count" class="lw-track-actions-count"></span>
+      </div>
+      <div class="ti-dc-scroll-wrap lw-track-actions-wrap">
+        <table class="ti-excel-table ti-excel-table--original lw-track-actions-table" id="lw-track-actions-table">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Type</th>
+              <th>Part / BOM</th>
+              <th>Lot</th>
+              <th>Phase</th>
+              <th class="lw-track-num">OK</th>
+              <th class="lw-track-num">QA</th>
+              <th class="lw-track-num">Clean</th>
+              <th class="lw-track-num">Rework</th>
+              <th class="lw-col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-actions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="lw-track-history-view" class="lw-track-report-view lw-track-report-view--active">
+      <div id="lw-track-history-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-stock-view" class="lw-track-report-view">
+      <div id="lw-track-stock-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-qa-view" class="lw-track-report-view">
+      <div id="lw-track-qa-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-scrap-view" class="lw-track-report-view">
+      <div id="lw-track-scrap-grid" class="lw-track-history-grid"></div>
+    </div>
+  </div>
+
+  <div id="lw-track-drawer-backdrop" class="lw-track-drawer-backdrop" hidden></div>
+  <aside id="lw-track-drawer" class="lw-track-drawer" aria-hidden="true" hidden>
+    <header class="lw-track-drawer-head">
+      <div class="lw-track-drawer-head-text">
+        <div id="lw-track-drawer-badge" class="lw-track-drawer-badge"></div>
+        <h3 id="lw-track-drawer-title">Details</h3>
+      </div>
+      <button type="button" class="lw-track-drawer-close" id="lw-track-drawer-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="lw-track-drawer-body" id="lw-track-drawer-body"></div>
+    <footer class="lw-track-drawer-foot" id="lw-track-drawer-foot"></footer>
+  </aside>
+
+  <datalist id="lw-parts-datalist"></datalist>
+
+  <!-- Production / Cleaning / QA / Packing modal -->
+  <div class="ti-modal-overlay" id="lw-production-modal-overlay" aria-hidden="true">
+    <div class="ti-modal ti-modal-lg lw-production-modal" role="dialog" aria-labelledby="lw-production-modal-title">
+      <div class="ti-modal-header">
+        <h3 id="lw-production-modal-title">Inspect</h3>
+      </div>
+      <div class="ti-modal-body">
+        <div class="lw-prod-modal-meta">
+          <div class="lw-prod-meta-item lw-prod-meta-part">
+            <label>Part</label>
+            <span id="lw-prod-modal-part" class="lw-rework-readonly" data-part-number="">—</span>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-meta-operator">
+            <label>Operator</label>
+            <span id="lw-prod-modal-operator" class="lw-rework-readonly">—</span>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-time-field">
+            <label>Time taken <span class="lw-required">*</span></label>
+            <div class="lw-prod-time-inputs">
+              <input type="number" id="lw-prod-modal-hours" class="ti-input" min="0" step="1" value="0" aria-label="Hours" />
+              <span class="lw-prod-time-unit">h</span>
+              <input type="number" id="lw-prod-modal-mins" class="ti-input" min="0" max="60" step="1" value="0" aria-label="Minutes" />
+              <span class="lw-prod-time-unit">m</span>
+            </div>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-meta-ot">
+            <label class="lw-ot-label"><input type="checkbox" id="lw-prod-modal-ot" /> OT</label>
+          </div>
+        </div>
+        <div id="lw-prod-modal-pack-materials" class="lw-pack-materials" style="display:none">
+          <div class="lw-pack-material-row">
+            <label for="lw-prod-tray-item">Tray</label>
+            <select id="lw-prod-tray-item" class="ti-input lw-pack-item-select"></select>
+            <label>Avail</label><span id="lw-prod-tray-avail" class="lw-rework-readonly">—</span>
+            <label for="lw-prod-tray-qty">Consumed</label>
+            <input type="number" id="lw-prod-tray-qty" class="ti-input lw-pack-qty-input" min="0" step="1" value="0" />
+          </div>
+          <div class="lw-pack-material-row">
+            <label for="lw-prod-carton-item">Carton</label>
+            <select id="lw-prod-carton-item" class="ti-input lw-pack-item-select"></select>
+            <label>Avail</label><span id="lw-prod-carton-avail" class="lw-rework-readonly">—</span>
+            <label for="lw-prod-carton-qty">Consumed</label>
+            <input type="number" id="lw-prod-carton-qty" class="ti-input lw-pack-qty-input" min="0" step="1" value="0" />
+          </div>
+        </div>
+        <div id="lw-prod-modal-lines" class="lw-prod-modal-lines"></div>
+      </div>
+      <div class="ti-modal-footer">
+        <button type="button" class="ti-btn ti-btn-outline" id="lw-production-modal-cancel">Cancel</button>
+        <button type="button" class="ti-btn ti-btn-primary" id="lw-production-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weld / Assemble modal -->
+  <div class="ti-modal-overlay" id="lw-weld-modal-overlay" aria-hidden="true">
+    <div class="ti-modal ti-modal-lg lw-weld-modal" role="dialog" aria-labelledby="lw-weld-modal-title">
+      <div class="ti-modal-header">
+        <h3 id="lw-weld-modal-title">Welded</h3>
+      </div>
+      <div class="ti-modal-body">
+        <div class="lw-prod-modal-meta">
+          <div class="lw-prod-meta-item lw-prod-meta-part">
+            <label>BOM</label>
+            <span id="lw-weld-modal-bom" class="lw-rework-readonly" data-bom-id="">—</span>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-meta-operator">
+            <label>Operator</label>
+            <span id="lw-weld-modal-operator" class="lw-rework-readonly">—</span>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-meta-operator" id="lw-weld-modal-machine-wrap">
+            <label>Machine</label>
+            <span id="lw-weld-modal-machine" class="lw-rework-readonly">—</span>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-time-field">
+            <label>Time taken <span class="lw-required">*</span></label>
+            <div class="lw-prod-time-inputs">
+              <input type="number" id="lw-weld-modal-hours" class="ti-input" min="0" step="1" value="0" aria-label="Hours" />
+              <span class="lw-prod-time-unit">h</span>
+              <input type="number" id="lw-weld-modal-mins" class="ti-input" min="0" max="60" step="1" value="0" aria-label="Minutes" />
+              <span class="lw-prod-time-unit">m</span>
+            </div>
+          </div>
+          <div class="lw-prod-meta-item lw-prod-meta-ot">
+            <label class="lw-ot-label"><input type="checkbox" id="lw-weld-modal-ot" /> OT</label>
+          </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field" id="lw-weld-target-lot-wrap" style="display:none">
+            <label for="lw-weld-modal-target-lot">Assembly Lot <span class="lw-required">*</span></label>
+            <select id="lw-weld-modal-target-lot" class="ti-input"><option value="">Select lot…</option></select>
+          </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field">
+            <label for="lw-weld-modal-qty" id="lw-weld-modal-qty-label">Weld QTY <span class="lw-required">*</span></label>
+            <input type="number" id="lw-weld-modal-qty" class="ti-input" min="1" step="1" value="0" />
+          </div>
+        </div>
+        <div id="lw-weld-modal-children" class="lw-weld-modal-children"></div>
+      </div>
+      <div class="ti-modal-footer">
+        <button type="button" class="ti-btn ti-btn-outline" id="lw-weld-modal-cancel">Cancel</button>
+        <button type="button" class="ti-btn ti-btn-primary" id="lw-weld-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trays/Carton mapping modal -->
+  <div class="ti-modal-overlay" id="lw-tc-modal-overlay" aria-hidden="true">
+    <div class="ti-modal ti-modal-lg lw-tc-modal" role="dialog" aria-labelledby="lw-tc-modal-title">
+      <div class="ti-modal-header">
+        <h3 id="lw-tc-modal-title">Trays / Carton mapping</h3>
+      </div>
+      <div class="ti-modal-body">
+        <input type="hidden" id="lw-tc-map-id" value="" />
+        <div class="lw-tc-form-grid">
+          <div class="lw-tc-field">
+            <label for="lw-tc-cust">Customer</label>
+            <select id="lw-tc-cust" class="ti-input"></select>
+          </div>
+          <div class="lw-tc-field">
+            <label for="lw-tc-part">Part No</label>
+            <select id="lw-tc-part" class="ti-input"></select>
+          </div>
+          <div class="lw-tc-field lw-tc-field--wide">
+            <label for="lw-tc-part-name">Part Name</label>
+            <input type="text" id="lw-tc-part-name" class="ti-input" readonly />
+          </div>
+        </div>
+        <fieldset class="lw-tc-fieldset">
+          <legend>Tray</legend>
+          <div class="lw-tc-form-grid lw-tc-form-grid--4">
+            <div class="lw-tc-field">
+              <label for="lw-tc-type-mode">Type</label>
+              <select id="lw-tc-type-mode" class="ti-input">
+                <option value="S">Single (S)</option>
+                <option value="P">Multiple parts (nP)</option>
+              </select>
+            </div>
+            <div class="lw-tc-field" id="lw-tc-no-parts-wrap" style="display:none">
+              <label for="lw-tc-no-parts">No. parts</label>
+              <input type="number" id="lw-tc-no-parts" class="ti-input" min="2" step="1" placeholder="e.g. 2, 4" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-tray-cavity">Cavity</label>
+              <input type="number" id="lw-tc-tray-cavity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-tray-capacity">Tray capacity</label>
+              <input type="number" id="lw-tc-tray-capacity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field lw-tc-field--wide" id="lw-tc-tray-existing-wrap" style="display:none">
+              <label for="lw-tc-tray-existing">Use existing tray</label>
+              <select id="lw-tc-tray-existing" class="ti-input">
+                <option value="">Generate new code</option>
+              </select>
+            </div>
+            <div class="lw-tc-field lw-tc-field--preview">
+              <label>Tray code preview</label>
+              <span id="lw-tc-tray-preview" class="lw-rework-readonly lw-tc-preview">—</span>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="lw-tc-fieldset">
+          <legend>Carton / Bin</legend>
+          <div class="lw-tc-form-grid lw-tc-form-grid--4">
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-type">Type</label>
+              <select id="lw-tc-box-type" class="ti-input">
+                <option value="C">Carton (SE-C)</option>
+                <option value="B">Bin (SE-B)</option>
+              </select>
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-l">L (mm)</label>
+              <input type="number" id="lw-tc-box-l" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-w">W (mm)</label>
+              <input type="number" id="lw-tc-box-w" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-box-h">H (mm)</label>
+              <input type="number" id="lw-tc-box-h" class="ti-input" min="1" max="999" step="1" />
+            </div>
+            <div class="lw-tc-field" id="lw-tc-bin-seq-wrap" style="display:none">
+              <label for="lw-tc-bin-seq">Bin seq</label>
+              <input type="number" id="lw-tc-bin-seq" class="ti-input" min="1" step="1" />
+              <span class="lw-tc-hint" id="lw-tc-bin-seq-hint"></span>
+            </div>
+            <div class="lw-tc-field">
+              <label for="lw-tc-carton-capacity">Carton capacity</label>
+              <input type="number" id="lw-tc-carton-capacity" class="ti-input" min="1" step="1" />
+            </div>
+            <div class="lw-tc-field lw-tc-field--preview">
+              <label>Carton / bin code preview</label>
+              <span id="lw-tc-box-preview" class="lw-rework-readonly lw-tc-preview">—</span>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <div class="ti-modal-footer">
+        <button type="button" class="ti-btn ti-btn-outline" id="lw-tc-modal-cancel">Cancel</button>
+        <button type="button" class="ti-btn ti-btn-primary" id="lw-tc-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+</section>

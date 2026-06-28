@@ -36,6 +36,16 @@ def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
     return str((_runtime_base_dir() / p).resolve())
 
 
+def _parse_int_tuple_env(env_key: str, default_csv: str) -> tuple:
+    raw = str(os.environ.get(env_key, "") or "").strip() or default_csv
+    values: list[int] = []
+    for piece in raw.split(","):
+        piece = piece.strip()
+        if piece:
+            values.append(int(piece))
+    return tuple(values)
+
+
 class Config:
     """Application configuration.
 
@@ -53,44 +63,12 @@ class Config:
     DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "15"))
     DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "15"))
 
-    # MySQL connection settings — Warehouse database (separate)
-    WH_DB_HOST = os.environ.get("WH_DB_HOST", "localhost")
-    WH_DB_PORT = int(os.environ.get("WH_DB_PORT", "3306"))
-    WH_DB_USER = os.environ.get("WH_DB_USER", "root")
-    WH_DB_PASSWORD = os.environ.get("WH_DB_PASSWORD", "root")
-    WH_DB_NAME = os.environ.get("WH_DB_NAME", "warehouse_db")
-    WH_DB_POOL_SIZE = int(os.environ.get("WH_DB_POOL_SIZE", "5"))
-    WH_DB_POOL_MAX_OVERFLOW = int(os.environ.get("WH_DB_POOL_MAX_OVERFLOW", "10"))
-
-    # Table to visualize in the dashboard
-    TARGET_TABLE_NAME = os.environ.get("TARGET_TABLE_NAME", "vw_bharat_dashboard")
-
     # JWT / Auth
     JWT_SECRET = os.environ.get("JWT_SECRET", "Shrujana")
     JWT_EXPIRES_IN = int(os.environ.get("JWT_EXPIRES_IN", "86400"))
     DES_KEY = os.environ.get("DES_KEY", "tJykDLYx")
 
-    # Pagination defaults
-    DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25"))
-    MAX_PAGE_SIZE = int(os.environ.get("MAX_PAGE_SIZE", "200"))
-
-    # User logins allowed to edit buffer qty on the report table (comma-separated)
-    BUFFER_EDIT_LOGINS = frozenset(
-        x.strip()
-        for x in os.environ.get("BUFFER_EDIT_LOGINS", "Bharath,U3_Bharath").split(",")
-        if x.strip()
-    )
-
     # DPR (Daily Production Review)
-    DPR_EDIT_LOGINS = frozenset(
-        x.strip().lower()
-        for x in os.environ.get("DPR_EDIT_LOGINS", "bharath,u3_bharath,vivaan").split(",")
-        if x.strip()
-    )
-    DPR_MACHINE_LIST_SQL = os.environ.get(
-        "DPR_MACHINE_LIST_SQL",
-        "SELECT MCM_Id AS id, MCM_Name AS label FROM machinemaster WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name",
-    )
     DPR_POLL_INTERVAL_MS = int(
         os.environ.get("DPR_POLL_INTERVAL_MS", str(DPR_POLL_INTERVAL_MS_DEFAULT))
     )
@@ -129,8 +107,6 @@ class Config:
         os.path.join(APP_DATA_DIR, "reports.json"),
     )
 
-    # Bumped when static assets change so packaged apps avoid stale browser/embedded caches.
-    STATIC_ASSET_VERSION = str(os.environ.get("STATIC_ASSET_VERSION", "3")).strip() or "3"
     DPR_QR_STORAGE_DIR = resolve_runtime_path(
         os.environ.get("DPR_QR_STORAGE_DIR", ""),
         "qr-codes",
@@ -140,13 +116,53 @@ class Config:
         "pm-attachments",
     )
 
+    # Inventory report — auto snapshot at 23:59 on the last day of each month
+    INVENTORY_SNAPSHOT_ENABLED = os.environ.get(
+        "INVENTORY_SNAPSHOT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Production scheduling — standard work hours per day
+    WORK_HOURS_PER_DAY = int(os.environ.get("WORK_HOURS_PER_DAY", "6"))
+
+    # Soft capacity overflow per machine-day (minutes beyond nominal shift)
+    CAPACITY_OVERFLOW_MINUTES = int(os.environ.get("CAPACITY_OVERFLOW_MINUTES", "30"))
+
+    # Laser Welding — ERP stock integration (child parts inspect)
+    LW_ERP_PLANT_ID = int(os.environ.get("LW_ERP_PLANT_ID", "1"))
+    LW_FG_STAGE_ID = int(os.environ.get("LW_FG_STAGE_ID", "6"))
+    # Part Inspection whitelist (11 parts) — separate plant/stage from default SS parts.
+    LW_WHITELIST_ERP_PLANT_ID = int(os.environ.get("LW_WHITELIST_ERP_PLANT_ID", "2"))
+    LW_WHITELIST_PART_INSPECTION_STAGE_ID = int(
+        os.environ.get("LW_WHITELIST_PART_INSPECTION_STAGE_ID", "19")
+    )
+    LW_WHITELIST_CT_SOURCE_REDUCE = int(
+        os.environ.get("LW_WHITELIST_CT_SOURCE_REDUCE", "1")
+    )
+    LW_WHITELIST_REDUCE_OP_STAGE = int(
+        os.environ.get("LW_WHITELIST_REDUCE_OP_STAGE", "1")
+    )
+    LW_WHITELIST_QA_OUTWARD_STAGE_ID = int(
+        os.environ.get("LW_WHITELIST_QA_OUTWARD_STAGE_ID", "6")
+    )
+    LW_WHITELIST_PACK_INWARD_OP_STAGE = int(
+        os.environ.get("LW_WHITELIST_PACK_INWARD_OP_STAGE", "19")
+    )
+    LW_WHITELIST_PACK_INWARD_NEXT_STAGE = int(
+        os.environ.get("LW_WHITELIST_PACK_INWARD_NEXT_STAGE", "6")
+    )
+    LW_PACKING_ERP_PLANT_ID = int(os.environ.get("LW_PACKING_ERP_PLANT_ID", "2"))
+    LW_PACKING_INWARD_STAGE_ID = int(os.environ.get("LW_PACKING_INWARD_STAGE_ID", "6"))
+    LW_CT_SOURCE_STOCK_TRANSFER = int(os.environ.get("LW_CT_SOURCE_STOCK_TRANSFER", "18"))
+    LW_CR_SRC_FG_SEGREGATION = int(os.environ.get("LW_CR_SRC_FG_SEGREGATION", "9"))
+    # Part Inspection whitelist — stable component family ids (CO_PARENTID), not part numbers.
+    LW_PART_INSPECTION_PARENT_IDS: tuple = _parse_int_tuple_env(
+        "LW_PART_INSPECTION_PARENT_IDS",
+        "1624,1775,1776,1782,1656,1654,1655,1668,1538,1539,1540",
+    )
+    LW_WELDING_MACHINE_TYPE = int(os.environ.get("LW_WELDING_MACHINE_TYPE", "3"))
+    LW_SUB_ASSEMBLY_MACHINE_TYPE = int(os.environ.get("LW_SUB_ASSEMBLY_MACHINE_TYPE", "4"))
 
 
 def get_config():
-    """Return the active configuration class.
-
-    The main app will first try to import Config from `config.py`;
-    if that doesn't exist, it can fall back to this example.
-    """
-
+    """Return the active configuration class."""
     return Config

@@ -24,7 +24,6 @@ class ColumnMeta:
     is_sortable: bool
 
 
-_CACHED_COLUMNS: Optional[List[ColumnMeta]] = None
 _DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None}
 _PULSE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
@@ -37,13 +36,6 @@ def _clear_reports_summary_cache() -> None:
     with _REPORT_SUMMARY_CACHE_LOCK:
         _REPORT_SUMMARY_CACHE["ts"] = 0.0
         _REPORT_SUMMARY_CACHE["summary"] = None
-
-
-def _get_table_name() -> str:
-    table = current_app.config.get("TARGET_TABLE_NAME")
-    if not table:
-        raise RuntimeError("TARGET_TABLE_NAME is not configured.")
-    return table
 
 
 def get_dashboard_columns() -> List[ColumnMeta]:
@@ -218,94 +210,6 @@ def get_dashboard_columns() -> List[ColumnMeta]:
     ]
 
 
-def get_table_columns(force_refresh: bool = False) -> List[ColumnMeta]:
-    """Return metadata for all columns of the target table.
-
-    Results are cached in-process for performance; use force_refresh=True
-    if the schema changes while the app is running.
-    """
-    global _CACHED_COLUMNS
-    if _CACHED_COLUMNS is not None and not force_refresh:
-        return _CACHED_COLUMNS
-
-    table = _get_table_name()
-    sql = """
-        SELECT COLUMN_NAME, DATA_TYPE
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-        ORDER BY ORDINAL_POSITION
-    """
-    rows = fetch_all(sql, (table,))
-
-    cols: List[ColumnMeta] = []
-    numeric_types = {
-        "int",
-        "integer",
-        "smallint",
-        "mediumint",
-        "bigint",
-        "decimal",
-        "numeric",
-        "float",
-        "double",
-    }
-    for row in rows:
-        name = row["COLUMN_NAME"]
-        data_type = row["DATA_TYPE"].lower()
-        is_numeric = data_type in numeric_types
-        label = name.replace("_", " ").title()
-        cols.append(
-            ColumnMeta(
-                name=name,
-                label=label,
-                data_type=data_type,
-                is_numeric=bool(is_numeric),
-                is_sortable=True,
-            )
-        )
-
-    _CACHED_COLUMNS = cols
-    return cols
-
-
-def _build_where_clause(
-    columns: List[ColumnMeta],
-    global_search: Optional[str],
-) -> Tuple[str, List[Any]]:
-    clauses: List[str] = []
-    params: List[Any] = []
-
-    if global_search:
-        like_pattern = f"%{global_search}%"
-        text_cols = [c for c in columns if not c.is_numeric]
-        if text_cols:
-            or_parts = []
-            for col in text_cols:
-                or_parts.append(f"`{col.name}` LIKE %s")
-                params.append(like_pattern)
-            clauses.append("(" + " OR ".join(or_parts) + ")")
-
-    if not clauses:
-        return "", []
-
-    where_sql = " WHERE " + " AND ".join(clauses)
-    return where_sql, params
-
-
-def _validate_sort(
-    columns: List[ColumnMeta],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-) -> str:
-    if not sort_by:
-        return ""
-    col_names = {c.name for c in columns if c.is_sortable}
-    if sort_by not in col_names:
-        return ""
-    direction = "ASC" if (sort_dir or "").lower() != "desc" else "DESC"
-    return f" ORDER BY `{sort_by}` {direction} "
-
-
 def _matches_global_search(
     row: Dict[str, Any],
     columns: List[ColumnMeta],
@@ -332,239 +236,18 @@ def _dashboard_row_sort_key(val: Any) -> Tuple[int, Any]:
         return (1, str(val).lower())
 
 
-def get_rows(
-    page: int,
-    page_size: int,
-    global_search: Optional[str],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-) -> Dict[str, Any]:
-    columns = get_table_columns()
-    table = _get_table_name()
+def _build_inventory_rows_for_dispatch_period(month: int, year: int) -> List[Dict[str, Any]]:
+    """Inventory metrics for parts on the customer dispatch schedule for a month."""
+    from .dispatch_calendar import get_dispatch_schedule_by_part
 
-    where_sql, params = _build_where_clause(columns, global_search)
-    order_sql = _validate_sort(columns, sort_by, sort_dir)
-
-    count_sql = f"SELECT COUNT(*) AS cnt FROM `{table}`{where_sql}"
-    count_row = fetch_one(count_sql, params)
-    total_count = int(count_row["cnt"]) if count_row else 0
-
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
-
-    # Special case: page_size == -1 means "all rows"
-    if page_size == -1:
-        page = 1
-        sql = f"SELECT * FROM `{table}`{where_sql}{order_sql}"
-        rows = fetch_all(sql, params)
-        effective_page_size = total_count
-    else:
-        if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
-        page_size = min(page_size, max_page_size)
-        page = max(page, 1)
-        offset = (page - 1) * page_size
-        sql = f"SELECT * FROM `{table}`{where_sql}{order_sql} LIMIT %s OFFSET %s"
-        params_with_pagination: List[Any] = list(params) + [page_size, offset]
-        rows = fetch_all(sql, params_with_pagination)
-        effective_page_size = page_size
-
-    return {
-        "columns": [c.__dict__ for c in columns],
-        "rows": rows,
-        "totalCount": total_count,
-        "page": page,
-        "pageSize": effective_page_size,
-    }
-
-
-def _get_dashboard_base_sql() -> str:
-    """Base SQL for dashboard metrics (without buffer calculations).
-
-    This mirrors vw_bharat_dashboard and returns:
-    part_no, part_name, sales_order_qty (hidden), wip, fg, total_stock, produced_qty,
-    plus feb (Total Requirement) overlaid from dispatch scheduled qty at cache refresh.
-    plus raw-material fields: rm_rawmt_part_no, rm_conval, rm_inward_accepted_qty,
-    current_acceptedqty (actual RM stock from inward).
-    """
-    # Note: date logic and joins are kept aligned with static/sql/vw_bharat_dashboard.sql
-    return """
-        SELECT
-            x.PART_NO AS part_no,
-            x.PART_NAME AS part_name,
-            x.QTY AS sales_order_qty,
-            IFNULL(y_wip.csQty, 0) AS wip,
-            IFNULL(y_fg.csQty, 0) AS fg,
-            (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
-            IFNULL(z.pdProdQty, 0) AS produced_qty,
-            rm.rm_rawmt_part_no,
-            IFNULL(rm.rm_conval, 0) AS rm_conval,
-            IFNULL(rm.rm_inward_accepted_qty, 0) AS rm_inward_accepted_qty,
-            IFNULL(rm.current_acceptedqty, 0) AS current_acceptedqty
-        FROM (
-            SELECT trim(PART_NAME) as PART_NAME, trim(PART_NO) as PART_NO, SUM(QTY) AS QTY
-            FROM (
-                SELECT trim(PART_NAME) as PART_NAME, trim(PART_NO) as PART_NO, SUM(QTY) AS qty
-                FROM sales_order
-                WHERE DLV_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-                  AND CATEGORY_ID = 1
-                  AND SO_TYPE_ID IN (1, 2)
-                  AND STATUS_ID IN (1, 7)
-                GROUP BY trim(PART_NAME), trim(PART_NO)
-                UNION ALL
-                SELECT trim(b.PART_NAME) as PART_NAME, trim(b.PART_NO) as PART_NO, SUM(a.QTY * b.QTY) AS qty
-                FROM sales_order a
-                JOIN bom_lin_item b
-                  ON b.bom_id IN (
-                      SELECT c.bom_id
-                      FROM bom c
-                      WHERE c.bom_no = a.bom_no
-                        AND c.is_latest_version = 'Y'
-                  )
-                WHERE a.DLV_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-                  AND a.CATEGORY_ID = 2
-                  AND a.SO_TYPE_ID IN (1, 2)
-                  AND a.STATUS_ID IN (1, 7)
-                  AND category_code = 'SS'
-                GROUP BY trim(b.PART_NAME), trim(b.PART_NO)
-            ) a
-            GROUP BY trim(PART_NAME), trim(PART_NO)
-        ) x
-        LEFT JOIN (
-            SELECT trim(c.CO_PARTNO) as PART_NO, SUM(a.csQty) AS csQty
-            FROM (
-                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
-                FROM comp_stockhistory
-                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
-                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
-                  AND CH_StageId = 6
-                  AND CH_WEEK = 0
-            ) a
-            JOIN components c ON a.csCompId = c.CO_id
-            WHERE c.CO_ACTIVEYN = 'Y'
-            GROUP BY trim(c.CO_PARTNO)
-        ) y_fg ON x.PART_NO = y_fg.PART_NO
-        LEFT JOIN (
-            SELECT trim(c.CO_PARTNO) as PART_NO, SUM(a.csQty) AS csQty
-            FROM (
-                SELECT CH_CompId AS csCompId, CH_Qty AS csQty
-                FROM comp_stockhistory
-                WHERE CH_Month = EXTRACT(MONTH FROM CURRENT_DATE) - 1
-                  AND CH_Year = EXTRACT(YEAR FROM DATE_ADD(CURRENT_DATE, INTERVAL -1 MONTH))
-                  AND CH_StageId != 6
-                  AND CH_WEEK = 0
-            ) a
-            JOIN components c ON a.csCompId = c.CO_id
-            WHERE c.CO_ACTIVEYN = 'Y'
-            GROUP BY trim(c.CO_PARTNO)
-        ) y_wip ON x.PART_NO = y_wip.PART_NO 
-        LEFT JOIN (
-            SELECT trim(CO_partNo) as PART_NO, SUM(PD_PRODQTY) AS pdProdQty
-            FROM scheduled_production
-            INNER JOIN production_details ON PS_ID = PD_PSID
-            INNER JOIN schedule_master ON SM_Id = PS_SMID
-            INNER JOIN components ON CO_Id = PS_ParentCompId
-            WHERE PD_DATE between DATE_SUB(current_date,INTERVAL DAYOFMONTH(current_date)-1 day) and last_day(current_date)
-              AND SM_Status = 'S'
-              AND PS_plantId = 2
-            GROUP BY trim(CO_partNo)
-        ) z ON x.PART_NO = z.PART_NO
-        LEFT JOIN (
-            SELECT
-                TRIM(mq.co_partNo) AS PART_NO,
-                mq.mm_rawmtpartNo AS rm_rawmt_part_no,
-                mq.conVal AS rm_conval,
-                IFNULL(iq.total_acceptedqty, 0) AS rm_inward_accepted_qty,
-                IFNULL(inq.current_acceptedqty, 0) AS current_acceptedqty
-            FROM (
-                SELECT rmx.*, rmy.conVal
-                FROM (
-                    SELECT c.co_id, c.co_partNo, c.CO_PARTNAME, mm_rawmtpartNo, mm_id
-                    FROM (
-                        SELECT MIN(co_id) AS co_id,
-                               TRIM(co_partNo) AS co_partNo,
-                               MIN(CO_PARTNAME) AS CO_PARTNAME
-                        FROM components
-                        WHERE co_activeyn = 'Y'
-                          AND TRIM(co_partNo) IN (
-                              SELECT TRIM(PART_NO)
-                              FROM (
-                                  SELECT PART_NAME, PART_NO
-                                  FROM sales_order
-                                  WHERE DLV_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
-                                        AND last_day(current_date)
-                                    AND CATEGORY_ID = 1
-                                    AND SO_TYPE_ID IN (1, 2)
-                                    AND STATUS_ID IN (1, 7)
-                                  GROUP BY PART_NAME, PART_NO
-                                  UNION ALL
-                                  SELECT b.PART_NAME, b.PART_NO
-                                  FROM sales_order a
-                                  JOIN bom_lin_item b
-                                    ON b.bom_id IN (
-                                        SELECT bm.bom_id FROM bom bm
-                                        WHERE bm.bom_no = a.bom_no AND bm.is_latest_version = 'Y'
-                                    )
-                                  WHERE a.DLV_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
-                                        AND last_day(current_date)
-                                    AND a.CATEGORY_ID = 2
-                                    AND a.SO_TYPE_ID IN (1, 2)
-                                    AND a.STATUS_ID IN (1, 7)
-                                    AND category_code = 'SS'
-                                  GROUP BY b.PART_NAME, b.PART_NO
-                              ) rm_so
-                              GROUP BY TRIM(PART_NO)
-                          )
-                        GROUP BY TRIM(co_partNo)
-                    ) c
-                    JOIN (
-                        SELECT ct_compid AS compId, MAX(ct_rmid) AS rmId
-                        FROM components_tool where CT_ACTIVEYN ='Y' GROUP BY ct_compid
-                    ) ct ON c.co_id = ct.compId
-                    JOIN materialmaster ON ct.rmId = mm_id
-                ) rmx
-                LEFT JOIN (
-                    SELECT co_Id, co_partNo, co_partname, ct.rmId, ct_compid, MM_RawMtPartNo,
-                        ROUND(1000 / ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth))
-                            * ((1000 * ct.ctNoOfCavity) / ct.ctPitch)), 10) AS conVal
-                    FROM components
-                    INNER JOIN (
-                        SELECT CT_RMID AS rmId, ct_compid,
-                               CT_NO_OF_CAVITY AS ctNoOfCavity, CT_Pitch AS ctPitch
-                        FROM components_tool
-                        WHERE ct_id IN (
-                            SELECT MAX(ct_id) FROM components_tool
-                            WHERE CT_ActiveYN='Y' AND CT_PPC='Y'
-                              AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
-                            GROUP BY ct_compid
-                        )
-                        AND CT_ActiveYN='Y' AND CT_PPC='Y'
-                        AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0
-                    ) ct ON co_id = ct.ct_compid
-                    INNER JOIN materialmaster ON ct.rmId = mm_id
-                    INNER JOIN materialtypemaster ON MM_MTID = MT_Id
-                    WHERE co_activeyn = 'Y' AND co_id = CO_PARENTID
-                ) rmy ON rmx.co_Id = rmy.co_Id
-                     AND rmx.co_partNo = rmy.co_partNo
-                     AND rmx.CO_PARTNAME = rmy.CO_PARTNAME
-            ) mq
-            LEFT JOIN (
-                SELECT RD_RMID,
-round(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
-- SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END) ,2)AS total_acceptedqty
-FROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster
-    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id AND RI_date <= last_day(DATE_ADD(current_date, INTERVAL -1 MONTH))     
-    group by RD_RMID
-            ) iq ON mq.mm_id = iq.RD_rmid
-            LEFT JOIN (
-                SELECT RD_RMID,
-      round(SUM(CASE WHEN ri_movement = 'I' THEN RD_acceptedqty ELSE 0 END)
-      - SUM(CASE WHEN ri_movement = 'O' THEN RD_acceptedqty ELSE 0 END) ,2)AS current_acceptedqty
-      FROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster
-    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id   
-    group by RD_RMID
-            ) inq ON mq.mm_id = inq.RD_rmid
-        ) rm ON x.PART_NO = rm.PART_NO
-    """
+    schedule = get_dispatch_schedule_by_part(month, year)
+    part_nos = [
+        str(info.get("partNo") or pk).strip()
+        for pk, info in schedule.items()
+        if float(info.get("scheduledQty") or 0) > 0
+    ]
+    base_rows = _fetch_inventory_metrics_for_parts(part_nos)
+    return _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
 
 
 def _normalize_inventory_part_key(part_no: Any) -> str:
@@ -575,7 +258,6 @@ def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, An
     return {
         "part_no": part_no,
         "part_name": part_name or part_no,
-        "sales_order_qty": 0.0,
         "feb": 0.0,
         "wip": 0.0,
         "fg": 0.0,
@@ -589,7 +271,7 @@ def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, An
 
 
 def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str, Any]]:
-    """Stock and production metrics for parts outside the sales-order base SQL."""
+    """Stock, production, and RM metrics for the given component part numbers."""
     cleaned = [str(p or "").strip() for p in part_nos if str(p or "").strip()]
     if not cleaned:
         return []
@@ -598,7 +280,6 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
         SELECT
             TRIM(c.CO_PARTNO) AS part_no,
             TRIM(c.CO_PARTNAME) AS part_name,
-            0 AS sales_order_qty,
             IFNULL(y_wip.csQty, 0) AS wip,
             IFNULL(y_fg.csQty, 0) AS fg,
             (IFNULL(y_wip.csQty, 0) + IFNULL(y_fg.csQty, 0)) AS total_stock,
@@ -763,19 +444,14 @@ def _merge_dispatch_schedule_into_inventory_rows(
 
 
 def refresh_dashboard_base_cache() -> Dict[str, Any]:
-    """Run the heavy base SQL once and cache results in memory.
+    """Rebuild dashboard rows from customer schedule + inventory metrics and cache in memory.
 
     This is intended to be called only on explicit hard refresh.
     """
     global _DASHBOARD_BASE_CACHE
 
-    from .dispatch_calendar import get_dispatch_schedule_by_part
-
-    base_sql = _get_dashboard_base_sql()
-    base_rows = fetch_all(base_sql)
     today = date.today()
-    schedule = get_dispatch_schedule_by_part(today.month, today.year)
-    rows = _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
+    rows = _build_inventory_rows_for_dispatch_period(today.month, today.year)
     _DASHBOARD_BASE_CACHE = {
         "rows": rows,
         "last_refreshed": datetime.utcnow(),
@@ -833,7 +509,7 @@ def get_dashboard_base_rows(
 
     total_count = len(working_rows)
 
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
+    max_page_size = 200
 
     if page_size == -1:
         page = 1
@@ -841,7 +517,7 @@ def get_dashboard_base_rows(
         page_rows = working_rows
     else:
         if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
+            page_size = 25
         page_size = min(page_size, max_page_size)
         page = max(page, 1)
         total_pages = max(1, (total_count + page_size - 1) // page_size)
@@ -992,29 +668,20 @@ def _enrich_dashboard_buffer_rows(
     return enriched_rows
 
 
-def get_dashboard_rows_with_buffer(
-    page: int,
-    page_size: int,
-    global_search: Optional[str],
-    sort_by: Optional[str],
-    sort_dir: Optional[str],
-    row_filter: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Return dashboard rows enriched with buffer and RM derived columns.
-
-    Default buffer_qty is 0 when not configured for a part_no.
-    All filtering, sorting, and pagination are applied on the enriched rows so
-    that derived column sorting works correctly.
-    """
-    columns = get_dashboard_columns()
-    base_rows = _get_cached_base_rows()
-    if not base_rows:
-        # Cache is empty – populate it once from the database.
-        refresh_dashboard_base_cache()
+def build_enriched_inventory_rows_for_period(
+    month: int,
+    year: int,
+) -> List[Dict[str, Any]]:
+    """Fully enriched inventory grid for a calendar month (live cache or rebuilt schedule)."""
+    today = date.today()
+    if month == today.month and year == today.year:
         base_rows = _get_cached_base_rows()
+        if not base_rows:
+            refresh_dashboard_base_cache()
+            base_rows = _get_cached_base_rows()
+    else:
+        base_rows = _build_inventory_rows_for_dispatch_period(month, year)
 
-    # Enrich full cache first so RM group totals (total_rm_*, current_stock_available, etc.)
-    # reflect all parts sharing an RM code — not only rows matching global search.
     enriched_all = _enrich_dashboard_buffer_rows(base_rows)
     _normalize_rm_allocation_inputs(enriched_all)
     sum_util, sum_req, inward_by_key, actual_by_key = _rm_material_group_aggregates(
@@ -1023,6 +690,46 @@ def get_dashboard_rows_with_buffer(
     _apply_rm_allocation_assignments(
         enriched_all, sum_util, sum_req, inward_by_key, actual_by_key
     )
+    return enriched_all
+
+
+def get_dashboard_rows_with_buffer(
+    page: int,
+    page_size: int,
+    global_search: Optional[str],
+    sort_by: Optional[str],
+    sort_dir: Optional[str],
+    row_filter: Optional[str] = None,
+    snapshot_year: Optional[int] = None,
+    snapshot_month: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Return dashboard rows enriched with buffer and RM derived columns.
+
+    Default buffer_qty is 0 when not configured for a part_no.
+    All filtering, sorting, and pagination are applied on the enriched rows so
+    that derived column sorting works correctly.
+
+    Past months are served from frozen end-of-month snapshots (read-only).
+    """
+    from .inventory_snapshot import is_current_inventory_period, load_snapshot_rows
+
+    columns = get_dashboard_columns()
+    today = date.today()
+    year = snapshot_year if snapshot_year is not None else today.year
+    month = snapshot_month if snapshot_month is not None else today.month
+    is_current = is_current_inventory_period(year, month)
+
+    if is_current:
+        enriched_all = build_enriched_inventory_rows_for_period(month, year)
+        snapshot_available = True
+    else:
+        loaded = load_snapshot_rows(year, month)
+        if loaded is None:
+            enriched_all = []
+            snapshot_available = False
+        else:
+            enriched_all = loaded
+            snapshot_available = True
 
     if global_search:
         term = str(global_search).lower()
@@ -1054,7 +761,7 @@ def get_dashboard_rows_with_buffer(
 
     total_count = len(enriched_rows)
 
-    max_page_size = int(current_app.config.get("MAX_PAGE_SIZE", 200))
+    max_page_size = 200
 
     if page_size == -1:
         page = 1
@@ -1062,7 +769,7 @@ def get_dashboard_rows_with_buffer(
         page_rows = enriched_rows
     else:
         if page_size <= 0:
-            page_size = int(current_app.config.get("DEFAULT_PAGE_SIZE", 25))
+            page_size = 25
         page_size = min(page_size, max_page_size)
         page = max(page, 1)
         total_pages = max(1, (total_count + page_size - 1) // page_size)
@@ -1077,6 +784,10 @@ def get_dashboard_rows_with_buffer(
         "totalCount": total_count,
         "page": page,
         "pageSize": effective_page_size,
+        "periodYear": year,
+        "periodMonth": month,
+        "isReadOnly": not is_current,
+        "snapshotAvailable": snapshot_available,
     }
 
 
@@ -1560,11 +1271,46 @@ def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
 # DPR — Daily Production Review
 # ══════════════════════════════════════════════════════════════════════════
 
+def _dpr_operator_label(row: Dict[str, Any]) -> str:
+    name = str(row.get("name") or "").strip()
+    ecno = str(row.get("ecno") or "").strip()
+    if name and ecno and name.lower() != ecno.lower():
+        return f"{name} ({ecno})"
+    return name or ecno
+
+
+def get_dpr_operator_options() -> List[Dict[str, Any]]:
+    """Active press operators (OP_OTID = 1) for DPR line assignment."""
+    rows = fetch_all(
+        """
+        SELECT
+            OP_ID AS id,
+            COALESCE(OP_ECNO, '') AS ecno,
+            COALESCE(OP_NAME, '') AS name
+        FROM operators
+        WHERE OP_ACTIVEYN = 'Y' AND OP_OTID = 1
+        ORDER BY OP_NAME, OP_ECNO
+        """
+    )
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if not row or row.get("id") is None:
+            continue
+        out.append(
+            {
+                "id": int(row["id"]),
+                "label": _dpr_operator_label(row),
+            }
+        )
+    return out
+
+
 def get_dpr_machine_options() -> List[Dict[str, Any]]:
-    """Machine dropdown options. Uses Config.DPR_MACHINE_LIST_SQL."""
-    sql = str(current_app.config.get("DPR_MACHINE_LIST_SQL") or "").strip()
-    if not sql:
-        return []
+    """Machine dropdown options from machinemaster (press / MCM_Type = 1)."""
+    sql = (
+        "SELECT MCM_Id AS id, MCM_Name AS label FROM machinemaster "
+        "WHERE MCM_Type = 1 AND MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
+    )
     rows = fetch_all(sql)
     out: List[Dict[str, Any]] = []
     for row in rows:
@@ -1804,7 +1550,7 @@ def get_hub_pulse_feed() -> List[Dict[str, Any]]:
         ("dispatch_order", "Dispatch order", ["DO_Date", "dispatch_date", "created_at", "updated_at"], ["DO_QTY", "qty", "order_qty"], ["DO_NO", "dispatch_no", "order_no", "SO_NO", "so_no"]),
         ("inventory_transaction", "Inventory movement", ["IT_Date", "trans_date", "transaction_date", "created_at", "updated_at"], ["IT_Qty", "qty", "quantity"], ["IT_ID", "it_id", "tag_id", "TAG_ID"]),
         ("rm_transaction", "RM movement", ["RT_Date", "trans_date", "created_at", "updated_at"], ["RT_Qty", "qty", "quantity"], ["RT_ID", "rt_id", "RT_BatchNo", "rt_batchno"]),
-        ("sales_order", "Sales order", ["SO_DATE", "DLV_DATE", "created_at", "updated_at"], ["QTY", "SO_QTY", "order_qty"], ["SO_NO", "PART_NO"]),
+        ("scheduled_customer", "Customer schedule", ["CS_DATE", "created_at", "updated_at"], ["CS_QTY", "qty"], ["CS_Id", "CS_SCID"]),
         ("tool_life", "Tool update", ["updated_at", "TL_updated_at", "created_at"], ["TL_tool_life", "TL_preventive_maintenance_strokes"], ["TL_tool_number", "TL_tool_id"]),
     ]
 
@@ -2363,7 +2109,7 @@ def _dpr_row_created_sort_key(created_at: Any, row_id: Any) -> Tuple[int, int]:
 def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     """Load DPR rows for a date; tool/strokes/RM derived from part + planned qty."""
     sql = """
-        SELECT id, review_date, machine_id, part_no, planned_qty, produced_qty, remarks,
+        SELECT id, review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks,
                created_by, updated_by, created_at, updated_at
         FROM dpr_daily_review
         WHERE review_date = %s
@@ -2372,6 +2118,7 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     part_nos = [str(r["part_no"]) for r in rows]
     names = _dpr_part_name_map(part_nos)
     machines = {m["id"]: m["label"] for m in get_dpr_machine_options()}
+    operators = {str(o["id"]): o["label"] for o in get_dpr_operator_options()}
     rm_issued_by_rmid = _dpr_rm_issued_map(review_date)
     strokes_by_tool = _dpr_strokes_consumed_by_tool()
     pm_due_by_tool = _dpr_pm_due_by_tool()
@@ -2380,6 +2127,9 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     enriched: List[Dict[str, Any]] = []
     for r in rows:
         pid = str(r.get("machine_id") or "")
+        op_raw = r.get("op_id")
+        op_id = None if op_raw is None else int(op_raw)
+        op_key = str(op_id) if op_id is not None else ""
         pno = str(r.get("part_no") or "").strip()
         rd = r.get("review_date")
         if hasattr(rd, "isoformat"):
@@ -2407,6 +2157,8 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
                 "reviewDate": review_date_str,
                 "machineId": pid,
                 "machineLabel": machines.get(pid, pid),
+                "operatorId": op_id,
+                "operatorLabel": operators.get(op_key, "") if op_id is not None else "",
                 "partNo": pno,
                 "partName": names.get(pno, ""),
                 "plannedQty": pq,
@@ -2447,6 +2199,15 @@ def get_machine_dpr_payload(qr_token: str, review_date: str) -> Optional[Dict[st
     machine_rows.sort(
         key=lambda r: _dpr_row_created_sort_key(r.get("createdAt"), r.get("id"))
     )
+    operator_id: Optional[int] = None
+    operator_label = ""
+    for r in machine_rows:
+        oid = r.get("operatorId")
+        if oid is not None:
+            operator_id = int(oid)
+            operator_label = str(r.get("operatorLabel") or "")
+            break
+
     out_rows: List[Dict[str, Any]] = []
     for r in machine_rows:
         out_rows.append(
@@ -2466,6 +2227,8 @@ def get_machine_dpr_payload(qr_token: str, review_date: str) -> Optional[Dict[st
         "date": review_date,
         "machineId": mid,
         "machineLabel": label,
+        "operatorId": operator_id,
+        "operatorLabel": operator_label,
         "rows": out_rows,
     }
 
@@ -2479,6 +2242,7 @@ def upsert_dpr_row(
     remarks: Optional[str],
     updated_by: Optional[str],
     row_id: Optional[int] = None,
+    op_id: Optional[int] = None,
 ) -> int:
     """Insert or update a DPR row. Returns row id."""
     machine_id = str(machine_id or "").strip()
@@ -2489,13 +2253,23 @@ def upsert_dpr_row(
     if row_id:
         sql = """
             UPDATE dpr_daily_review
-            SET review_date = %s, machine_id = %s, part_no = %s,
+            SET review_date = %s, machine_id = %s, op_id = %s, part_no = %s,
                 planned_qty = %s, produced_qty = %s, remarks = %s, updated_by = %s
             WHERE id = %s
         """
         execute(
             sql,
-            (review_date, machine_id, part_no, planned_qty, produced_qty, remarks or "", updated_by, row_id),
+            (
+                review_date,
+                machine_id,
+                op_id,
+                part_no,
+                planned_qty,
+                produced_qty,
+                remarks or "",
+                updated_by,
+                row_id,
+            ),
         )
         one = fetch_one("SELECT id FROM dpr_daily_review WHERE id = %s", (row_id,))
         if not one:
@@ -2504,9 +2278,10 @@ def upsert_dpr_row(
 
     sql = """
         INSERT INTO dpr_daily_review
-            (review_date, machine_id, part_no, planned_qty, produced_qty, remarks, created_by, updated_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks, created_by, updated_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
+            op_id = VALUES(op_id),
             planned_qty = VALUES(planned_qty),
             produced_qty = VALUES(produced_qty),
             remarks = VALUES(remarks),
@@ -2517,6 +2292,7 @@ def upsert_dpr_row(
         (
             review_date,
             machine_id,
+            op_id,
             part_no,
             planned_qty,
             produced_qty,
@@ -2644,6 +2420,21 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         (d,),
     ) or {}
 
+    active_tool_breakdowns = 0
+    try:
+        bd_row = fetch_one(
+            """
+            SELECT COUNT(*) AS active_tool_breakdowns
+            FROM tool_breakdowns
+            WHERE DATE(downtime_at) = %s
+              AND completed_at IS NULL
+            """,
+            (d,),
+        )
+        active_tool_breakdowns = int((bd_row or {}).get("active_tool_breakdowns") or 0)
+    except Exception:
+        pass
+
     return {
         "date": d,
         "monthStart": month_start,
@@ -2664,6 +2455,7 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         "operatorPlanned": snap_row.get("operator_planned"),
         "operatorActual": snap_row.get("operator_actual"),
         "bottleneckPending": (snap_row.get("bottleneck_pending") or "") or "",
+        "activeToolBreakdowns": active_tool_breakdowns,
     }
 
 
@@ -2712,6 +2504,21 @@ def get_dpr_version(review_date: str) -> str:
     bottleneck = str(snap_row.get("bottleneck_pending") or "")
     bottleneck_hash = hashlib.md5(bottleneck.encode("utf-8")).hexdigest()[:8]
 
+    active_tool_breakdowns = 0
+    try:
+        bd_row = fetch_one(
+            """
+            SELECT COUNT(*) AS active_tool_breakdowns
+            FROM tool_breakdowns
+            WHERE DATE(downtime_at) = %s
+              AND completed_at IS NULL
+            """,
+            (d,),
+        )
+        active_tool_breakdowns = int((bd_row or {}).get("active_tool_breakdowns") or 0)
+    except Exception:
+        pass
+
     parts = [
         str(row_ts),
         str(row_count),
@@ -2721,6 +2528,8 @@ def get_dpr_version(review_date: str) -> str:
         "n" if op_actual is None else str(op_actual),
         "b",
         bottleneck_hash,
+        "tb",
+        str(active_tool_breakdowns),
     ]
     return "|".join(parts)
 

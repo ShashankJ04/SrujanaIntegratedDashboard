@@ -35,20 +35,6 @@ class Config:
     DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "15"))
     DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "15"))
 
-    WH_DB_HOST = os.environ.get("WH_DB_HOST", "localhost")
-    WH_DB_PORT = int(os.environ.get("WH_DB_PORT", "3306"))
-    WH_DB_USER = os.environ.get("WH_DB_USER", "root")
-    WH_DB_PASSWORD = os.environ.get("WH_DB_PASSWORD", "")
-    WH_DB_NAME = os.environ.get("WH_DB_NAME", "warehouse_db")
-    WH_DB_POOL_SIZE = int(os.environ.get("WH_DB_POOL_SIZE", "5"))
-    WH_DB_POOL_MAX_OVERFLOW = int(os.environ.get("WH_DB_POOL_MAX_OVERFLOW", "10"))
-
-    # Table to visualize in the dashboard
-    TARGET_TABLE_NAME = os.environ.get("TARGET_TABLE_NAME", "your_table_name_here")
-
-    # Pagination defaults
-    DEFAULT_PAGE_SIZE = int(os.environ.get("DEFAULT_PAGE_SIZE", "25"))
-    MAX_PAGE_SIZE = int(os.environ.get("MAX_PAGE_SIZE", "200"))
     HUB_PULSE_CACHE_SECONDS = int(os.environ.get("HUB_PULSE_CACHE_SECONDS", "20"))
     HUB_SCHEMA_CACHE_SECONDS = int(os.environ.get("HUB_SCHEMA_CACHE_SECONDS", "600"))
     REPORTS_SUMMARY_CACHE_SECONDS = int(

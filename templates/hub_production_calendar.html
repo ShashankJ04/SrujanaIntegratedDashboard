@@ -2,7 +2,7 @@
 <section class="ti-section ti-hub-section-fill" data-section="production-calendar" id="section-production-calendar">
   <div class="ti-dc-toolbar ti-dc-toolbar--all-in-one">
     <div class="ti-dc-toolbar-left">
-      <span class="ti-dc-icon">🏭</span>
+      <span class="ti-dc-icon">⏱️</span>
       <div class="ti-dc-title-block">
         <h2 class="ti-dc-title">Production Calendar</h2>
         <p class="ti-dc-subtitle" id="dispatch-calendar-subtitle">Loading…</p>
@@ -10,10 +10,9 @@
     </div>
     <div class="ti-dc-toolbar-mid">
       <div class="ti-dc-legend ti-dc-legend--inline ti-dc-legend--grid2" aria-label="Production status legend">
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="over" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--dispatched"></span> Over-produced</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="exact" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--ok"></span> Produced</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="under" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Under-produced</button>
-        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="none" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Not produced</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="pending" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--short"></span> Pending</button>
+        <button type="button" class="ti-dc-legend-item" data-dc-legend-filter="overdue" aria-pressed="false"><span class="ti-dc-swatch ti-dc-swatch--partial"></span> Overdue</button>
+        <label class="ti-dc-legend-item ti-dc-legend-item--toggle"><input type="checkbox" id="pc-show-completed" /> Show Completed</label>
       </div>
     </div>
     <div class="ti-dc-toolbar-kpi" aria-label="Production month to date">
