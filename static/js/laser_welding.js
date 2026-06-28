@@ -22,11 +22,14 @@ window.LaserWeldingPage = (() => {
     packing: 'Packing',
     trays_carton: 'Trays/Carton',
     qa: 'QA',
+    tracking: 'Tracking — pipeline snapshot & build capacity',
+    reports: 'Reports — activity, stock, QA & scrap',
   };
 
   const GRID_TABS = new Set(['inspection', 'sa_cleaning', 'lw_cleaning', 'qa', 'packing']);
   const SA_TABS = new Set(['sub_assembly', 'sa_rework']);
   const ASM_TABS = new Set(['laser_welding', 'lw_rework']);
+  const TRACK_TABS = new Set(['tracking', 'reports']);
 
   let _tab = 'inspection';
   let _workDate = '';
@@ -77,7 +80,36 @@ window.LaserWeldingPage = (() => {
   let _weldModalSubAssemblyPartNo = null;
   let _prodModalSubAssemblyPartNo = null;
   let _prodModalIsBo = false;
+
+  let _trackingDataRaw = null;
+  let _trackCache = {};
+  let _trackLoadedKey = '';
+  let _trackReportView = 'history';
+  let _trackCustId = '';
+  let _trackPhase = '';
+  let _trackFlowStep = '';
+  let _trackSearch = '';
+  let _trackLoading = false;
+  let _trackCapacityExpanded = {};
+  let _trackSelectedCardKey = '';
   let _visibilityRefreshBound = false;
+  let _actionHistoryRows = [];
+  let _historyFrom = '';
+  let _historyTo = '';
+  let _historyStep = '';
+  let _historySearch = '';
+  let _historyLoading = false;
+  let _historyExpanded = {};
+  let _historyGrid = null;
+  let _stockGrid = null;
+  let _qaGrid = null;
+  let _scrapGrid = null;
+  let _stockRows = [];
+  let _qaRows = [];
+  let _scrapRows = [];
+  let _stockLoading = false;
+  let _qaLoading = false;
+  let _scrapLoading = false;
 
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
   const $$ = (sel, ctx) => [...(ctx || document).querySelectorAll(sel)];
@@ -105,6 +137,15 @@ window.LaserWeldingPage = (() => {
     return `${y}-${m}-${day}`;
   }
 
+  function isoDaysAgo(days) {
+    const d = new Date();
+    d.setDate(d.getDate() - Math.max(0, Number(days) || 0));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   async function apiFetch(url, opts) {
     if (typeof window.apiFetch === 'function') return window.apiFetch(url, opts);
     const r = await fetch(url, opts);
@@ -126,6 +167,41 @@ window.LaserWeldingPage = (() => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+  }
+
+  async function apiDownload(path, body, fileName) {
+    if (window.Hub?.api?.download) {
+      return window.Hub.api.download(path, body, fileName);
+    }
+    const res = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      credentials: 'same-origin',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+      window.location.href = '/login';
+      throw new Error('Session expired');
+    }
+    if (!res.ok) {
+      let msg = `Download error: ${res.status}`;
+      try {
+        const j = await res.json();
+        msg = j.error || j.message || msg;
+      } catch (_) { /* ignore */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'download.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
   }
 
   function isReworkWeldingMode() {
@@ -246,6 +322,16 @@ window.LaserWeldingPage = (() => {
     return '<td class="lw-col-qa">—</td><td class="lw-col-scrap">—</td>';
   }
 
+  function timePlaceholderCell() {
+    return '<td class="lw-col-time">—</td>';
+  }
+
+  function asmTimeCellHtml(row) {
+    if (!row?.isProcessed) return '—';
+    const timeStr = rowTimeTakenDisplay(row);
+    return escapeHtml(timeStr || '—');
+  }
+
   function packLotCellHtml(row) {
     if (!row.packLotNo) return '—';
     return `<span class="lw-lot-badge" title="Packed output lot">${escapeHtml(row.packLotNo)}</span>`;
@@ -334,6 +420,12 @@ window.LaserWeldingPage = (() => {
       await loadSubAssemblyRows(preserveFilter);
     } else if (_tab === 'trays_carton') {
       await loadTraysCartonTab(preserveFilter);
+    } else if (TRACK_TABS.has(_tab)) {
+      await loadTracking();
+      if (_trackReportView === 'history') await loadActionHistory();
+      else if (_trackReportView === 'stock') await loadStockReport();
+      else if (_trackReportView === 'qa') await loadQaHistory();
+      else if (_trackReportView === 'scrap') await loadScrapHistory();
     } else {
       updateRowCount();
     }
@@ -2630,6 +2722,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qty">${pendingQty > 0 ? pendingQty : '—'}</td>
       ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
+      ${timePlaceholderCell()}
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
     `;
@@ -2669,6 +2762,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qty">${pendingQty > 0 ? pendingQty : '—'}</td>
       ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
+      ${timePlaceholderCell()}
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
     `;
@@ -2844,6 +2938,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
       <td class="lw-col-scrap">${scrapTotalCellHtml(row)}</td>
       <td class="lw-col-lot">${row.newLotNo ? `<span class="lw-lot-badge">${escapeHtml(row.newLotNo)}</span>` : '—'}</td>
+      <td class="lw-col-time">${asmTimeCellHtml(row)}</td>
       <td class="lw-col-ot">${otBadgeHtml(row)}</td>
       <td class="lw-col-actions lw-actions-cell">${buildAsmActionsHtml(row)}</td>
     `;
@@ -2855,7 +2950,7 @@ window.LaserWeldingPage = (() => {
     tr.className = 'lw-detail-row';
     tr.dataset.detailFor = row.rowKey;
     const td = document.createElement('td');
-    td.colSpan = 11;
+    td.colSpan = 12;
     td.className = 'lw-detail-cell';
     td.innerHTML = `<div class="lw-detail-inline lw-detail-body">${asmDetailLinesHtml(row)}</div>`;
     tr.appendChild(td);
@@ -2929,6 +3024,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qty">—</td>
       ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
+      ${timePlaceholderCell()}
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
     `;
@@ -3104,6 +3200,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
       <td class="lw-col-scrap">${scrapTotalCellHtml(row)}</td>
       <td class="lw-col-lot">${row.newLotNo ? `<span class="lw-lot-badge">${escapeHtml(row.newLotNo)}</span>` : '—'}</td>
+      <td class="lw-col-time">${asmTimeCellHtml(row)}</td>
       <td class="lw-col-ot">${otBadgeHtml(row)}</td>
       <td class="lw-col-actions lw-actions-cell">${buildAsmActionsHtml(row, isReworkSubAssemblyMode())}</td>
     `;
@@ -3115,7 +3212,7 @@ window.LaserWeldingPage = (() => {
     tr.className = 'lw-detail-row';
     tr.dataset.detailFor = row.rowKey;
     const td = document.createElement('td');
-    td.colSpan = 11;
+    td.colSpan = 12;
     td.className = 'lw-detail-cell';
     td.innerHTML = `<div class="lw-detail-inline lw-detail-body">${asmDetailLinesHtml(row)}</div>`;
     tr.appendChild(td);
@@ -3246,6 +3343,7 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-qty">—</td>
       ${qtyMetaPlaceholderCells()}
       <td class="lw-col-lot">—</td>
+      ${timePlaceholderCell()}
       <td class="lw-col-ot">—</td>
       <td class="lw-col-actions"></td>
     `;
@@ -4020,7 +4118,27 @@ window.LaserWeldingPage = (() => {
       $('#lw-asm-panel')?.classList.add('lw-panel--active');
     } else if (tab === 'trays_carton') {
       $('#lw-trays-carton-panel')?.classList.add('lw-panel--active');
+    } else if (tab === 'tracking') {
+      $('#lw-tracking-panel')?.classList.add('lw-panel--active');
+    } else if (tab === 'reports') {
+      $('#lw-reports-panel')?.classList.add('lw-panel--active');
     }
+    const trackTools = $('#lw-track-toolbar-tools');
+    const reportsTools = $('#lw-reports-toolbar-tools');
+    if (trackTools) trackTools.hidden = tab !== 'tracking';
+    if (reportsTools) reportsTools.hidden = tab !== 'reports';
+    updateReportsToolbar();
+    const search = $('#lw-grid-search');
+    const dateInput = $('#lw-work-date');
+    const dateLabel = $('.lw-date-label');
+    const countEl = $('#lw-item-count');
+    const showToolbarInputs = isGridTab(tab) || ASM_TABS.has(tab) || SA_TABS.has(tab) || tab === 'trays_carton';
+    const hideDateSearch = TRACK_TABS.has(tab);
+    if (search) search.style.display = showToolbarInputs && !hideDateSearch ? '' : 'none';
+    if (dateInput) dateInput.style.display = showToolbarInputs && !hideDateSearch ? '' : 'none';
+    if (dateLabel) dateLabel.style.display = showToolbarInputs && !hideDateSearch ? '' : 'none';
+    if (countEl && TRACK_TABS.has(tab)) countEl.style.display = 'none';
+    else if (countEl) countEl.style.display = '';
   }
 
   function switchTab(tab) {
@@ -4186,6 +4304,1772 @@ window.LaserWeldingPage = (() => {
     }
   }
 
+  // --- Tracking ---
+
+  const TRACK_CHILD_PHASES = [
+    { id: 'erp_stock', label: 'ERP stock' },
+    { id: 'inspected_ready', label: 'Inspected' },
+    { id: 'qa_pending', label: 'QA pending' },
+    { id: 'consumed', label: 'Consumed' },
+  ];
+  const TRACK_SA_PHASES = [
+    { id: 'awaiting_clean', label: 'Awaiting clean' },
+    { id: 'qa_pending', label: 'QA pending' },
+    { id: 'ready_for_weld', label: 'Ready for weld' },
+    { id: 'rework_pending', label: 'Rework' },
+  ];
+  const TRACK_FG_PHASES = [
+    { id: 'awaiting_clean', label: 'Awaiting clean' },
+    { id: 'qa_pending', label: 'QA pending' },
+    { id: 'ready_to_pack', label: 'Ready to pack' },
+    { id: 'rework_pending', label: 'Rework' },
+  ];
+
+  const TRACK_PHASE_LABELS = {
+    erp_stock: 'ERP stock',
+    inspected_ready: 'Inspected ready',
+    qa_pending: 'QA pending',
+    consumed: 'Consumed',
+    awaiting_clean: 'Awaiting clean',
+    ready_for_weld: 'Ready for weld',
+    ready_to_pack: 'Ready to pack',
+    rework_pending: 'Rework pending',
+  };
+
+  const MATERIAL_FLOW_STEPS = [
+    { id: 'inspection', label: 'Inspection', tab: 'inspection', filterPhases: ['erp_stock', 'inspected_ready'] },
+    { id: 'sub_assembly', label: 'Sub-Assembly', tab: 'sub_assembly', filterPhases: ['ready_for_weld'], kinds: ['sa'] },
+    { id: 'sa_cleaning', label: 'SA Inspection', tab: 'sa_cleaning', filterPhases: ['awaiting_clean'], kinds: ['sa'] },
+    { id: 'sa_rework', label: 'SA Re-Work', tab: 'sa_rework', filterPhases: ['rework_pending'], kinds: ['sa'] },
+    { id: 'laser_welding', label: 'Laser Welding', tab: 'laser_welding', filterPhases: ['ready_for_weld'], kinds: ['fg'] },
+    { id: 'lw_cleaning', label: 'LW Cleaning/Inspection', tab: 'lw_cleaning', filterPhases: ['awaiting_clean'], kinds: ['fg'] },
+    { id: 'lw_rework', label: 'LW Re-Work', tab: 'lw_rework', filterPhases: ['rework_pending'], kinds: ['fg'] },
+    { id: 'packing', label: 'Packing', tab: 'packing', filterPhases: ['ready_to_pack'], kinds: ['fg'] },
+    { id: 'qa', label: 'QA', tab: 'qa', filterPhases: ['qa_pending'] },
+  ];
+
+  function actionTabForItem(item, kind) {
+    if (!item || item.phase === 'consumed') return null;
+    const phase = item.phase;
+    if (kind === 'child' && (phase === 'erp_stock' || phase === 'inspected_ready')) {
+      return 'inspection';
+    }
+    if (phase === 'qa_pending') return 'qa';
+    if (phase === 'awaiting_clean') return kind === 'sa' ? 'sa_cleaning' : 'lw_cleaning';
+    if (phase === 'rework_pending') return kind === 'sa' ? 'sa_rework' : 'lw_rework';
+    if (phase === 'ready_to_pack' && kind === 'fg') return 'packing';
+    if (phase === 'ready_for_weld' && kind === 'sa') return 'laser_welding';
+    return null;
+  }
+
+  function matchWorkflowStep(step, item) {
+    if (!step || !item) return false;
+    return actionTabForItem(item, item.kind) === step.tab;
+  }
+
+  function findWorkflowStep(stepId) {
+    return MATERIAL_FLOW_STEPS.find(s => s.id === stepId) || null;
+  }
+
+  function trackPhaseLabel(phase) {
+    return TRACK_PHASE_LABELS[phase] || phase || '—';
+  }
+
+  function setTrackLoading(on, { skeleton = true } = {}) {
+    _trackLoading = !!on;
+    if (!skeleton) return;
+    const shell = $('#lw-track-dash-shell');
+    const skel = $('#lw-track-skeleton');
+    if (shell) shell.classList.toggle('is-loading', !!on);
+    if (skel) skel.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
+  function setTrackError(msg) {
+    const trackEl = $('#lw-tracking-error');
+    const reportsEl = $('#lw-reports-error');
+    [trackEl, reportsEl].forEach(el => {
+      if (!el) return;
+      el.textContent = '';
+      el.style.display = 'none';
+    });
+    const el = _tab === 'reports' ? reportsEl : trackEl;
+    if (!el || !msg) return;
+    el.textContent = msg;
+    el.style.display = '';
+  }
+
+  function trackingQueryParams() {
+    const params = new URLSearchParams();
+    if (_trackCustId) params.set('custId', _trackCustId);
+    if (_trackSearch.trim()) params.set('q', _trackSearch.trim());
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+  }
+
+  function trackingFetchKey() {
+    return `${_trackCustId || ''}|${_trackSearch.trim()}`;
+  }
+
+  function getActiveTrackingData() {
+    return _trackingDataRaw;
+  }
+
+  function getFilteredTrackingData() {
+    const raw = _trackingDataRaw;
+    if (!raw || _tab !== 'tracking') return raw;
+    if (_trackFlowStep) {
+      const step = findWorkflowStep(_trackFlowStep);
+      if (step) {
+        const match = (item) => matchWorkflowStep(step, item);
+        return {
+          ...raw,
+          childParts: (raw.childParts || []).filter(p => match({ ...p, kind: 'child' })),
+          subAssemblies: (raw.subAssemblies || []).filter(s => match({ ...s, kind: 'sa' })),
+          finalAssemblies: (raw.finalAssemblies || []).filter(f => match({ ...f, kind: 'fg' })),
+        };
+      }
+    }
+    if (!_trackPhase) return raw;
+    const match = (item) => item?.phase === _trackPhase;
+    return {
+      ...raw,
+      childParts: (raw.childParts || []).filter(match),
+      subAssemblies: (raw.subAssemblies || []).filter(match),
+      finalAssemblies: (raw.finalAssemblies || []).filter(match),
+    };
+  }
+
+  function collectTrackActionRows(data) {
+    const src = data || _trackingDataRaw;
+    if (!src) return [];
+    const rows = [];
+    (src.childParts || []).forEach(p => {
+      (p.lots || []).forEach(lot => {
+        rows.push({
+          type: 'Child',
+          label: p.partNo,
+          lot: lot.lotNo,
+          phase: lot.phase || p.phase,
+          okayed: lot.totalOkayed,
+          qa: lot.totalQa,
+          clean: lot.inspectionPending,
+          rework: lot.reworkPending,
+          item: { ...p, ...lot, kind: 'child', phase: lot.phase || p.phase },
+        });
+      });
+      if (!p.lots?.length && p.phase !== 'consumed') {
+        rows.push({
+          type: 'Child',
+          label: p.partNo,
+          lot: '—',
+          phase: p.phase,
+          okayed: p.lwOkayed,
+          qa: p.qaPending,
+          clean: 0,
+          rework: 0,
+          item: { ...p, kind: 'child' },
+        });
+      }
+    });
+    (src.subAssemblies || []).forEach(s => {
+      if (s.phase === 'consumed') return;
+      rows.push({
+        type: 'SA',
+        label: s.saPartNo || s.partNo,
+        lot: s.lotNo,
+        phase: s.phase,
+        okayed: s.totalOkayed,
+        qa: s.totalQa,
+        clean: s.inspectionPending,
+        rework: s.reworkPending,
+        item: { ...s, kind: 'sa' },
+      });
+    });
+    (src.finalAssemblies || []).forEach(f => {
+      if (f.phase === 'consumed') return;
+      rows.push({
+        type: 'FG',
+        label: f.bomNo,
+        lot: f.lotNo,
+        phase: f.phase,
+        okayed: f.totalOkayed,
+        qa: f.totalQa,
+        clean: f.inspectionPending,
+        rework: f.reworkPending,
+        item: { ...f, kind: 'fg' },
+      });
+    });
+    return rows;
+  }
+
+  function countMaterialFlowStep(step) {
+    return collectTrackActionRows(_trackingDataRaw).filter(r => matchWorkflowStep(step, r.item)).length;
+  }
+
+  async function ensureTrackCustomers() {
+    const sel = $('#lw-track-cust');
+    if (!sel || sel.dataset.loaded === '1') return;
+    try {
+      const data = await apiFetch('/api/laser-welding/bom-customers');
+      const list = Array.isArray(data) ? data : (data.customers || data.rows || []);
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All customers</option>';
+      list.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.custId ?? c.cust_id ?? '');
+        opt.textContent = c.customerName || c.customer_name || `Customer ${opt.value}`;
+        sel.appendChild(opt);
+      });
+      if (current) sel.value = current;
+      sel.dataset.loaded = '1';
+    } catch (err) {
+      console.error('Failed to load tracking customers', err);
+    }
+  }
+
+  async function loadTracking(opts = {}) {
+    if (!TRACK_TABS.has(_tab)) return;
+    const forReports = _tab === 'reports';
+    const cacheKey = forReports ? '__full__' : trackingFetchKey();
+    if (!opts.force && _trackCache[cacheKey]) {
+      _trackingDataRaw = _trackCache[cacheKey];
+      _trackLoadedKey = cacheKey;
+      renderTracking();
+      return;
+    }
+    const showSkeleton = opts.skeleton !== false;
+    setTrackLoading(true, { skeleton: showSkeleton });
+    setTrackError('');
+    try {
+      if (!forReports) await ensureTrackCustomers();
+      const qs = forReports ? '' : trackingQueryParams();
+      const data = await apiFetch('/api/laser-welding/tracking' + qs);
+      _trackingDataRaw = data;
+      _trackCache[cacheKey] = data;
+      _trackLoadedKey = cacheKey;
+      renderTracking();
+    } catch (err) {
+      console.error(err);
+      setTrackError(err.message || 'Failed to load tracking data');
+    } finally {
+      setTrackLoading(false, { skeleton: showSkeleton });
+    }
+  }
+
+  function updateReportsToolbar() {
+    const reportSel = $('#lw-report-view');
+    const histFilters = $('#lw-history-toolbar-filters');
+    const stepFilter = $('#lw-report-step-filter');
+    const dateFrom = $('#lw-report-date-from');
+    const dateTo = $('#lw-report-date-to');
+    const fromInput = $('#lw-history-from');
+    const toInput = $('#lw-history-to');
+    const stepInput = $('#lw-history-step');
+    const exportBtn = $('#lw-history-export');
+    const view = _trackReportView;
+    const onReports = _tab === 'reports';
+    const filteredViews = new Set(['history', 'qa', 'scrap', 'stock']);
+    const exportableViews = new Set(['history', 'stock', 'qa', 'scrap']);
+    const isStock = view === 'stock';
+    if (reportSel) reportSel.value = view;
+    if (histFilters) histFilters.hidden = !onReports || !filteredViews.has(view);
+    if (exportBtn) exportBtn.hidden = !onReports || !exportableViews.has(view);
+    if (stepFilter) stepFilter.hidden = isStock;
+    if (dateFrom) dateFrom.hidden = isStock;
+    if (dateTo) dateTo.hidden = isStock;
+    if (fromInput) fromInput.disabled = isStock;
+    if (toInput) toInput.disabled = isStock;
+    if (stepInput) stepInput.disabled = isStock;
+  }
+
+  const LW_REPORT_EXPORT_NAMES = {
+    history: 'Activity',
+    stock: 'Stock',
+    qa: 'QA',
+    scrap: 'Scrap',
+  };
+
+  const STOCK_QTY_COLUMNS = [
+    { key: 'inspection_pending', label: 'Inspection Pending' },
+    { key: 'fg', label: 'FG' },
+    { key: 'qa', label: 'QA' },
+    { key: 'scrap', label: 'Scrap' },
+    { key: 'rework_pending', label: 'Rework Pending' },
+    { key: 'packed', label: 'Packed' },
+  ];
+
+  const HISTORY_GRID_COLUMNS = [
+    {
+      key: '_expand',
+      label: '',
+      sortable: false,
+      width: 40,
+      format: (val, row) => {
+        if (!row.hasDetail) return '';
+        const exp = _historyExpanded[row._rowKey];
+        return `<button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-history-act-detail${exp ? ' is-expanded' : ''}" `
+          + `data-history-key="${escapeAttr(row._rowKey)}" title="Show consumption lines">▤</button>`;
+      },
+    },
+    { key: 'workDate', label: 'Date', width: 96, format: (v, row) => escapeHtml(row.workDateDisplay || v || '—') },
+    { key: 'workflowLabel', label: 'Step', width: 120 },
+    { key: 'rowClass', label: 'Type', width: 56 },
+    { key: 'label', label: 'Part / BOM', width: 140 },
+    {
+      key: 'lotNo',
+      label: 'Lot',
+      width: 110,
+      format: (v, row) => {
+        const lot = row.packLotNo || v;
+        if (!lot || lot === '—') return '—';
+        if (row.workflowStep === 'packing' && row.packLotNo) {
+          return `<span class="lw-lot-badge" title="Packed output lot">${escapeHtml(row.packLotNo)}</span>`;
+        }
+        return `<code>${escapeHtml(lot)}</code>`;
+      },
+    },
+    { key: 'operator', label: 'Operator', width: 130 },
+    { key: 'machineName', label: 'Machine', width: 110 },
+    { key: 'inspectedQty', label: 'Qty', align: 'right', width: 64 },
+    { key: 'qaQty', label: 'QA', align: 'right', width: 52 },
+    { key: 'scrapQty', label: 'Scrap', align: 'right', width: 58 },
+    { key: 'reworkQty', label: 'Rework', align: 'right', width: 64 },
+    { key: 'timeTaken', label: 'Time', width: 72 },
+    {
+      key: 'otFlag',
+      label: 'OT',
+      width: 44,
+      align: 'center',
+      sortable: false,
+      format: (v, row) => row.otHtml || '—',
+    },
+  ];
+
+  function historyRowKey(row) {
+    if (row.cdLineId) return `hist:cd:${row.cdLineId}`;
+    return `hist:${row.lineId}`;
+  }
+
+  function historyDetailLinesHtml(row) {
+    const consumptions = row.consumptions || [];
+    const totalCols = 6;
+    let html = '<table class="ti-table lw-detail-table lw-history-detail-table"><thead><tr>';
+    html += '<th>Type</th><th>Item ID</th><th>Lot</th><th>Consumed</th><th>QA</th><th>Scrap</th>';
+    html += '</tr></thead><tbody>';
+    if (!consumptions.length) {
+      html += `<tr><td colspan="${totalCols}" class="lw-detail-empty">No consumption lines.</td></tr>`;
+    }
+    consumptions.forEach(cons => {
+      const traceLines = cons.traceLines || [];
+      const nested = cons.nestedConsumptions || [];
+      const hasNested = traceLines.length > 0 || nested.length > 0;
+      const label = cons.partNo || '—';
+      html += `<tr class="lw-detail-consume-row${hasNested ? ' lw-detail-consume-row--branch' : ''}">`;
+      html += `<td>${escapeHtml(cons.rowClass || 'Part')}</td>`;
+      html += `<td class="lw-consume-part-cell">${cellWithTreeToggle(escapeHtml(label), hasNested)}</td>`;
+      html += `<td>${escapeHtml(cons.lotNo || '—')}</td>`;
+      html += `<td>${Number(cons.consumedQty) || 0}</td>`;
+      html += `<td>${Number(cons.qaQty) || 0}</td>`;
+      html += `<td>${Number(cons.scrapQty) || 0}</td>`;
+      html += '</tr>';
+      if (hasNested) {
+        const nestedLines = traceLines.length > 0
+          ? traceLines
+          : nested.map(n => ({
+            partNumber: n.partNo,
+            sourceLotNo: n.lotNo,
+            inspectedQty: n.consumedQty,
+            qaQty: n.qaQty,
+            scrapQty: n.scrapQty,
+            nestedLines: n.nestedLines,
+          }));
+        html += traceBranchRowHtml(totalCols, nestedLines, 1);
+      }
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function buildHistoryDetailContent(row) {
+    return `<div class="lw-detail-inline lw-detail-body">${historyDetailLinesHtml(row)}</div>`;
+  }
+
+  function mapHistoryRowForGrid(r) {
+    const consumptions = r.consumptions || [];
+    return {
+      _rowKey: historyRowKey(r),
+      workflowStep: r.workflowStep || '',
+      hasDetail: !!(r.hasDetail && consumptions.length),
+      consumptions,
+      workDate: r.workDate || '',
+      workDateDisplay: isoToDisplayDate(r.workDate) || r.workDate || '—',
+      workflowLabel: r.workflowLabel || '—',
+      rowClass: r.rowClass || r.rowType || '—',
+      label: r.label || r.partNo || r.bomNo || '—',
+      lotNo: r.packLotNo || r.lotNo || '—',
+      operator: historyOperatorLabel(r),
+      machineName: r.machineName || '—',
+      inspectedQty: Number(r.inspectedQty) || 0,
+      qaQty: Number(r.qaQty) || 0,
+      scrapQty: Number(r.scrapQty) || 0,
+      reworkQty: Number(r.reworkQty) || 0,
+      timeTaken: formatTimeTaken(r.timeTakenMinutes) || '—',
+      otFlag: r.otFlag || '',
+      otHtml: historyOtHtml(r),
+    };
+  }
+
+  function destroyHistoryGrid() {
+    if (_historyGrid && _historyGrid.destroy) _historyGrid.destroy();
+    _historyGrid = null;
+    const host = $('#lw-track-history-grid');
+    if (host) host.innerHTML = '';
+  }
+
+  function ensureHistoryDateDefaults() {
+    const fromEl = $('#lw-history-from');
+    const toEl = $('#lw-history-to');
+    const stepEl = $('#lw-history-step');
+    const searchEl = $('#lw-history-search');
+    if (fromEl?.value) _historyFrom = fromEl.value;
+    if (toEl?.value) _historyTo = toEl.value;
+    if (stepEl) _historyStep = stepEl.value || '';
+    if (!_historyTo) _historyTo = todayIso();
+    if (!_historyFrom) _historyFrom = isoDaysAgo(30);
+    if (fromEl && !fromEl.value) fromEl.value = _historyFrom;
+    if (toEl && !toEl.value) toEl.value = _historyTo;
+    if (stepEl) stepEl.value = _historyStep;
+    if (searchEl && searchEl.value !== _historySearch) searchEl.value = _historySearch;
+  }
+
+  function historyQueryParams() {
+    ensureHistoryDateDefaults();
+    const params = new URLSearchParams();
+    params.set('from', _historyFrom);
+    params.set('to', _historyTo);
+    if (_historyStep) params.set('step', _historyStep);
+    if (_historySearch.trim()) params.set('q', _historySearch.trim());
+    return params.toString();
+  }
+
+  async function loadActionHistory(opts = {}) {
+    if (_tab !== 'reports' || _trackReportView !== 'history') return;
+    ensureHistoryDateDefaults();
+    if (_historyLoading && !opts.force) return;
+    _historyLoading = true;
+    setTrackError('');
+    const host = $('#lw-track-history-grid');
+    if (host && opts.skeleton !== false && !_historyGrid) {
+      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
+    }
+    try {
+      const data = await apiFetch('/api/laser-welding/reports/action-history?' + historyQueryParams());
+      _actionHistoryRows = data.rows || [];
+      renderTrackActionHistoryTable();
+    } catch (err) {
+      console.error(err);
+      setTrackError(err.message || 'Failed to load action history');
+      destroyHistoryGrid();
+      if (host) {
+        host.innerHTML = '<div class="lw-track-empty">Failed to load history</div>';
+      }
+    } finally {
+      _historyLoading = false;
+    }
+  }
+
+  function historyOperatorLabel(row) {
+    const name = String(row.operatorName || '').trim();
+    const ecno = String(row.operatorEcno || '').trim();
+    if (name && ecno) return `${name} (${ecno})`;
+    return name || ecno || '—';
+  }
+
+  function historyOtHtml(row) {
+    return String(row.otFlag || '').toUpperCase() === 'Y'
+      ? '<span class="lw-ot-badge" title="Overtime">OT</span>'
+      : '—';
+  }
+
+  function renderTrackActionHistoryTable() {
+    const host = $('#lw-track-history-grid');
+    const countEl = $('#lw-report-count');
+    if (!host) return;
+
+    if (typeof SuperGrid === 'undefined' || typeof SuperGrid.create !== 'function') {
+      host.innerHTML = '<div class="lw-track-empty">Grid component not loaded</div>';
+      return;
+    }
+
+    const mapped = (_actionHistoryRows || []).map(mapHistoryRowForGrid);
+
+    if (!_historyGrid) {
+      host.innerHTML = '';
+      _historyGrid = SuperGrid.create(host, {
+        columns: HISTORY_GRID_COLUMNS,
+        rows: mapped,
+        options: {
+          omitToolbar: true,
+          countElement: countEl,
+          countLabel: 'lines',
+          emptyText: 'No activity for this range',
+          layoutKey: 'lw-action-history',
+          resizable: true,
+          reorderable: true,
+          pinnable: true,
+          detailRowExpanded: (row) => !!(row.hasDetail && _historyExpanded[row._rowKey]),
+          detailRowHtml: (row) => buildHistoryDetailContent(row),
+        },
+      });
+      return;
+    }
+
+    _historyGrid.setRows(mapped);
+  }
+
+  function destroyLwReportGrid(gridRef, hostSel) {
+    if (gridRef && gridRef.destroy) gridRef.destroy();
+    const host = $(hostSel);
+    if (host) host.innerHTML = '';
+    return null;
+  }
+
+  function stockGridColumns() {
+    const cols = [
+      { key: 'rowType', label: 'Type', width: 56 },
+      { key: 'label', label: 'Part / BOM', width: 130 },
+      { key: 'partName', label: 'Name', width: 160 },
+    ];
+    STOCK_QTY_COLUMNS.forEach(col => {
+      cols.push({
+        key: col.key,
+        label: col.label,
+        align: 'right',
+        width: 96,
+      });
+    });
+    cols.push({ key: 'totalQty', label: 'Total', align: 'right', width: 72 });
+    return cols;
+  }
+
+  const QA_GRID_COLUMNS = [
+    { key: 'workDateDisplay', label: 'Date', width: 96 },
+    { key: 'rowClass', label: 'Type', width: 56 },
+    { key: 'label', label: 'Part / BOM', width: 130 },
+    { key: 'lotNo', label: 'Lot', width: 110, format: (v) => `<code>${escapeHtml(v || '—')}</code>` },
+    { key: 'workflowLabel', label: 'Step', width: 120 },
+    { key: 'qaQty', label: 'QA', align: 'right', width: 64 },
+    { key: 'operator', label: 'Operator', width: 130 },
+    { key: 'scrapRemark', label: 'Remark', width: 140 },
+  ];
+
+  const SCRAP_GRID_COLUMNS = [
+    { key: 'workDateDisplay', label: 'Date', width: 96 },
+    { key: 'rowClass', label: 'Type', width: 56 },
+    { key: 'label', label: 'Part / BOM', width: 130 },
+    { key: 'lotNo', label: 'Lot', width: 110, format: (v) => `<code>${escapeHtml(v || '—')}</code>` },
+    { key: 'workflowLabel', label: 'Step', width: 120 },
+    { key: 'scrapQty', label: 'Scrap', align: 'right', width: 64 },
+    { key: 'scrapRemark', label: 'Remark', width: 160 },
+    { key: 'operator', label: 'Operator', width: 130 },
+    { key: 'machineName', label: 'Machine', width: 110 },
+  ];
+
+  function mapDatedReportRowForGrid(r) {
+    return {
+      workDate: r.workDate || '',
+      workDateDisplay: isoToDisplayDate(r.workDate) || r.workDate || '—',
+      rowClass: r.rowClass || r.rowType || '—',
+      label: r.label || r.partNo || r.bomNo || '—',
+      lotNo: r.lotNo || '—',
+      workflowLabel: r.workflowLabel || '—',
+      qaQty: Number(r.qaQty) || 0,
+      scrapQty: Number(r.scrapQty) || 0,
+      scrapRemark: r.scrapRemark || r.reworkRemark || '—',
+      operator: historyOperatorLabel(r),
+      machineName: r.machineName || '—',
+    };
+  }
+
+  function renderLwReportGrid(hostSel, gridRef, columns, rows, layoutKey, emptyText) {
+    const host = $(hostSel);
+    const countEl = $('#lw-report-count');
+    if (!host) return gridRef;
+    if (typeof SuperGrid === 'undefined' || typeof SuperGrid.create !== 'function') {
+      host.innerHTML = '<div class="lw-track-empty">Grid component not loaded</div>';
+      return gridRef;
+    }
+    if (!gridRef) {
+      host.innerHTML = '';
+      return SuperGrid.create(host, {
+        columns,
+        rows,
+        options: {
+          omitToolbar: true,
+          countElement: countEl,
+          countLabel: 'lines',
+          emptyText,
+          layoutKey,
+          resizable: true,
+          reorderable: true,
+          pinnable: true,
+        },
+      });
+    }
+    gridRef.setRows(rows);
+    return gridRef;
+  }
+
+  async function loadStockReport(opts = {}) {
+    if (_tab !== 'reports' || _trackReportView !== 'stock') return;
+    if (_stockLoading && !opts.force) return;
+    _stockLoading = true;
+    setTrackError('');
+    const host = $('#lw-track-stock-grid');
+    if (host && opts.skeleton !== false && !_stockGrid) {
+      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
+    }
+    try {
+      const params = new URLSearchParams();
+      if (_historySearch.trim()) params.set('q', _historySearch.trim());
+      const qs = params.toString();
+      const data = await apiFetch('/api/laser-welding/reports/stock' + (qs ? '?' + qs : ''));
+      _stockRows = data.rows || [];
+      renderStockReportGrid();
+    } catch (err) {
+      console.error(err);
+      setTrackError(err.message || 'Failed to load stock report');
+      _stockGrid = destroyLwReportGrid(_stockGrid, '#lw-track-stock-grid');
+      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load stock</div>';
+    } finally {
+      _stockLoading = false;
+    }
+  }
+
+  function renderStockReportGrid() {
+    if (_stockGrid) {
+      _stockGrid = destroyLwReportGrid(_stockGrid, '#lw-track-stock-grid');
+    }
+    _stockGrid = renderLwReportGrid(
+      '#lw-track-stock-grid',
+      _stockGrid,
+      stockGridColumns(),
+      _stockRows,
+      'lw-stock-report',
+      'No stock on hand',
+    );
+  }
+
+  async function loadQaHistory(opts = {}) {
+    if (_tab !== 'reports' || _trackReportView !== 'qa') return;
+    ensureHistoryDateDefaults();
+    if (_qaLoading && !opts.force) return;
+    _qaLoading = true;
+    setTrackError('');
+    const host = $('#lw-track-qa-grid');
+    if (host && opts.skeleton !== false && !_qaGrid) {
+      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
+    }
+    try {
+      const data = await apiFetch('/api/laser-welding/reports/qa-history?' + historyQueryParams());
+      _qaRows = (data.rows || []).map(mapDatedReportRowForGrid);
+      renderQaHistoryGrid();
+    } catch (err) {
+      console.error(err);
+      setTrackError(err.message || 'Failed to load QA history');
+      _qaGrid = destroyLwReportGrid(_qaGrid, '#lw-track-qa-grid');
+      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load QA history</div>';
+    } finally {
+      _qaLoading = false;
+    }
+  }
+
+  function renderQaHistoryGrid() {
+    if (_qaGrid) {
+      _qaGrid = destroyLwReportGrid(_qaGrid, '#lw-track-qa-grid');
+    }
+    _qaGrid = renderLwReportGrid(
+      '#lw-track-qa-grid',
+      _qaGrid,
+      QA_GRID_COLUMNS,
+      _qaRows,
+      'lw-qa-history',
+      'No QA entries for this range',
+    );
+  }
+
+  async function loadScrapHistory(opts = {}) {
+    if (_tab !== 'reports' || _trackReportView !== 'scrap') return;
+    ensureHistoryDateDefaults();
+    if (_scrapLoading && !opts.force) return;
+    _scrapLoading = true;
+    setTrackError('');
+    const host = $('#lw-track-scrap-grid');
+    if (host && opts.skeleton !== false && !_scrapGrid) {
+      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
+    }
+    try {
+      const data = await apiFetch('/api/laser-welding/reports/scrap-history?' + historyQueryParams());
+      _scrapRows = (data.rows || []).map(mapDatedReportRowForGrid);
+      renderScrapHistoryGrid();
+    } catch (err) {
+      console.error(err);
+      setTrackError(err.message || 'Failed to load scrap history');
+      _scrapGrid = destroyLwReportGrid(_scrapGrid, '#lw-track-scrap-grid');
+      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load scrap history</div>';
+    } finally {
+      _scrapLoading = false;
+    }
+  }
+
+  function renderScrapHistoryGrid() {
+    _scrapGrid = renderLwReportGrid(
+      '#lw-track-scrap-grid',
+      _scrapGrid,
+      SCRAP_GRID_COLUMNS,
+      _scrapRows,
+      'lw-scrap-history',
+      'No scrap entries for this range',
+    );
+  }
+
+  function reloadActiveReport(opts = {}) {
+    if (_trackReportView === 'history') return loadActionHistory(opts);
+    if (_trackReportView === 'stock') return loadStockReport(opts);
+    if (_trackReportView === 'qa') return loadQaHistory(opts);
+    if (_trackReportView === 'scrap') return loadScrapHistory(opts);
+    return Promise.resolve();
+  }
+
+  async function exportActiveReportExcel() {
+    if (_tab !== 'reports') return;
+    const view = _trackReportView;
+    if (!LW_REPORT_EXPORT_NAMES[view]) {
+      showSnackbar('Select a report to export', 'warning');
+      return;
+    }
+    ensureHistoryDateDefaults();
+    if (view !== 'stock' && (!_historyFrom || !_historyTo)) {
+      showSnackbar('Set From and To dates before exporting', 'warning');
+      return;
+    }
+    const variables = {};
+    if (view !== 'stock') {
+      variables.from = _historyFrom;
+      variables.to = _historyTo;
+      if (_historyStep) variables.step = _historyStep;
+    }
+    if (_historySearch.trim()) variables.q = _historySearch.trim();
+    const reportName = LW_REPORT_EXPORT_NAMES[view];
+    const fileName = `${reportName}.xlsx`;
+    try {
+      await apiDownload('/api/laser-welding/reports/export', {
+        reportType: view,
+        variables,
+        fileName,
+      }, fileName);
+    } catch (err) {
+      console.error(err);
+      showSnackbar(err.message || 'Export failed', 'error');
+    }
+  }
+
+  function animateCountUp(el, target) {
+    const end = Number(target) || 0;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.textContent = String(end);
+      return;
+    }
+    const duration = 520;
+    const t0 = performance.now();
+    function frame(now) {
+      const p = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = String(Math.round(end * eased));
+      if (p < 1) requestAnimationFrame(frame);
+      else el.textContent = String(end);
+    }
+    el.textContent = '0';
+    requestAnimationFrame(frame);
+  }
+
+  function trackPlotlyBase() {
+    const isLight = typeof Hub !== 'undefined' && Hub.getTheme && Hub.getTheme() === 'light';
+    const textColor = isLight ? '#334155' : '#94a3b8';
+    const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(148,163,184,0.08)';
+    return {
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      margin: { l: 8, r: 8, t: 8, b: 8 },
+      font: { family: "'Inter', sans-serif", size: 11, color: textColor },
+      xaxis: { gridcolor: gridColor, zerolinecolor: gridColor },
+      yaxis: { gridcolor: gridColor, zerolinecolor: gridColor },
+    };
+  }
+
+  function trackPhaseCounts(items) {
+    const m = {};
+    (items || []).forEach(item => {
+      const ph = item.phase;
+      if (ph) m[ph] = (m[ph] || 0) + 1;
+    });
+    return m;
+  }
+
+  function trackTopLabels(items, limit) {
+    return (items || [])
+      .slice(0, limit)
+      .map(i => i.partNo || i.lotNo || i.bomNo || '')
+      .filter(Boolean);
+  }
+
+  const TRACK_FLOW_LANES = [
+    { id: 'child', label: 'Child parts', phases: TRACK_CHILD_PHASES, itemsKey: 'childParts', y: 52 },
+    { id: 'sa', label: 'Sub-assembly', phases: TRACK_SA_PHASES, itemsKey: 'subAssemblies', y: 152 },
+    { id: 'fg', label: 'Final assembly', phases: TRACK_FG_PHASES, itemsKey: 'finalAssemblies', y: 252 },
+  ];
+
+  const TRACK_PHASE_COLORS = {
+    erp_stock: '#8b5cf6',
+    inspected_ready: '#10b981',
+    qa_pending: '#f59e0b',
+    consumed: '#94a3b8',
+    awaiting_clean: '#3b82f6',
+    ready_for_weld: '#10b981',
+    ready_to_pack: '#059669',
+    rework_pending: '#ef4444',
+  };
+
+  const TRACK_READY_PHASES = new Set(['inspected_ready', 'ready_for_weld', 'ready_to_pack']);
+
+  function trackQtyBarHtml(label, value, maxVal) {
+    const v = Math.max(0, Number(value) || 0);
+    const max = Math.max(1, Number(maxVal) || 1);
+    const pct = Math.min(100, Math.round((v / max) * 100));
+    return `
+      <div class="lw-track-qty-row">
+        <span class="lw-track-qty-label">${escapeHtml(label)}</span>
+        <div class="lw-track-qty-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
+        <span class="lw-track-qty-val">${v}</span>
+      </div>
+    `;
+  }
+
+  function trackQueueIconSvg(kind) {
+    const icons = {
+      qa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
+      rework: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 12a9 9 0 0115.5-6.5L21 8"/><path d="M21 12a9 9 0 01-15.5 6.5L3 16"/><path d="M16 3l2.5 2.5L16 8"/><path d="M8 16l-2.5 2.5L8 21"/></svg>',
+      pack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7.7L12 12l8.7-4.3M12 22V12"/></svg>',
+      ready: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>',
+    };
+    return icons[kind] || icons.qa;
+  }
+
+  function trackExecIconSvg(tone) {
+    const icons = {
+      erp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>',
+      qa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
+      clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+      pack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
+    };
+    return icons[tone] || icons.erp;
+  }
+
+  function trackCardKey(kind, partNo, lotId) {
+    return `${kind}:${partNo}:${lotId || ''}`;
+  }
+
+  function trackColCountLabel(n) {
+    const count = Number(n) || 0;
+    return count < 10 ? `(${String(count).padStart(2, '0')})` : `(${count})`;
+  }
+
+  function trackEmptyColHtml(phaseId, label) {
+    return `
+      <div class="lw-track-col-empty-state lw-track-col-empty-state--${escapeAttr(phaseId)}">
+        <span class="lw-track-col-empty-icon" aria-hidden="true">${trackQueueIconSvg('qa')}</span>
+        <span class="lw-track-col-empty-text">No lots in ${escapeHtml(label)}</span>
+      </div>
+    `;
+  }
+
+  function applyTrackPhaseFilter(phase) {
+    _trackPhase = phase || '';
+    _trackFlowStep = '';
+    const sel = $('#lw-track-phase');
+    if (sel) sel.value = _trackPhase;
+    renderTracking();
+  }
+
+  function applyTrackFlowFilter(stepId) {
+    if (_trackFlowStep === stepId) {
+      applyTrackPhaseFilter('');
+      return;
+    }
+    _trackFlowStep = stepId || '';
+    const step = findWorkflowStep(stepId);
+    _trackPhase = step?.filterPhases[0] || '';
+    const sel = $('#lw-track-phase');
+    if (sel) sel.value = _trackPhase;
+    renderTracking();
+  }
+
+  function switchToReportsPipeline(phase) {
+    if (phase) {
+      _trackPhase = phase;
+      const sel = $('#lw-track-phase');
+      if (sel) sel.value = phase;
+    }
+    setTrackReportView('pipeline');
+    if (_tab === 'reports') {
+      renderTracking();
+    } else {
+      switchTab('reports');
+    }
+  }
+
+  function renderMaterialFlowStrip() {
+    const host = $('#lw-track-exec-flow');
+    if (!host || !_trackingDataRaw) return;
+    host.innerHTML = `
+      <div class="lw-material-flow-strip lw-tabs lw-tabs--scroll" role="tablist" aria-label="Material flow by workflow step">
+        ${MATERIAL_FLOW_STEPS.map((step, i) => {
+          const count = countMaterialFlowStep(step);
+          const active = _trackFlowStep === step.id
+            || (!_trackFlowStep && _trackPhase && step.filterPhases.includes(_trackPhase));
+          return `
+            <button type="button" class="lw-material-flow-step lw-tab${active ? ' lw-tab--active' : ''}${count > 0 ? ' lw-material-flow-step--hot' : ''}"
+                    data-flow-step="${escapeAttr(step.id)}"
+                    data-goto-tab="${escapeAttr(step.tab)}"
+                    style="--i:${i}" title="${count} lot${count === 1 ? '' : 's'} · ${escapeAttr(step.label)}">
+              <span class="lw-material-flow-label">${escapeHtml(step.label)}</span>
+              ${count > 0 ? `<span class="lw-material-flow-count">${count}</span>` : ''}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderTrackPhaseGrid() {
+    const host = $('#lw-track-phase-grid');
+    const data = getFilteredTrackingData();
+    if (!host || !data) return;
+    const laneAccent = { child: '#8b5cf6', sa: '#3b82f6', fg: '#059669' };
+
+    host.innerHTML = TRACK_FLOW_LANES.map((lane, laneIdx) => {
+      const items = data[lane.itemsKey] || [];
+      const counts = trackPhaseCounts(items);
+      const accent = laneAccent[lane.id] || '#64748b';
+      return `
+        <div class="lw-track-phase-lane lw-track-phase-lane--${lane.id}" style="--lane-accent:${accent}">
+          <div class="lw-track-phase-lane-head">
+            <span class="lw-track-phase-lane-dot" aria-hidden="true"></span>
+            <span class="lw-track-phase-lane-title">${escapeHtml(lane.label)}</span>
+            <span class="lw-track-phase-lane-total">${items.length} lots</span>
+          </div>
+          <div class="lw-track-phase-lane-track" role="list">
+            ${lane.phases.map((ph, i) => {
+              const count = counts[ph.id] || 0;
+              const active = _trackPhase === ph.id;
+              const samples = items.filter(it => it.phase === ph.id).slice(0, 2)
+                .map(it => it.partNo || it.lotNo || it.bomNo).join(', ');
+              const title = samples ? `${ph.label}: ${samples}` : ph.label;
+              return `
+                ${i > 0 ? '<span class="lw-track-phase-connector" aria-hidden="true"></span>' : ''}
+                <button type="button" role="listitem"
+                  class="lw-track-phase-cell lw-track-phase-cell--${ph.id}${active ? ' is-active' : ''}${count > 0 ? ' has-wip' : ''}"
+                  data-track-phase="${escapeAttr(ph.id)}"
+                  title="${escapeAttr(title)}"
+                  style="--i:${laneIdx * 4 + i}">
+                  <span class="lw-track-phase-cell-count">${count}</span>
+                  <span class="lw-track-phase-cell-label">${escapeHtml(ph.label)}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+    const details = document.querySelector('.lw-track-phase-details');
+    if (details) details.open = !!_trackPhase;
+  }
+
+  function renderTrackSankey() {
+    const el = $('#lw-track-sankey');
+    const data = _trackingDataRaw;
+    if (!el || !data || !window.Plotly) return;
+    const s = data.summary || {};
+    const childC = trackPhaseCounts(data.childParts);
+    const saC = trackPhaseCounts(data.subAssemblies);
+    const fgC = trackPhaseCounts(data.finalAssemblies);
+
+    const nodes = [
+      'ERP stock', 'Inspected', 'Child QA', 'Consumed',
+      'SA clean', 'SA QA', 'SA ready', 'SA rework',
+      'FG clean', 'FG QA', 'Ready pack', 'FG rework', 'Pack',
+    ];
+    const nodeColors = [
+      '#8b5cf6', '#10b981', '#f59e0b', '#94a3b8',
+      '#3b82f6', '#f59e0b', '#10b981', '#ef4444',
+      '#3b82f6', '#f59e0b', '#059669', '#ef4444', '#6366f1',
+    ];
+
+    const links = [];
+    function link(src, tgt, val) {
+      const v = Math.max(0, Number(val) || 0);
+      if (v > 0) links.push({ source: src, target: tgt, value: v });
+    }
+
+    link(0, 1, Math.max(childC.inspected_ready || 0, s.childPartsReady || 0));
+    link(0, 1, childC.erp_stock || s.childErpStock || 0);
+    link(1, 2, childC.qa_pending || s.childQaPending || 0);
+    link(1, 4, saC.awaiting_clean || s.saAwaitingClean || 0);
+    link(1, 8, fgC.awaiting_clean || s.fgAwaitingClean || 0);
+    link(4, 5, saC.qa_pending || 0);
+    link(5, 6, saC.ready_for_weld || s.saReadyForWeld || 0);
+    link(6, 8, saC.ready_for_weld || 0);
+    link(8, 9, fgC.qa_pending || 0);
+    link(9, 10, fgC.ready_to_pack || s.fgReadyToPack || 0);
+    link(10, 12, fgC.ready_to_pack || s.fgReadyToPack || 0);
+    link(4, 7, saC.rework_pending || 0);
+    link(8, 11, fgC.rework_pending || 0);
+
+    if (!links.length) {
+      el.innerHTML = '<p class="lw-track-dash-empty">No WIP flow data</p>';
+      const insight = $('#lw-track-sankey-insight');
+      if (insight) {
+        insight.textContent = '';
+        insight.hidden = true;
+      }
+      return;
+    }
+
+    const trace = {
+      type: 'sankey',
+      orientation: 'h',
+      node: {
+        pad: 20,
+        thickness: 22,
+        line: { color: 'rgba(15, 23, 42, 0.1)', width: 0.5 },
+        label: nodes,
+        color: nodeColors,
+      },
+      link: {
+        source: links.map(l => l.source),
+        target: links.map(l => l.target),
+        value: links.map(l => l.value),
+        color: 'rgba(59, 130, 246, 0.22)',
+      },
+    };
+
+    const plotFont = trackPlotlyBase().font;
+    if (window.Plotly.purge) window.Plotly.purge(el);
+    Plotly.newPlot(el, [trace], {
+      ...trackPlotlyBase(),
+      font: { ...plotFont, size: 12 },
+      margin: { l: 12, r: 12, t: 8, b: 8 },
+    }, { responsive: true, displayModeBar: false });
+    requestAnimationFrame(() => {
+      if (window.Plotly?.Plots?.resize) window.Plotly.Plots.resize(el);
+    });
+
+    const insight = $('#lw-track-sankey-insight');
+    if (insight) {
+      const buckets = [
+        { label: 'ERP stock', v: childC.erp_stock || s.childErpStock || 0 },
+        { label: 'Child inspected', v: childC.inspected_ready || s.childPartsReady || 0 },
+        { label: 'Child QA', v: childC.qa_pending || 0 },
+        { label: 'SA awaiting clean', v: saC.awaiting_clean || s.saAwaitingClean || 0 },
+        { label: 'SA ready weld', v: saC.ready_for_weld || s.saReadyForWeld || 0 },
+        { label: 'FG awaiting clean', v: fgC.awaiting_clean || s.fgAwaitingClean || 0 },
+        { label: 'FG ready pack', v: fgC.ready_to_pack || s.fgReadyToPack || 0 },
+        { label: 'Rework', v: (saC.rework_pending || 0) + (fgC.rework_pending || 0) + (s.reworkPendingTotal || 0) },
+      ].filter(b => b.v > 0).sort((a, b) => b.v - a.v);
+      let msg = 'Each band is lot volume moving between stages — thicker = more WIP on that path.';
+      if (buckets.length) {
+        msg += ` Largest bucket right now: ${buckets[0].label} (${buckets[0].v}).`;
+      }
+      insight.textContent = msg;
+      insight.hidden = false;
+    }
+  }
+
+  function renderTrackCapacityList() {
+    const host = $('#lw-track-capacity-list');
+    if (!host || !_trackingDataRaw) return;
+    const rows = (_trackingDataRaw.bomCapacity || [])
+      .filter(b => b.maxBuildQty > 0)
+      .sort((a, b) => b.maxBuildQty - a.maxBuildQty)
+      .slice(0, 3);
+    if (!rows.length) {
+      host.innerHTML = '';
+      return;
+    }
+    const top = rows[0].maxBuildQty || 1;
+    host.innerHTML = rows.map((row, i) => {
+      const pct = Math.round((row.maxBuildQty / top) * 100);
+      return `
+        <button type="button" class="lw-track-cap-list-row${i === 0 ? ' lw-track-cap-list-row--bn' : ''}" data-cap-idx="${i}">
+          <div class="lw-track-cap-list-head">
+            <span class="lw-track-cap-list-bom">${escapeHtml(row.bomNo)}</span>
+            ${i === 0 ? '<span class="lw-track-cap-bn-chip">Bottleneck</span>' : ''}
+            <span class="lw-track-cap-list-pct">${pct}%</span>
+            <span class="lw-track-cap-list-val">${row.maxBuildQty}</span>
+          </div>
+          <span class="lw-track-cap-list-product">${escapeHtml(row.productName || row.bottleneckPartNo || '')}</span>
+          <div class="lw-track-cap-list-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>
+        </button>
+      `;
+    }).join('');
+    host.querySelectorAll('.lw-track-cap-list-row').forEach((btn, i) => {
+      btn.addEventListener('click', () => openTrackBomDrawer(rows[i]));
+    });
+  }
+
+  function renderTrackCapacityChart() {
+    const el = $('#lw-track-capacity-chart');
+    if (!el || !_trackingDataRaw || !window.Plotly) return;
+    const rows = (_trackingDataRaw.bomCapacity || [])
+      .filter(b => b.maxBuildQty > 0)
+      .sort((a, b) => b.maxBuildQty - a.maxBuildQty)
+      .slice(0, 8);
+    if (!rows.length) {
+      el.innerHTML = '<p class="lw-track-dash-empty">No build capacity available</p>';
+      return;
+    }
+    const labels = rows.map(r => r.bomNo || r.productName || 'BOM');
+    const values = rows.map(r => r.maxBuildQty);
+    const colors = rows.map((_, i) => (i === 0 ? 'rgba(245,158,11,0.9)' : 'rgba(59,130,246,0.75)'));
+
+    _trackCapacityChartRows = rows;
+    if (window.Plotly.purge) window.Plotly.purge(el);
+    Plotly.newPlot(el, [{
+      type: 'bar',
+      orientation: 'h',
+      y: labels,
+      x: values,
+      marker: { color: colors, cornerradius: 4 },
+      hovertemplate: '<b>%{y}</b><br>Max build: %{x}<extra></extra>',
+    }], {
+      ...trackPlotlyBase(),
+      margin: { l: 100, r: 16, t: 8, b: 28 },
+      xaxis: { ...trackPlotlyBase().xaxis, title: '' },
+      yaxis: { ...trackPlotlyBase().yaxis, automargin: true },
+    }, { responsive: true, displayModeBar: false });
+
+    if (el.removeAllListeners) el.removeAllListeners('plotly_click');
+    el.on('plotly_click', ev => {
+      const idx = ev.points?.[0]?.pointIndex;
+      if (idx == null || !_trackCapacityChartRows[idx]) return;
+      openTrackBomDrawer(_trackCapacityChartRows[idx]);
+    });
+  }
+
+  function renderTrackQueueTiles() {
+    const host = $('#lw-track-queue-tiles');
+    if (!host || !_trackingDataRaw?.summary) return;
+    const s = _trackingDataRaw.summary;
+    const tiles = [
+      { id: 'qa', label: 'QA queue', value: s.qaQueueTotal, phase: 'qa_pending', tone: 'qa', icon: 'qa' },
+      { id: 'rework', label: 'Rework', value: s.reworkPendingTotal, phase: 'rework_pending', tone: 'rework', icon: 'rework' },
+      { id: 'fgpack', label: 'FG ready', value: s.fgReadyToPack, phase: 'ready_to_pack', tone: 'pack', icon: 'pack' },
+      { id: 'saweld', label: 'SA ready weld', value: s.saReadyForWeld, phase: 'ready_for_weld', tone: 'ready', icon: 'ready' },
+    ];
+    host.innerHTML = tiles.map((t, i) => `
+      <button type="button" class="lw-track-queue-tile lw-track-queue-tile--${t.tone}${t.value > 0 ? ' lw-track-queue-tile--hot' : ''}"
+              data-track-queue-phase="${escapeAttr(t.phase)}" style="--i:${i}">
+        <span class="lw-track-queue-icon" aria-hidden="true">${trackQueueIconSvg(t.icon)}</span>
+        <span class="lw-track-queue-val" data-value="${t.value}">0</span>
+        <span class="lw-track-queue-label">${escapeHtml(t.label)}</span>
+        ${t.value > 0 ? '<span class="lw-track-queue-cta">Process now →</span>' : '<span class="lw-track-queue-hint">View in Reports</span>'}
+      </button>
+    `).join('');
+    host.querySelectorAll('.lw-track-queue-val').forEach(el => animateCountUp(el, el.dataset.value));
+  }
+
+  function openTrackBomDrawer(bomRow) {
+    const drawer = $('#lw-track-drawer');
+    const backdrop = $('#lw-track-drawer-backdrop');
+    if (!drawer || !bomRow) return;
+    const title = $('#lw-track-drawer-title');
+    const badge = $('#lw-track-drawer-badge');
+    const body = $('#lw-track-drawer-body');
+    const foot = $('#lw-track-drawer-foot');
+    if (badge) badge.innerHTML = '<span class="lw-track-drawer-phase lw-track-drawer-phase--ready">BOM capacity</span>';
+    if (title) title.textContent = bomRow.bomNo || 'BOM';
+    if (body) {
+      const maxVal = Math.max(bomRow.maxBuildQty, bomRow.bottleneckAvailable || 0, 1);
+      body.innerHTML = `
+        <p class="lw-track-drawer-sub">${escapeHtml(bomRow.productName || '')} · ${escapeHtml(bomRow.customerName || '')}</p>
+        <div class="lw-track-drawer-qty-bars">
+          ${trackQtyBarHtml('Max build', bomRow.maxBuildQty, maxVal)}
+          ${trackQtyBarHtml('BN available', bomRow.bottleneckAvailable || 0, maxVal)}
+        </div>
+        <p class="lw-track-drawer-meta">Bottleneck: <strong>${escapeHtml(bomRow.bottleneckPartNo || '—')}</strong> (qty ${bomRow.bottleneckBomQty ?? '—'})</p>
+        <h4 class="lw-track-drawer-lots-head">Children</h4>
+        <ul class="lw-track-drawer-lots lw-track-drawer-lots--bn">
+          ${(bomRow.children || []).map(c => `
+            <li class="${c.isBottleneck ? 'lw-track-drawer-lot-bn' : ''}">${escapeHtml(c.partNo)} — max ${c.maxFromChild} (LW ${c.lwOkayed}, ERP ${c.erpAvailable})${c.isBottleneck ? ' <span class="lw-track-cap-bn-chip">BN</span>' : ''}</li>
+          `).join('')}
+        </ul>
+      `;
+    }
+    if (foot) {
+      foot.innerHTML = `<button type="button" class="ti-btn ti-btn-primary lw-track-goto" data-goto-tab="laser_welding">Weld up to ${bomRow.maxBuildQty}</button>`;
+    }
+    drawer.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    if (backdrop) backdrop.hidden = false;
+    document.body.classList.add('lw-track-drawer-open');
+  }
+
+  function renderTrackDashboard() {
+    renderMaterialFlowStrip();
+    renderTrackSankey();
+    renderTrackCapacityList();
+    renderTrackQueueTiles();
+    renderTrackPhaseGrid();
+  }
+
+  function renderTrackReports() {
+    renderTrackPipeline();
+    renderTrackCapacity();
+    renderTrackActionsTable();
+    setTrackReportView(_trackReportView);
+  }
+
+  function renderTrackFilterChip() {
+    /* filter chip removed — phase filter is shown on material flow strip */
+  }
+
+  function trackCardHtml(item, kind) {
+    const partNo = item.partNo || item.bomNo || item.saPartNo || '';
+    const lotId = item.lotId || '';
+    const cardKey = trackCardKey(kind, partNo, lotId);
+    const title = kind === 'child'
+      ? escapeHtml(item.partNo)
+      : escapeHtml(item.lotNo || item.bomNo);
+    const sub = kind === 'child'
+      ? escapeHtml(item.partName || '')
+      : escapeHtml(item.productName || item.saPartNo || item.partNo || '');
+    const okayed = item.lwOkayed ?? item.totalOkayed ?? 0;
+    const inwarded = item.totalInwarded || okayed || item.erpAvailable || 0;
+    const meta = kind === 'child'
+      ? `LW ${okayed} · ERP ${item.erpAvailable || 0}`
+      : `OK ${item.totalOkayed || 0} · QA ${item.totalQa || 0}`;
+    const readyBadge = TRACK_READY_PHASES.has(item.phase)
+      ? '<span class="lw-track-ready-badge">READY</span>'
+      : '';
+    const priorityBadge = (kind !== 'child' && ((item.reworkPending || 0) > 0 || (item.totalQa || 0) > 0))
+      ? '<span class="lw-track-priority-badge">PRIORITY</span>'
+      : '';
+    const selected = _trackSelectedCardKey === cardKey ? ' lw-track-card--selected' : '';
+    const inw = Math.max(1, Number(inwarded) || 0);
+    const ok = Math.max(0, Number(okayed) || 0);
+    const pct = Math.min(100, Math.round((ok / inw) * 100));
+    return `
+      <button type="button" class="lw-track-card${selected}" data-track-kind="${kind}"
+              data-track-part="${escapeAttr(partNo)}" data-track-lot-id="${lotId}"
+              data-track-card-key="${escapeAttr(cardKey)}"
+              data-phase="${escapeAttr(item.phase)}">
+        <span class="lw-track-card-head">
+          <span class="lw-track-card-part">${title}</span>
+          <span class="lw-track-card-badges">${priorityBadge}${readyBadge}</span>
+        </span>
+        <span class="lw-track-card-name">${sub}</span>
+        <div class="lw-track-bar lw-track-bar--${escapeAttr(item.phase)}" aria-hidden="true"><span style="width:${pct}%"></span></div>
+        <span class="lw-track-card-meta">${meta}</span>
+      </button>
+    `;
+  }
+
+  function renderTrackPipelineLane(title, phases, items, kind) {
+    const byPhase = {};
+    phases.forEach(p => { byPhase[p.id] = []; });
+    items.forEach(item => {
+      const ph = item.phase;
+      if (byPhase[ph]) byPhase[ph].push(item);
+    });
+    return `
+      <section class="lw-track-lane">
+        <h3 class="lw-track-lane-title">
+          <span class="lw-track-lane-title-text">${escapeHtml(title)}</span>
+          <span class="lw-track-lane-lot-count">${items.length} active lot${items.length === 1 ? '' : 's'}</span>
+        </h3>
+        <div class="lw-track-lane-cols">
+          ${phases.map((p, colIdx) => {
+            const colItems = byPhase[p.id] || [];
+            return `
+            <div class="lw-track-col lw-track-col--${p.id}" style="--col:${colIdx}">
+              <div class="lw-track-col-head">
+                <span class="lw-track-col-head-label">${escapeHtml(p.label)}</span>
+                <span class="lw-track-col-count">${trackColCountLabel(colItems.length)}</span>
+              </div>
+              <div class="lw-track-col-body">
+                ${colItems.map((item, i) =>
+                  trackCardHtml(item, kind).replace('lw-track-card"', `lw-track-card" style="--i:${i}"`)
+                ).join('') || trackEmptyColHtml(p.id, p.label)}
+              </div>
+            </div>
+          `;
+          }).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTrackPipeline() {
+    const host = $('#lw-track-pipeline');
+    if (!host || !_trackingDataRaw) return;
+    host.innerHTML = [
+      renderTrackPipelineLane('Child parts', TRACK_CHILD_PHASES, _trackingDataRaw.childParts || [], 'child'),
+      renderTrackPipelineLane('Sub-assembly', TRACK_SA_PHASES, _trackingDataRaw.subAssemblies || [], 'sa'),
+      renderTrackPipelineLane('Final assembly', TRACK_FG_PHASES, _trackingDataRaw.finalAssemblies || [], 'fg'),
+    ].join('');
+    if (_trackSelectedCardKey) {
+      $$('.lw-track-card').forEach(card => {
+        card.classList.toggle('lw-track-card--selected', (card.dataset.trackCardKey || '') === _trackSelectedCardKey);
+      });
+    }
+  }
+
+  function renderCapacityChildRows(children) {
+    if (!children?.length) return '<tr><td colspan="7" class="lw-track-empty">No children</td></tr>';
+    return children.map(ch => `
+      <tr class="${ch.isBottleneck ? 'lw-track-bn-row' : ''}">
+        <td>${escapeHtml(ch.partNo)}</td>
+        <td>${escapeHtml(ch.partName || '')}</td>
+        <td class="lw-track-num">${ch.bomQty}</td>
+        <td class="lw-track-num">${ch.lwOkayed}</td>
+        <td class="lw-track-num">${ch.erpAvailable}</td>
+        <td class="lw-track-num">${ch.maxFromChild}</td>
+        <td>${escapeHtml(ch.source)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderTrackCapacity() {
+    const body = $('#lw-track-capacity-body');
+    const saBody = $('#lw-track-sa-capacity-body');
+    if (!body || !_trackingDataRaw) return;
+    const rows = _trackingDataRaw.bomCapacity || [];
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" class="lw-track-empty">No BOM capacity data</td></tr>';
+    } else {
+      body.innerHTML = rows.map((row, idx) => {
+        const key = `bom:${row.bomId}`;
+        const open = !!_trackCapacityExpanded[key];
+        return `
+          <tr class="lw-track-cap-row${row.maxBuildQty === 0 ? ' lw-track-cap-row--zero' : ''}${open ? ' lw-track-cap-row--open' : ''}">
+            <td>${escapeHtml(row.bomNo)}</td>
+            <td>${escapeHtml(row.productName || '')}</td>
+            <td>${escapeHtml(row.customerName || '')}</td>
+            <td class="lw-track-num lw-track-max">${row.maxBuildQty}</td>
+            <td class="lw-track-bn">
+              ${row.bottleneckPartNo ? `<span class="lw-track-bn-dot"></span>${escapeHtml(row.bottleneckPartNo)}` : '—'}
+            </td>
+            <td>
+              <button type="button" class="lw-track-expand" data-cap-key="${escapeAttr(key)}" aria-expanded="${open}">
+                ${open ? 'Hide' : 'Details'}
+              </button>
+            </td>
+          </tr>
+          ${open ? `
+          <tr class="lw-track-cap-detail">
+            <td colspan="6">
+              <table class="lw-track-cap-child-table">
+                <thead><tr>
+                  <th>Part</th><th>Name</th><th>BOM qty</th><th>LW OK</th><th>ERP</th><th>Max</th><th>Src</th>
+                </tr></thead>
+                <tbody>${renderCapacityChildRows(row.children)}</tbody>
+              </table>
+            </td>
+          </tr>` : ''}
+        `;
+      }).join('');
+    }
+
+    if (saBody) {
+      const saRows = _trackingDataRaw.saCapacity || [];
+      if (!saRows.length) {
+        saBody.innerHTML = '<tr><td colspan="5" class="lw-track-empty">No sub-assembly capacity</td></tr>';
+      } else {
+        saBody.innerHTML = saRows.map(row => {
+          const key = `sa:${row.bomId}:${row.saPartNo}`;
+          const open = !!_trackCapacityExpanded[key];
+          return `
+            <tr class="${open ? 'lw-track-cap-row--open' : ''}">
+              <td>${escapeHtml(row.bomNo)}</td>
+              <td>${escapeHtml(row.saPartNo)} — ${escapeHtml(row.saPartName || '')}</td>
+              <td class="lw-track-num lw-track-max">${row.maxBuildQty}</td>
+              <td>${row.bottleneckPartNo ? escapeHtml(row.bottleneckPartNo) : '—'}</td>
+              <td>
+                <button type="button" class="lw-track-expand" data-cap-key="${escapeAttr(key)}" aria-expanded="${open}">
+                  ${open ? 'Hide' : 'Details'}
+                </button>
+              </td>
+            </tr>
+            ${open ? `
+            <tr class="lw-track-cap-detail">
+              <td colspan="5">
+                <table class="lw-track-cap-child-table">
+                  <thead><tr>
+                    <th>Part</th><th>Name</th><th>BOM qty</th><th>LW OK</th><th>ERP</th><th>Max</th><th>Src</th>
+                  </tr></thead>
+                  <tbody>${renderCapacityChildRows(row.children)}</tbody>
+                </table>
+              </td>
+            </tr>` : ''}
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  function workflowStepLabel(tab) {
+    const step = MATERIAL_FLOW_STEPS.find(s => s.tab === tab);
+    return step?.label || TAB_LABELS[tab] || tab || '—';
+  }
+
+  function workflowStepOrder(tab) {
+    const idx = MATERIAL_FLOW_STEPS.findIndex(s => s.tab === tab);
+    return idx >= 0 ? idx : 99;
+  }
+
+  function buildTrackActionReportRows() {
+    const rows = collectTrackActionRows()
+      .map(r => {
+        const tab = actionTabForItem(r.item, r.item.kind);
+        return tab ? { ...r, workflowTab: tab, workflowLabel: workflowStepLabel(tab) } : null;
+      })
+      .filter(Boolean);
+    rows.sort((a, b) => {
+      const o = workflowStepOrder(a.workflowTab) - workflowStepOrder(b.workflowTab);
+      if (o !== 0) return o;
+      const la = String(a.label || '').localeCompare(String(b.label || ''));
+      if (la !== 0) return la;
+      return String(a.lot || '').localeCompare(String(b.lot || ''));
+    });
+    return rows;
+  }
+
+  function renderTrackActionsTable() {
+    const body = $('#lw-track-actions-body');
+    const countEl = $('#lw-track-actions-count');
+    if (!body || !_trackingDataRaw) return;
+    const rows = buildTrackActionReportRows();
+    if (countEl) countEl.textContent = rows.length ? `${rows.length} lines` : '';
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="10" class="lw-track-empty">No actionable lots</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => `
+      <tr class="lw-track-action-row" tabindex="0" data-track-kind="${escapeAttr(r.item.kind)}"
+          data-track-part="${escapeAttr(r.item.partNo || r.item.bomNo || r.item.saPartNo || '')}"
+          data-track-lot-id="${r.item.lotId || ''}">
+        <td>${escapeHtml(r.workflowLabel)}</td>
+        <td>${escapeHtml(r.type)}</td>
+        <td>${escapeHtml(r.label)}</td>
+        <td><code>${escapeHtml(r.lot)}</code></td>
+        <td><span class="lw-track-phase lw-track-phase--${escapeAttr(r.phase)}">${escapeHtml(trackPhaseLabel(r.phase))}</span></td>
+        <td class="lw-track-num">${r.okayed}</td>
+        <td class="lw-track-num">${r.qa}</td>
+        <td class="lw-track-num">${r.clean}</td>
+        <td class="lw-track-num">${r.rework}</td>
+        <td class="lw-col-actions">
+          <button type="button" class="ti-btn ti-btn-xs ti-btn-outline lw-track-actions-goto" data-goto-tab="${escapeAttr(r.workflowTab)}">Open</button>
+        </td>
+      </tr>
+    `).join('');
+    body.querySelectorAll('.lw-track-action-row').forEach((tr, i) => {
+      tr._trackItem = rows[i]?.item || null;
+    });
+  }
+
+  function trackBomChildrenForLot(item, kind) {
+    if (!_trackingDataRaw || kind === 'child') return null;
+    if (kind === 'fg') {
+      return (_trackingDataRaw.bomCapacity || []).find(b => String(b.bomId) === String(item.bomId)
+        || b.bomNo === item.bomNo) || null;
+    }
+    if (kind === 'sa') {
+      return (_trackingDataRaw.saCapacity || []).find(s =>
+        (String(s.bomId) === String(item.bomId) || s.bomNo === item.bomNo)
+        && (s.saPartNo === item.saPartNo || s.saPartNo === item.partNo)
+      ) || null;
+    }
+    return null;
+  }
+
+  function trackBomChildrenTableHtml(capRow) {
+    const children = capRow?.children || [];
+    if (!children.length) return '';
+    return `
+      <h4 class="lw-track-drawer-lots-head">BOM children</h4>
+      <table class="lw-track-drawer-bom-table">
+        <thead>
+          <tr><th>Part</th><th class="lw-track-num">Qty</th><th class="lw-track-num">LW OK</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${children.map(c => `
+            <tr class="${c.isBottleneck ? 'lw-track-drawer-bom-bn' : ''}">
+              <td><code>${escapeHtml(c.partNo)}</code></td>
+              <td class="lw-track-num">${c.bomQty ?? '—'}</td>
+              <td class="lw-track-num">${c.lwOkayed ?? 0}</td>
+              <td>${c.isBottleneck ? '<span class="lw-track-cap-bn-chip">BN</span>' : ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function trackPhaseStepsHtml(phase, kind) {
+    const stepsByKind = {
+      child: ['erp_stock', 'inspected_ready', 'qa_pending', 'consumed'],
+      sa: ['awaiting_clean', 'qa_pending', 'ready_for_weld', 'rework_pending'],
+      fg: ['awaiting_clean', 'qa_pending', 'ready_to_pack', 'rework_pending'],
+    };
+    const steps = stepsByKind[kind] || stepsByKind.fg;
+    const idx = Math.max(0, steps.indexOf(phase));
+    return `
+      <div class="lw-track-drawer-phase-steps" aria-label="Phase progress">
+        ${steps.map((s, i) => `
+          <div class="lw-track-drawer-step${i <= idx ? ' lw-track-drawer-step--done' : ''}${s === phase ? ' lw-track-drawer-step--current' : ''}">
+            <span class="lw-track-drawer-step-dot"></span>
+            <span class="lw-track-drawer-step-label">${escapeHtml(trackPhaseLabel(s))}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function markTrackSelectedCard(kind, partNo, lotId) {
+    _trackSelectedCardKey = trackCardKey(kind, partNo, lotId);
+    $$('.lw-track-card').forEach(card => {
+      const key = card.dataset.trackCardKey || '';
+      card.classList.toggle('lw-track-card--selected', key === _trackSelectedCardKey);
+    });
+  }
+
+  function clearTrackSelectedCard() {
+    _trackSelectedCardKey = '';
+    $$('.lw-track-card--selected').forEach(card => card.classList.remove('lw-track-card--selected'));
+  }
+
+  function trackSuggestedAction(item, kind) {
+    const phase = item.phase;
+    if (phase === 'erp_stock') return { text: 'Inspect parts in Part Inspection', tab: 'inspection' };
+    if (phase === 'inspected_ready' && kind === 'child') return { text: 'Use in weld / sub-assembly', tab: 'laser_welding' };
+    if (phase === 'qa_pending') return { text: 'Approve in QA Disposition', tab: 'qa' };
+    if (phase === 'awaiting_clean') {
+      if (kind === 'sa') return { text: 'SA Inspection', tab: 'sa_cleaning' };
+      return { text: 'LW Cleaning/Inspection', tab: 'lw_cleaning' };
+    }
+    if (phase === 'ready_for_weld') return { text: 'Weld into final assembly', tab: 'laser_welding' };
+    if (phase === 'ready_to_pack') return { text: 'Pack lot', tab: 'packing' };
+    if (phase === 'rework_pending') {
+      if (kind === 'sa') return { text: 'SA Re-Work', tab: 'sa_rework' };
+      return { text: 'LW Re-Work', tab: 'lw_rework' };
+    }
+    return null;
+  }
+
+  function findTrackItem(kind, partNo, lotId) {
+    if (!_trackingDataRaw) return null;
+    if (kind === 'child') {
+      if (lotId) {
+        for (const p of _trackingDataRaw.childParts || []) {
+          const lot = (p.lots || []).find(l => String(l.lotId) === String(lotId));
+          if (lot) {
+            return { ...p, ...lot, kind: 'child', phase: lot.phase || p.phase };
+          }
+        }
+      }
+      return (_trackingDataRaw.childParts || []).find(p => p.partNo === partNo) || null;
+    }
+    if (kind === 'sa') {
+      if (lotId) {
+        return (_trackingDataRaw.subAssemblies || []).find(s => String(s.lotId) === String(lotId)) || null;
+      }
+      return (_trackingDataRaw.subAssemblies || []).find(s => s.partNo === partNo || s.saPartNo === partNo) || null;
+    }
+    if (lotId) {
+      return (_trackingDataRaw.finalAssemblies || []).find(f => String(f.lotId) === String(lotId)) || null;
+    }
+    return (_trackingDataRaw.finalAssemblies || []).find(f => f.bomNo === partNo || f.partNo === partNo) || null;
+  }
+
+  function trackDrawerFooterHtml(item, kind) {
+    const action = trackSuggestedAction(item, kind);
+    const extras = [];
+    if (item.phase === 'awaiting_clean' && kind === 'sa' && action?.tab !== 'sa_cleaning') {
+      if (kind === 'sa') extras.push({ text: 'SA Inspection', tab: 'sa_cleaning' });
+      else extras.push({ text: 'LW Cleaning/Inspection', tab: 'lw_cleaning' });
+    }
+    if (item.phase === 'ready_to_pack' && action?.tab !== 'packing') {
+      extras.push({ text: 'Pack', tab: 'packing' });
+    }
+    if (!action && !extras.length) return '';
+    const primary = action
+      ? `<button type="button" class="ti-btn ti-btn-primary lw-track-goto" data-goto-tab="${escapeAttr(action.tab)}">${escapeHtml(action.text)}</button>`
+      : '';
+    const secondary = extras.length
+      ? `<div class="lw-track-drawer-foot-secondary">${extras.map(ex =>
+        `<button type="button" class="ti-btn ti-btn-ghost lw-track-goto" data-goto-tab="${escapeAttr(ex.tab)}">${escapeHtml(ex.text)}</button>`
+      ).join('')}</div>`
+      : '';
+    return `<div class="lw-track-drawer-foot-actions">${primary}${secondary}</div>`;
+  }
+
+  function openTrackDrawer(item, kind) {
+    const drawer = $('#lw-track-drawer');
+    const backdrop = $('#lw-track-drawer-backdrop');
+    if (!drawer || !item) return;
+    const title = $('#lw-track-drawer-title');
+    const badge = $('#lw-track-drawer-badge');
+    const body = $('#lw-track-drawer-body');
+    const foot = $('#lw-track-drawer-foot');
+    if (title) {
+      title.textContent = kind === 'child'
+        ? item.partNo
+        : (item.lotNo || item.bomNo || 'Lot');
+    }
+    if (badge) {
+      const lotBadge = (kind !== 'child' && item.lotNo)
+        ? `<span class="lw-track-drawer-lot-badge">Lot: ${escapeHtml(item.lotNo)}</span>`
+        : '';
+      const phasePill = `<span class="lw-track-drawer-phase lw-track-drawer-phase--${escapeAttr(item.phase)}">${escapeHtml(trackPhaseLabel(item.phase))}</span>`;
+      badge.innerHTML = lotBadge + phasePill;
+    }
+    const okayed = item.lwOkayed ?? item.totalOkayed ?? 0;
+    const qa = item.qaPending ?? item.totalQa ?? 0;
+    const erp = item.erpAvailable ?? 0;
+    const cleaning = item.inspectionPending ?? 0;
+    const maxVal = Math.max(okayed, qa, erp, cleaning, 1);
+    if (body) {
+      const capRow = trackBomChildrenForLot(item, kind);
+      body.innerHTML = `
+        <p class="lw-track-drawer-sub">${escapeHtml(item.partName || item.productName || '')}</p>
+        ${trackPhaseStepsHtml(item.phase, kind)}
+        <div class="lw-track-drawer-qty-bars">
+          ${trackQtyBarHtml('Okayed', okayed, maxVal)}
+          ${trackQtyBarHtml('QA', qa, maxVal)}
+          ${trackQtyBarHtml('ERP', erp, maxVal)}
+          ${trackQtyBarHtml('Cleaning', cleaning, maxVal)}
+        </div>
+        ${trackBomChildrenTableHtml(capRow)}
+        ${(item.lots || []).length ? `
+          <h4 class="lw-track-drawer-lots-head">Lots</h4>
+          <ul class="lw-track-drawer-lots">
+            ${item.lots.map(l => `<li><code>${escapeHtml(l.lotNo)}</code> — OK ${l.totalOkayed} / QA ${l.totalQa}</li>`).join('')}
+          </ul>
+        ` : ''}
+      `;
+    }
+    if (foot) foot.innerHTML = trackDrawerFooterHtml(item, kind);
+    markTrackSelectedCard(kind, item.partNo || item.bomNo || item.saPartNo || '', item.lotId || '');
+    drawer.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    if (backdrop) backdrop.hidden = false;
+    document.body.classList.add('lw-track-drawer-open');
+  }
+
+  function closeTrackDrawer() {
+    const drawer = $('#lw-track-drawer');
+    const backdrop = $('#lw-track-drawer-backdrop');
+    if (drawer) {
+      drawer.hidden = true;
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove('lw-track-drawer-open');
+    clearTrackSelectedCard();
+  }
+
+  function setTrackReportView(view) {
+    _trackReportView = view || 'pipeline';
+    updateReportsToolbar();
+    const map = {
+      pipeline: '#lw-track-pipeline-view',
+      capacity: '#lw-track-capacity-view',
+      actions: '#lw-track-actions-view',
+      history: '#lw-track-history-view',
+      stock: '#lw-track-stock-view',
+      qa: '#lw-track-qa-view',
+      scrap: '#lw-track-scrap-view',
+    };
+    Object.entries(map).forEach(([key, sel]) => {
+      const panel = $(sel);
+      if (panel) panel.classList.toggle('lw-track-report-view--active', key === _trackReportView);
+    });
+    if (_trackReportView === 'actions' && _trackingDataRaw) {
+      renderTrackActionsTable();
+    }
+    if (_trackReportView === 'history') {
+      loadActionHistory({ skeleton: false });
+    } else if (_trackReportView === 'stock') {
+      loadStockReport({ skeleton: false });
+    } else if (_trackReportView === 'qa') {
+      loadQaHistory({ skeleton: false });
+    } else if (_trackReportView === 'scrap') {
+      loadScrapHistory({ skeleton: false });
+    }
+  }
+
+  function renderTracking() {
+    if (_tab === 'tracking') {
+      renderTrackDashboard();
+    } else if (_tab === 'reports') {
+      renderTrackReports();
+      setTrackReportView(_trackReportView);
+    }
+  }
+
+  function onTrackPipelineClick(e) {
+    const card = e.target.closest('.lw-track-card');
+    if (!card) return;
+    const kind = card.dataset.trackKind;
+    const partNo = card.dataset.trackPart || '';
+    const lotId = card.dataset.trackLotId || '';
+    const item = findTrackItem(kind, partNo, lotId);
+    if (item) openTrackDrawer(item, kind);
+  }
+
+  function onTrackCapacityClick(e) {
+    const btn = e.target.closest('.lw-track-expand');
+    if (!btn) return;
+    const key = btn.dataset.capKey;
+    _trackCapacityExpanded[key] = !_trackCapacityExpanded[key];
+    renderTrackCapacity();
+  }
+
+  function onTrackHistoryGridClick(e) {
+    if (handleLwTreeToggle(e)) return;
+    const detailBtn = e.target.closest('.lw-history-act-detail');
+    if (!detailBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const key = detailBtn.getAttribute('data-history-key');
+    if (!key) return;
+    _historyExpanded[key] = !_historyExpanded[key];
+    if (_historyGrid && _historyGrid.redrawBody) _historyGrid.redrawBody();
+  }
+
+  function onTrackActionsClick(e) {
+    const gotoBtn = e.target.closest('.lw-track-actions-goto');
+    if (gotoBtn) {
+      const tab = gotoBtn.dataset.gotoTab;
+      if (tab) switchTab(tab);
+      return;
+    }
+    const row = e.target.closest('.lw-track-action-row');
+    if (!row || !row._trackItem) return;
+    openTrackDrawer(row._trackItem, row._trackItem.kind);
+  }
+
   function bindEvents() {
     const root = $('#lw-root');
     if (!root || root.dataset.lwBound === '1') return;
@@ -4216,6 +6100,7 @@ window.LaserWeldingPage = (() => {
       _visibilityRefreshBound = true;
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible' || !isLaserWeldingVisible()) return;
+        if (TRACK_TABS.has(_tab)) return;
         refreshActiveTab(true);
       });
     }
@@ -4255,6 +6140,86 @@ window.LaserWeldingPage = (() => {
     $('#lw-tc-table-body')?.addEventListener('click', onTcTableClick);
     $('#lw-tc-modal-cancel')?.addEventListener('click', closeTcModal);
     $('#lw-tc-modal-save')?.addEventListener('click', () => { void saveTcModal(); });
+
+    $('#lw-track-refresh')?.addEventListener('click', () => loadTracking({ force: true }));
+    $('#lw-track-cust')?.addEventListener('change', e => {
+      _trackCustId = e.target.value || '';
+      _trackCache = {};
+      loadTracking({ skeleton: false });
+    });
+    $('#lw-track-phase')?.addEventListener('change', e => {
+      applyTrackPhaseFilter(e.target.value || '');
+    });
+    let _trackSearchTimer = null;
+    $('#lw-track-search')?.addEventListener('input', e => {
+      _trackSearch = e.target.value || '';
+      clearTimeout(_trackSearchTimer);
+      _trackSearchTimer = setTimeout(() => {
+        _trackCache = {};
+        loadTracking({ skeleton: false });
+      }, 300);
+    });
+    $('#lw-report-view')?.addEventListener('change', e => setTrackReportView(e.target.value));
+    $('#lw-history-refresh')?.addEventListener('click', () => reloadActiveReport({ force: true }));
+    $('#lw-history-export')?.addEventListener('click', () => exportActiveReportExcel());
+    $('#lw-history-from')?.addEventListener('change', e => {
+      _historyFrom = e.target.value || '';
+      if (_trackReportView !== 'stock') reloadActiveReport({ skeleton: false });
+    });
+    $('#lw-history-to')?.addEventListener('change', e => {
+      _historyTo = e.target.value || '';
+      if (_trackReportView !== 'stock') reloadActiveReport({ skeleton: false });
+    });
+    $('#lw-history-step')?.addEventListener('change', e => {
+      _historyStep = e.target.value || '';
+      if (_trackReportView !== 'stock') reloadActiveReport({ skeleton: false });
+    });
+    let _historySearchTimer = null;
+    $('#lw-history-search')?.addEventListener('input', e => {
+      _historySearch = e.target.value || '';
+      clearTimeout(_historySearchTimer);
+      _historySearchTimer = setTimeout(() => {
+        if (['history', 'stock', 'qa', 'scrap'].includes(_trackReportView)) {
+          reloadActiveReport({ skeleton: false });
+        }
+      }, 300);
+    });
+    $('#lw-track-exec-flow')?.addEventListener('click', e => {
+      const step = e.target.closest('.lw-material-flow-step');
+      if (!step) return;
+      if (e.altKey || e.metaKey) {
+        const tab = step.dataset.gotoTab;
+        if (tab) switchTab(tab);
+        return;
+      }
+      applyTrackFlowFilter(step.dataset.flowStep || '');
+    });
+    $('#lw-track-phase-grid')?.addEventListener('click', e => {
+      const cell = e.target.closest('.lw-track-phase-cell');
+      if (!cell) return;
+      const phase = cell.dataset.trackPhase || '';
+      applyTrackPhaseFilter(_trackPhase === phase ? '' : phase);
+    });
+    $('#lw-track-queue-tiles')?.addEventListener('click', e => {
+      const tile = e.target.closest('.lw-track-queue-tile');
+      if (!tile) return;
+      switchToReportsPipeline(tile.dataset.trackQueuePhase || '');
+    });
+    $('#lw-track-pipeline')?.addEventListener('click', onTrackPipelineClick);
+    $('#lw-track-capacity-body')?.addEventListener('click', onTrackCapacityClick);
+    $('#lw-track-sa-capacity-body')?.addEventListener('click', onTrackCapacityClick);
+    $('#lw-track-actions-body')?.addEventListener('click', onTrackActionsClick);
+    $('#lw-track-history-grid')?.addEventListener('click', onTrackHistoryGridClick);
+    $('#lw-track-drawer-close')?.addEventListener('click', closeTrackDrawer);
+    $('#lw-track-drawer-backdrop')?.addEventListener('click', closeTrackDrawer);
+    $('#lw-track-drawer-foot')?.addEventListener('click', e => {
+      const btn = e.target.closest('.lw-track-goto');
+      if (!btn) return;
+      const tab = btn.dataset.gotoTab;
+      closeTrackDrawer();
+      if (tab) switchTab(tab);
+    });
+
     $('#lw-tc-modal-overlay')?.addEventListener('click', e => {
       if (e.target.id === 'lw-tc-modal-overlay') closeTcModal();
     });

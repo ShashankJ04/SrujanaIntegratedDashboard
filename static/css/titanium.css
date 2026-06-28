@@ -6729,8 +6729,8 @@ body.dpr-col-resizing {
 }
 
 .ti-laser-welding .lw-col-time {
-  width: 72px;
-  max-width: 80px;
+  width: 84px;
+  max-width: 84px;
   min-width: 0;
   white-space: nowrap;
   text-align: left;
@@ -6740,8 +6740,8 @@ body.dpr-col-resizing {
 .ti-laser-welding #lw-table thead th.lw-col-time,
 .ti-laser-welding #lw-sa-table thead th.lw-col-time,
 .ti-laser-welding #lw-asm-table thead th.lw-col-time {
-  width: 72px;
-  max-width: 80px;
+  width: 84px;
+  max-width: 84px;
   white-space: nowrap;
 }
 
@@ -6851,7 +6851,7 @@ body.dpr-col-resizing {
 .ti-laser-welding #lw-sa-table,
 .ti-laser-welding #lw-asm-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1260px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -6859,49 +6859,57 @@ body.dpr-col-resizing {
 
 .ti-laser-welding #lw-sa-table col.lw-col-customer,
 .ti-laser-welding #lw-asm-table col.lw-col-customer {
-  width: 15%;
+  width: 112px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-bom,
 .ti-laser-welding #lw-asm-table col.lw-col-bom {
-  width: 10%;
+  width: 84px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-part,
 .ti-laser-welding #lw-asm-table col.lw-col-name {
-  width: 16%;
+  width: 128px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-operator,
 .ti-laser-welding #lw-asm-table col.lw-col-operator {
-  width: 13%;
+  width: 118px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-machine,
 .ti-laser-welding #lw-asm-table col.lw-col-machine {
-  width: 11%;
+  width: 104px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-qty,
 .ti-laser-welding #lw-asm-table col.lw-col-qty {
-  width: 56px;
+  width: 72px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-qa,
-.ti-laser-welding #lw-asm-table col.lw-col-qa,
+.ti-laser-welding #lw-asm-table col.lw-col-qa {
+  width: 44px;
+}
+
 .ti-laser-welding #lw-sa-table col.lw-col-scrap,
 .ti-laser-welding #lw-asm-table col.lw-col-scrap {
-  width: 48px;
+  width: 52px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-lot,
 .ti-laser-welding #lw-asm-table col.lw-col-lot {
-  width: 10%;
+  width: 96px;
+}
+
+.ti-laser-welding #lw-sa-table col.lw-col-time,
+.ti-laser-welding #lw-asm-table col.lw-col-time {
+  width: 84px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-ot,
 .ti-laser-welding #lw-asm-table col.lw-col-ot {
-  width: 44px;
+  width: 40px;
 }
 
 .ti-laser-welding #lw-sa-table col.lw-col-actions,
@@ -6917,6 +6925,22 @@ body.dpr-col-resizing {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.ti-laser-welding #lw-sa-table thead th.lw-col-qty,
+.ti-laser-welding #lw-asm-table thead th.lw-col-qty,
+.ti-laser-welding #lw-sa-table thead th.lw-col-qa,
+.ti-laser-welding #lw-asm-table thead th.lw-col-qa,
+.ti-laser-welding #lw-sa-table thead th.lw-col-scrap,
+.ti-laser-welding #lw-asm-table thead th.lw-col-scrap,
+.ti-laser-welding #lw-sa-table thead th.lw-col-time,
+.ti-laser-welding #lw-asm-table thead th.lw-col-time,
+.ti-laser-welding #lw-sa-table thead th.lw-col-ot,
+.ti-laser-welding #lw-asm-table thead th.lw-col-ot {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ti-laser-welding #lw-sa-table thead th.lw-col-actions,
@@ -9250,4 +9274,2030 @@ body.sg-resizing {
   #export-btn {
     width: 100%;
   }
+}
+
+
+/* --- Laser Welding Tracking tab --- */
+.ti-laser-welding .lw-track-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 4px 2px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.ti-laser-welding .lw-track-toolbar-tools,
+.ti-laser-welding .lw-reports-toolbar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-right: 8px;
+}
+
+.ti-laser-welding .lw-track-toolbar-tools[hidden],
+.ti-laser-welding .lw-reports-toolbar-tools[hidden] {
+  display: none !important;
+}
+
+.ti-laser-welding .lw-track-filter--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  margin: 0;
+}
+
+.ti-laser-welding .lw-track-filter--inline .ti-input,
+.ti-laser-welding .lw-track-filter--inline .lw-track-select {
+  min-width: 120px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.ti-laser-welding .lw-track-filter--inline.lw-track-filter--search .ti-input {
+  min-width: 160px;
+}
+
+.ti-laser-welding .lw-reports-toolbar-tools .lw-track-select {
+  min-width: 148px;
+}
+
+.ti-laser-welding .lw-history-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.ti-laser-welding .lw-history-toolbar-filters[hidden] {
+  display: none !important;
+}
+
+.ti-laser-welding .lw-history-toolbar-filters .lw-track-history-count {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-history-detail-row .lw-detail-inline {
+  padding: 8px 12px 10px;
+}
+
+.ti-laser-welding .lw-history-detail-table {
+  min-width: 520px;
+}
+
+.ti-laser-welding .lw-track-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-filter--search {
+  min-width: 200px;
+}
+
+.ti-laser-welding .lw-track-select {
+  min-width: 160px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.ti-laser-welding .lw-track-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ti-border);
+  background: var(--ti-bg-surface, #fff);
+  font-size: 12px;
+  width: fit-content;
+}
+
+.ti-laser-welding .lw-track-filter-chip-label {
+  font-weight: 600;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-filter-chip-clear {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ti-text-muted);
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+.ti-laser-welding .lw-track-filter-chip-clear:hover {
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-kpi {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ti-border) 80%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--ti-bg-surface, #fff) 92%, var(--ti-blue) 8%),
+    var(--ti-bg-surface, var(--ti-surface))
+  );
+  animation: lwTrackFadeIn 0.45s ease both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.ti-laser-welding .lw-track-kpi--filtered {
+  border-color: var(--ti-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ti-blue) 20%, transparent);
+}
+
+.ti-laser-welding .lw-track-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ti-blue) 12%, transparent);
+}
+
+.ti-laser-welding .lw-track-kpi-val {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-kpi-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-kpi--qa .lw-track-kpi-val { color: #b45309; }
+.ti-laser-welding .lw-track-kpi--rework .lw-track-kpi-val { color: #dc2626; }
+.ti-laser-welding .lw-track-kpi--pack .lw-track-kpi-val { color: #059669; }
+
+/* Tracking — tiered KPI (Stitch-inspired) */
+.ti-laser-welding .lw-track-kpi-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-kpi-hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.ti-laser-welding .lw-track-kpi-hero-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--ti-border);
+  border-bottom-width: 3px;
+  background: var(--ti-bg-surface, #fff);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  animation: lwTrackFadeIn 0.45s ease both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.ti-laser-welding .lw-track-kpi-hero-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.ti-laser-welding .lw-track-kpi-hero-card--filtered {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ti-blue) 25%, transparent);
+}
+
+.ti-laser-welding .lw-track-kpi-hero-card--qa { border-bottom-color: #f59e0b; }
+.ti-laser-welding .lw-track-kpi-hero-card--rework { border-bottom-color: #ef4444; }
+.ti-laser-welding .lw-track-kpi-hero-card--pack { border-bottom-color: #10b981; }
+.ti-laser-welding .lw-track-kpi-hero-card--build { border-bottom-color: var(--ti-blue, #3b82f6); }
+
+.ti-laser-welding .lw-track-kpi-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.ti-laser-welding .lw-track-kpi-hero-val {
+  font-size: 28px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-kpi-hero-card--qa .lw-track-kpi-hero-val { color: #b45309; }
+.ti-laser-welding .lw-track-kpi-hero-card--rework .lw-track-kpi-hero-val { color: #dc2626; }
+.ti-laser-welding .lw-track-kpi-hero-card--pack .lw-track-kpi-hero-val { color: #059669; }
+.ti-laser-welding .lw-track-kpi-hero-card--build .lw-track-kpi-hero-val { color: var(--ti-blue, #2563eb); }
+
+.ti-laser-welding .lw-track-kpi-hero-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-kpi-hero-sub {
+  font-size: 11px;
+  color: var(--ti-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-track-kpi-secondary {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.ti-laser-welding .lw-track-kpi-pill {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ti-border);
+  background: var(--ti-bg-surface, #fff);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  animation: lwTrackFadeIn 0.4s ease both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ti-laser-welding .lw-track-kpi-pill:hover {
+  border-color: var(--ti-blue);
+}
+
+.ti-laser-welding .lw-track-kpi-pill--filtered {
+  border-color: var(--ti-blue);
+  background: color-mix(in srgb, var(--ti-blue) 8%, var(--ti-bg-surface, #fff));
+}
+
+.ti-laser-welding .lw-track-kpi-pill-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-kpi-pill-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-track-view-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--ti-surface-2, #f1f5f9);
+  width: fit-content;
+}
+
+.ti-laser-welding .lw-track-view-tab {
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ti-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.ti-laser-welding .lw-track-view-tab--active {
+  background: var(--ti-bg-surface, #fff);
+  color: var(--ti-text-bright);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.ti-laser-welding .lw-track-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-view--active {
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-laser-welding .lw-track-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+}
+
+.ti-laser-welding .lw-track-lane {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ti-border);
+}
+
+.ti-laser-welding .lw-track-lane:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ti-laser-welding .lw-track-lane-title {
+  margin: 0 0 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ti-laser-welding .lw-track-lane-title-text {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-lane-lot-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-lane-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 8px;
+  min-height: 140px;
+}
+
+.ti-laser-welding .lw-track-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--ti-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ti-surface-2);
+}
+
+.ti-laser-welding .lw-track-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--ti-border);
+  background: var(--ti-bg-subtle, #f8fafc);
+}
+
+.ti-laser-welding .lw-track-col-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ti-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-col--qa_pending .lw-track-col-head { border-top: 3px solid #f59e0b; }
+.ti-laser-welding .lw-track-col--ready_for_weld .lw-track-col-head,
+.ti-laser-welding .lw-track-col--ready_to_pack .lw-track-col-head,
+.ti-laser-welding .lw-track-col--inspected_ready .lw-track-col-head { border-top: 3px solid #10b981; }
+.ti-laser-welding .lw-track-col--rework_pending .lw-track-col-head { border-top: 3px solid #ef4444; }
+.ti-laser-welding .lw-track-col--awaiting_clean .lw-track-col-head { border-top: 3px solid #3b82f6; }
+.ti-laser-welding .lw-track-col--erp_stock .lw-track-col-head { border-top: 3px solid #8b5cf6; }
+
+.ti-laser-welding .lw-track-col-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ti-laser-welding .lw-track-col-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 88px;
+  margin: 4px 0;
+  padding: 16px 10px;
+  border: 2px dashed color-mix(in srgb, var(--ti-border) 80%, transparent);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ti-text-muted);
+  text-align: center;
+  background: color-mix(in srgb, var(--ti-border) 8%, transparent);
+}
+
+.ti-laser-welding .lw-track-col-empty-state--qa_pending { background: color-mix(in srgb, #f59e0b 4%, transparent); }
+.ti-laser-welding .lw-track-col-empty-state--rework_pending { background: color-mix(in srgb, #ef4444 4%, transparent); }
+.ti-laser-welding .lw-track-col-empty-state--awaiting_clean { background: color-mix(in srgb, #3b82f6 4%, transparent); }
+.ti-laser-welding .lw-track-col-empty-state--ready_for_weld,
+.ti-laser-welding .lw-track-col-empty-state--ready_to_pack,
+.ti-laser-welding .lw-track-col-empty-state--inspected_ready { background: color-mix(in srgb, #10b981 4%, transparent); }
+
+.ti-laser-welding .lw-track-col-empty-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.45;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-col-empty-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ti-laser-welding .lw-track-col-empty-text {
+  font-weight: 600;
+}
+
+.ti-laser-welding .lw-track-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--ti-border);
+  border-radius: 8px;
+  background: var(--ti-bg-surface, var(--ti-surface));
+  cursor: pointer;
+  animation: lwTrackSlideIn 0.35s ease both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.ti-laser-welding .lw-track-card:hover {
+  border-color: var(--ti-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12);
+}
+
+.ti-laser-welding .lw-track-card--selected {
+  border-color: var(--ti-blue, #3b82f6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ti-blue) 22%, transparent);
+  background: color-mix(in srgb, var(--ti-blue) 4%, var(--ti-bg-surface, #fff));
+}
+
+.ti-laser-welding .lw-track-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-priority-badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.ti-laser-welding .lw-track-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ti-laser-welding .lw-track-card-part {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ti-text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-track-ready-badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.ti-laser-welding .lw-track-card-name {
+  font-size: 11px;
+  color: var(--ti-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-track-card-meta {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ti-border) 60%, transparent);
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ti-blue), #10b981);
+}
+
+.ti-laser-welding .lw-track-bar--qa_pending span { background: #f59e0b; }
+.ti-laser-welding .lw-track-bar--rework_pending span { background: #ef4444; }
+.ti-laser-welding .lw-track-bar--awaiting_clean span { background: #3b82f6; }
+.ti-laser-welding .lw-track-bar--erp_stock span { background: #8b5cf6; }
+.ti-laser-welding .lw-track-bar--inspected_ready span,
+.ti-laser-welding .lw-track-bar--ready_for_weld span,
+.ti-laser-welding .lw-track-bar--ready_to_pack span { background: #10b981; }
+
+.ti-laser-welding .lw-track-capacity-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+}
+
+.ti-laser-welding .lw-track-capacity-table {
+  width: 100%;
+  font-size: 13px;
+}
+
+.ti-laser-welding .lw-track-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-max {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.ti-laser-welding .lw-track-bn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ti-laser-welding .lw-track-bn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: lwTrackPulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-cap-row--zero .lw-track-max {
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-bn-row {
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+}
+
+.ti-laser-welding .lw-track-bn-row td:first-child {
+  border-left: 3px solid #f59e0b;
+}
+
+.ti-laser-welding .lw-track-expand {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border: 1px solid var(--ti-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ti-blue);
+}
+
+.ti-laser-welding .lw-track-cap-child-table {
+  width: 100%;
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+.ti-laser-welding .lw-track-sa-cap-heading {
+  margin-top: 18px;
+}
+
+.ti-laser-welding .lw-track-empty {
+  text-align: center;
+  color: var(--ti-text-muted);
+  font-style: italic;
+  padding: 12px;
+}
+
+.ti-laser-welding .lw-track-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-laser-welding .lw-track-phase {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ti-laser-welding .lw-track-phase--qa_pending { background: rgba(245, 158, 11, 0.15); color: #b45309; }
+.ti-laser-welding .lw-track-phase--ready_for_weld,
+.ti-laser-welding .lw-track-phase--ready_to_pack,
+.ti-laser-welding .lw-track-phase--inspected_ready { background: rgba(16, 185, 129, 0.15); color: #047857; }
+.ti-laser-welding .lw-track-phase--rework_pending { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
+.ti-laser-welding .lw-track-phase--awaiting_clean { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
+.ti-laser-welding .lw-track-phase--erp_stock { background: rgba(139, 92, 246, 0.12); color: #6d28d9; }
+
+.lw-track-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 1200;
+}
+
+.lw-track-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(440px, 92vw);
+  height: 100%;
+  z-index: 1201;
+  display: flex;
+  flex-direction: column;
+  background: var(--ti-bg-surface, #fff);
+  border-left: 1px solid var(--ti-border);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
+  transform: translateX(100%);
+  transition: transform 0.28s ease;
+}
+
+body.lw-track-drawer-open .lw-track-drawer {
+  transform: translateX(0);
+}
+
+.lw-track-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ti-border);
+}
+
+.lw-track-drawer-head-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lw-track-drawer-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lw-track-drawer-lot-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--ti-blue) 12%, transparent);
+  color: var(--ti-blue, #2563eb);
+}
+
+.lw-track-drawer-phase {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+.lw-track-drawer-phase--qa_pending { color: #b45309; border-color: #f59e0b; }
+.lw-track-drawer-phase--ready_for_weld,
+.lw-track-drawer-phase--ready_to_pack,
+.lw-track-drawer-phase--inspected_ready { color: #047857; border-color: #10b981; }
+.lw-track-drawer-phase--rework_pending { color: #b91c1c; border-color: #ef4444; }
+.lw-track-drawer-phase--awaiting_clean { color: #1d4ed8; border-color: #3b82f6; }
+.lw-track-drawer-phase--erp_stock { color: #6d28d9; border-color: #8b5cf6; }
+.lw-track-drawer-phase--ready { color: var(--ti-blue, #2563eb); border-color: var(--ti-blue, #3b82f6); }
+
+.lw-track-drawer-qty-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.lw-track-qty-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+}
+
+.lw-track-qty-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.lw-track-qty-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ti-border) 50%, transparent);
+  overflow: hidden;
+}
+
+.lw-track-qty-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ti-blue, #3b82f6), #60a5fa);
+}
+
+.lw-track-qty-val {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.lw-track-drawer-foot-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.lw-track-drawer-foot-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lw-track-drawer-foot-secondary .ti-btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+.lw-track-drawer-lot-bn {
+  background: color-mix(in srgb, #f59e0b 8%, transparent);
+  border-left: 3px solid #f59e0b;
+  padding-left: 8px;
+  margin-left: -8px;
+}
+
+.lw-track-cap-bn-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.lw-track-drawer-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lw-track-drawer-close {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ti-text-muted);
+  padding: 4px 8px;
+}
+
+.lw-track-drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.lw-track-drawer-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--ti-border);
+}
+
+.lw-track-drawer-sub {
+  margin: 0 0 12px;
+  color: var(--ti-text-muted);
+  font-size: 13px;
+}
+
+.lw-track-drawer-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+}
+
+.lw-track-drawer-stats div {
+  padding: 8px 10px;
+  border: 1px solid var(--ti-border);
+  border-radius: 8px;
+  background: var(--ti-surface-2);
+}
+
+.lw-track-drawer-stats dt {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.lw-track-drawer-stats dd {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.lw-track-drawer-lots-head {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.lw-track-drawer-lots {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.lw-track-drawer-phase-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 0 16px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--ti-blue) 25%, var(--ti-border));
+}
+
+.lw-track-drawer-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 6px 12px;
+  position: relative;
+}
+
+.lw-track-drawer-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ti-border);
+  flex-shrink: 0;
+  margin-left: -21px;
+  border: 2px solid var(--ti-bg-surface, #fff);
+}
+
+.lw-track-drawer-step--done .lw-track-drawer-step-dot {
+  background: var(--ti-blue, #3b82f6);
+}
+
+.lw-track-drawer-step--current .lw-track-drawer-step-label {
+  font-weight: 800;
+  color: var(--ti-text-bright);
+}
+
+.lw-track-drawer-step-label {
+  font-size: 12px;
+  color: var(--ti-text-muted);
+}
+
+.lw-track-drawer-bom-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.lw-track-drawer-bom-table th,
+.lw-track-drawer-bom-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ti-border);
+  text-align: left;
+}
+
+.lw-track-drawer-bom-table th {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.lw-track-drawer-bom-bn {
+  background: color-mix(in srgb, #f59e0b 6%, transparent);
+}
+
+@keyframes lwTrackFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lwTrackSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes lwTrackPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
+/* Tracking — Visual Dashboard */
+.ti-laser-welding .lw-track-dash-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-laser-welding .lw-track-dash-shell.is-loading .lw-track-dash-grid {
+  pointer-events: none;
+  opacity: 0.4;
+  filter: blur(1px);
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.ti-laser-welding .lw-track-dash-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 1px 6px;
+  scrollbar-gutter: stable;
+}
+
+.ti-laser-welding .lw-track-skeleton {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 1px;
+  background: color-mix(in srgb, var(--ti-bg-surface, #fff) 82%, transparent);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+
+.ti-laser-welding .lw-track-dash-shell.is-loading .lw-track-skeleton {
+  display: flex;
+}
+
+.ti-laser-welding .lw-track-skeleton-hero {
+  flex: 1;
+  min-height: 360px;
+  border-radius: 16px;
+}
+
+.ti-laser-welding .lw-track-skeleton-secondary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-skeleton-secondary .lw-track-skeleton-block {
+  min-height: 96px;
+  border-radius: 12px;
+}
+
+.ti-laser-welding .lw-track-skeleton-block {
+  border-radius: 16px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ti-border) 24%, var(--ti-surface-2, #f1f5f9)) 0%,
+    color-mix(in srgb, var(--ti-border) 10%, var(--ti-surface-2, #f1f5f9)) 50%,
+    color-mix(in srgb, var(--ti-border) 24%, var(--ti-surface-2, #f1f5f9)) 100%
+  );
+  background-size: 200% 100%;
+  animation: lwTrackSkeletonShimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes lwTrackSkeletonShimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Hero centerpiece */
+.ti-laser-welding .lw-track-hero {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: min(72vh, 760px);
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--ti-border) 70%, transparent);
+  background: var(--ti-bg-surface, #fff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 40px rgba(15, 23, 42, 0.07);
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-hero-flow {
+  flex: 0 0 auto;
+  padding: 20px 28px 10px;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--ti-blue) 5%, #fff) 0%, #fff 55%);
+}
+
+.ti-laser-welding .lw-track-hero-wip {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  padding: 14px 28px 22px;
+}
+
+.ti-laser-welding .lw-track-hero-divider {
+  height: 1px;
+  margin: 0 28px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ti-border) 90%, transparent) 25%, color-mix(in srgb, var(--ti-border) 90%, transparent) 75%, transparent);
+}
+
+.ti-laser-welding .lw-track-hero-head {
+  margin-bottom: 14px;
+}
+
+.ti-laser-welding .lw-track-hero-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-hero-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-sankey-chart {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 260px;
+}
+
+.ti-laser-welding .lw-track-dash-secondary {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr 1fr;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-dash-card {
+  border: 1px solid color-mix(in srgb, var(--ti-border) 85%, transparent);
+  border-radius: 12px;
+  background: var(--ti-bg-surface, #fff);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  padding: 12px 14px 14px;
+}
+
+.ti-laser-welding .lw-track-dash-card-head {
+  margin-bottom: 10px;
+}
+
+.ti-laser-welding .lw-track-dash-card-head--compact {
+  margin-bottom: 8px;
+}
+
+.ti-laser-welding .lw-track-dash-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-dash-section-sub {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-phase-details {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-phase-details-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.ti-laser-welding .lw-track-phase-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ti-laser-welding .lw-track-phase-details-summary::after {
+  content: '▾';
+  font-size: 11px;
+  color: var(--ti-text-muted);
+  transition: transform 0.2s ease;
+}
+
+.ti-laser-welding .lw-track-phase-details[open] .lw-track-phase-details-summary::after {
+  transform: rotate(180deg);
+}
+
+.ti-laser-welding .lw-track-phase-details-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-phase-details .lw-track-phase-grid {
+  padding: 0 14px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--ti-border) 60%, transparent);
+}
+
+.ti-laser-welding .lw-track-exec-flow {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 0 8px;
+}
+
+.ti-laser-welding .lw-material-flow-strip.lw-tabs {
+  width: 100%;
+}
+
+.ti-laser-welding .lw-material-flow-step.lw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-material-flow-count {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 14%, transparent);
+  color: var(--ti-accent, #3b82f6);
+}
+
+.ti-laser-welding .lw-material-flow-step--hot:not(.lw-tab--active) .lw-material-flow-count {
+  background: color-mix(in srgb, var(--ti-warning, #d97706) 18%, transparent);
+  color: var(--ti-warning, #d97706);
+}
+
+.ti-laser-welding #lw-track-actions-view {
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-actions-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 0 4px 8px;
+}
+
+.ti-laser-welding .lw-track-actions-count {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-actions-wrap {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--ti-border);
+  border-radius: 10px;
+  background: var(--ti-bg-surface, var(--ti-surface));
+}
+
+.ti-laser-welding .lw-track-actions-table {
+  width: 100%;
+}
+
+.ti-laser-welding .lw-track-action-row {
+  cursor: pointer;
+}
+
+.ti-laser-welding .lw-track-action-row:hover {
+  background: color-mix(in srgb, var(--ti-accent, #3b82f6) 6%, transparent);
+}
+
+.ti-laser-welding .lw-track-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  flex-shrink: 0;
+  padding: 0 4px 10px;
+}
+
+.ti-laser-welding .lw-track-history-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-history-filter .ti-input,
+.ti-laser-welding .lw-track-history-filter .lw-track-select {
+  min-width: 130px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.ti-laser-welding .lw-track-history-filter--search .ti-input {
+  min-width: 180px;
+}
+
+.ti-laser-welding .lw-track-history-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding #lw-track-history-view {
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-laser-welding .lw-track-history-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-laser-welding .lw-track-history-grid .sg-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-laser-welding .lw-track-history-grid .sg-host--no-toolbar > .sg-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-laser-welding .lw-track-history-grid .sg-table th,
+.ti-laser-welding .lw-track-history-grid .sg-table td {
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ti-laser-welding .lw-track-history-grid .sg-hdr-cell {
+  font-size: 11px;
+}
+
+.ti-laser-welding .lw-track-history-grid .sg-detail-cell {
+  padding: 6px 10px 8px;
+}
+
+.ti-laser-welding .lw-track-history-grid .lw-history-act-detail {
+  min-width: 28px;
+  padding: 2px 6px;
+}
+
+.ti-laser-welding .lw-track-history-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-sankey-insight {
+  margin: 8px 4px 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ti-text-muted);
+  line-height: 1.45;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.ti-laser-welding .lw-track-sankey-insight:empty,
+.ti-laser-welding .lw-track-sankey-insight[hidden] {
+  display: none;
+}
+
+.ti-laser-welding .lw-track-exec-flow-track {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.ti-laser-welding .lw-track-exec-flow-track::before {
+  content: '';
+  position: absolute;
+  top: 36px;
+  left: 5%;
+  right: 5%;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  border-radius: 999px;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+.ti-laser-welding .lw-track-exec-node {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.18s ease;
+}
+
+.ti-laser-welding .lw-track-exec-node:hover {
+  transform: translateY(-2px);
+}
+
+.ti-laser-welding .lw-track-exec-node-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--ti-bg-surface, #fff);
+  border: 2.5px solid var(--ti-border);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.ti-laser-welding .lw-track-exec-node-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-exec-node-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ti-laser-welding .lw-track-exec-node--qa .lw-track-exec-node-ring { border-color: #f59e0b; }
+.ti-laser-welding .lw-track-exec-node--erp .lw-track-exec-node-ring { border-color: #8b5cf6; }
+.ti-laser-welding .lw-track-exec-node--clean .lw-track-exec-node-ring { border-color: #3b82f6; }
+.ti-laser-welding .lw-track-exec-node--pack .lw-track-exec-node-ring { border-color: #10b981; }
+
+.ti-laser-welding .lw-track-exec-node--hot .lw-track-exec-node-ring {
+  border-color: color-mix(in srgb, #10b981 55%, var(--ti-border));
+}
+
+.ti-laser-welding .lw-track-exec-node--active .lw-track-exec-node-ring {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ti-blue) 22%, transparent);
+  border-color: var(--ti-blue, #3b82f6);
+}
+
+.ti-laser-welding .lw-track-exec-node-count {
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ti-text-bright);
+  line-height: 1;
+}
+
+.ti-laser-welding .lw-track-exec-node-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  text-align: center;
+  max-width: 100px;
+  line-height: 1.3;
+}
+
+.ti-laser-welding .lw-track-exec-connector {
+  flex: 0 0 12px;
+  align-self: center;
+  margin-top: -24px;
+}
+
+/* Phase detail — readable HTML grid (replaces cramped SVG) */
+.ti-laser-welding .lw-track-phase-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ti-laser-welding .lw-track-phase-lane {
+  border: 1px solid color-mix(in srgb, var(--ti-border) 85%, transparent);
+  border-radius: 10px;
+  background: var(--ti-surface-2, #f8fafc);
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-phase-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ti-border) 70%, transparent);
+  background: var(--ti-bg-surface, #fff);
+}
+
+.ti-laser-welding .lw-track-phase-lane-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lane-accent, var(--ti-blue));
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-phase-lane-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-phase-lane-total {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ti-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-phase-lane-track {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ti-laser-welding .lw-track-phase-connector {
+  flex: 0 0 20px;
+  align-self: center;
+  height: 2px;
+  margin: 0 -2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ti-border) 60%, transparent), color-mix(in srgb, var(--lane-accent, var(--ti-blue)) 40%, transparent));
+  border-radius: 999px;
+}
+
+.ti-laser-welding .lw-track-phase-cell {
+  flex: 1 1 0;
+  min-width: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 1px solid color-mix(in srgb, var(--ti-border) 80%, transparent);
+  border-radius: 10px;
+  background: var(--ti-bg-surface, #fff);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.ti-laser-welding .lw-track-phase-cell:hover {
+  border-color: var(--ti-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.ti-laser-welding .lw-track-phase-cell.is-active {
+  border-color: var(--ti-blue, #3b82f6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ti-blue) 18%, transparent);
+}
+
+.ti-laser-welding .lw-track-phase-cell.has-wip {
+  border-left: 3px solid var(--lane-accent, var(--ti-blue));
+}
+
+.ti-laser-welding .lw-track-phase-cell-count {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ti-text-bright);
+}
+
+.ti-laser-welding .lw-track-phase-cell-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-phase-cell--qa_pending .lw-track-phase-cell-count { color: #b45309; }
+.ti-laser-welding .lw-track-phase-cell--rework_pending .lw-track-phase-cell-count { color: #dc2626; }
+.ti-laser-welding .lw-track-phase-cell--awaiting_clean .lw-track-phase-cell-count { color: #2563eb; }
+.ti-laser-welding .lw-track-phase-cell--inspected_ready .lw-track-phase-cell-count,
+.ti-laser-welding .lw-track-phase-cell--ready_for_weld .lw-track-phase-cell-count,
+.ti-laser-welding .lw-track-phase-cell--ready_to_pack .lw-track-phase-cell-count { color: #059669; }
+.ti-laser-welding .lw-track-phase-cell--erp_stock .lw-track-phase-cell-count { color: #7c3aed; }
+
+.ti-laser-welding .lw-track-dash-capacity .lw-track-capacity-list {
+  margin-bottom: 0;
+}
+
+.ti-laser-welding .lw-track-capacity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ti-laser-welding .lw-track-cap-list-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ti-border) 80%, transparent);
+  border-radius: 8px;
+  background: var(--ti-surface-2, #f8fafc);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.ti-laser-welding .lw-track-cap-list-row:hover {
+  border-color: var(--ti-blue);
+  background: var(--ti-bg-surface, #fff);
+  transform: translateY(-1px);
+}
+
+.ti-laser-welding .lw-track-cap-list-row--bn {
+  border-left: 3px solid #f59e0b;
+}
+
+.ti-laser-welding .lw-track-cap-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ti-laser-welding .lw-track-cap-list-bom {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.ti-laser-welding .lw-track-cap-list-pct {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-cap-list-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-laser-welding .lw-track-capacity-chart--dash {
+  display: none !important;
+}
+
+.ti-laser-welding .lw-track-cap-list-product {
+  font-size: 11px;
+  color: var(--ti-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ti-laser-welding .lw-track-cap-list-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ti-border) 50%, transparent);
+  overflow: hidden;
+}
+
+.ti-laser-welding .lw-track-cap-list-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ti-blue, #3b82f6), #60a5fa);
+}
+
+.ti-laser-welding .lw-track-cap-list-row--bn .lw-track-cap-list-bar span {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.ti-laser-welding .lw-track-sankey-chart,
+.ti-laser-welding .lw-track-capacity-chart {
+  flex: 1;
+  min-height: 200px;
+}
+
+.ti-laser-welding .lw-track-dash-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--ti-text-muted);
+  font-size: 13px;
+  font-style: italic;
+  padding: 24px;
+}
+
+.ti-laser-welding .lw-track-dash-queues {
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-queue-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ti-laser-welding .lw-track-queue-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ti-border) 85%, transparent);
+  border-left-width: 3px;
+  background: var(--ti-surface-2, #f8fafc);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.ti-laser-welding .lw-track-queue-tile--qa { border-left-color: #f59e0b; }
+.ti-laser-welding .lw-track-queue-tile--rework { border-left-color: #ef4444; }
+.ti-laser-welding .lw-track-queue-tile--pack { border-left-color: #10b981; }
+.ti-laser-welding .lw-track-queue-tile--ready { border-left-color: #3b82f6; }
+
+.ti-laser-welding .lw-track-queue-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+  background: var(--ti-bg-surface, #fff);
+  border-color: color-mix(in srgb, var(--ti-blue) 35%, var(--ti-border));
+}
+
+.ti-laser-welding .lw-track-queue-tile--hot {
+  border-color: color-mix(in srgb, var(--ti-blue) 50%, var(--ti-border));
+}
+
+.ti-laser-welding .lw-track-queue-tile--hot .lw-track-queue-val {
+  animation: lwTrackTilePulse 2s ease-in-out infinite;
+}
+
+.ti-laser-welding .lw-track-queue-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-queue-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ti-laser-welding .lw-track-queue-val {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ti-text-bright);
+  line-height: 1;
+}
+
+.ti-laser-welding .lw-track-queue-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-queue-hint,
+.ti-laser-welding .lw-track-queue-cta {
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.ti-laser-welding .lw-track-queue-hint {
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-track-queue-cta {
+  color: var(--ti-blue, #2563eb);
+  text-decoration: none;
+}
+
+.ti-laser-welding .lw-track-queue-tile:hover .lw-track-queue-cta {
+  text-decoration: underline;
+}
+
+.ti-laser-welding .lw-track-queue-tile--qa.lw-track-queue-tile--hot .lw-track-queue-cta {
+  color: #b45309;
+}
+
+.ti-laser-welding .lw-track-queue-tile--qa .lw-track-queue-val { color: #b45309; }
+.ti-laser-welding .lw-track-queue-tile--rework .lw-track-queue-val { color: #dc2626; }
+.ti-laser-welding .lw-track-queue-tile--pack .lw-track-queue-val { color: #059669; }
+
+.ti-laser-welding #lw-reports-panel {
+  flex-direction: column;
+}
+
+.ti-laser-welding .lw-track-report-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.ti-laser-welding .lw-track-report-tab {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--ti-border);
+  border-radius: 999px;
+  background: var(--ti-bg-surface, var(--ti-surface));
+  color: var(--ti-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.ti-laser-welding .lw-track-report-tab--active {
+  background: color-mix(in srgb, var(--ti-blue) 10%, transparent);
+  border-color: var(--ti-blue);
+  color: var(--ti-blue);
+}
+
+.ti-laser-welding .lw-track-report-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.ti-laser-welding .lw-track-report-view--active {
+  display: flex;
+}
+
+@keyframes lwTrackFlow {
+  to { stroke-dashoffset: -28; }
+}
+
+@keyframes lwTrackNodePulse {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50% { filter: drop-shadow(0 0 6px color-mix(in srgb, #10b981 50%, transparent)); }
+}
+
+@keyframes lwTrackTilePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@media (min-width: 1400px) {
+  .ti-laser-welding .lw-track-queue-tiles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  .ti-laser-welding .lw-track-hero {
+    min-height: 520px;
+  }
+  .ti-laser-welding .lw-track-dash-secondary {
+    grid-template-columns: 1fr;
+  }
+  .ti-laser-welding .lw-track-skeleton-secondary {
+    grid-template-columns: 1fr;
+  }
+  .ti-laser-welding .lw-track-kpi-hero {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ti-laser-welding .lw-track-exec-flow-track {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+  }
+  .ti-laser-welding .lw-track-exec-flow-track::before {
+    display: none;
+  }
+  .ti-laser-welding .lw-track-exec-connector {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ti-laser-welding .lw-track-queue-tiles {
+    grid-template-columns: 1fr;
+  }
+  .ti-laser-welding .lw-track-kpi-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ti-laser-welding .lw-track-kpi,
+  .ti-laser-welding .lw-track-kpi-hero-card,
+  .ti-laser-welding .lw-track-kpi-pill,
+  .ti-laser-welding .lw-track-exec-node,
+  .ti-laser-welding .lw-track-card,
+  .ti-laser-welding .lw-track-phase-cell,
+  .ti-laser-welding .lw-track-queue-tile,
+  .ti-laser-welding .lw-track-skeleton-block,
+  .lw-track-drawer,
+  .ti-laser-welding .lw-track-bn-dot {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ti-laser-welding .lw-track-kpi:hover,
+  .ti-laser-welding .lw-track-kpi-hero-card:hover,
+  .ti-laser-welding .lw-track-card:hover,
+  .ti-laser-welding .lw-track-queue-tile:hover {
+    transform: none;
+  }
+  .ti-laser-welding .lw-track-queue-tile--hot .lw-track-queue-val {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .ti-laser-welding .lw-track-lane-cols {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}
+
+.ti-laser-welding .lw-track-chrome {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0 4px 8px;
+}
+
+.ti-laser-welding .lw-track-chrome[hidden] {
+  display: none !important;
+}
+
+.ti-laser-welding #lw-tracking-panel,
+.ti-laser-welding #lw-reports-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ti-laser-welding #lw-reports-panel {
+  flex-direction: column;
+}
+
+.ti-laser-welding #lw-tracking-panel .lw-track-dash-shell {
+  flex: 1;
+  min-height: 0;
 }

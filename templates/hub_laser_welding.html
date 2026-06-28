@@ -10,6 +10,83 @@
       </div>
     </div>
     <div class="ti-dc-toolbar-right ti-dc-toolbar-actions lw-toolbar-actions">
+      <div id="lw-track-toolbar-tools" class="lw-track-toolbar-tools" hidden>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Customer</span>
+          <select id="lw-track-cust" class="ti-input lw-track-select">
+            <option value="">All customers</option>
+          </select>
+        </label>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Phase</span>
+          <select id="lw-track-phase" class="ti-input lw-track-select">
+            <option value="">All phases</option>
+            <optgroup label="Child parts">
+              <option value="erp_stock">ERP stock</option>
+              <option value="inspected_ready">Inspected ready</option>
+              <option value="qa_pending">QA pending</option>
+              <option value="consumed">Consumed</option>
+            </optgroup>
+            <optgroup label="Sub-assembly / FG">
+              <option value="awaiting_clean">Awaiting clean</option>
+              <option value="ready_for_weld">Ready for weld</option>
+              <option value="ready_to_pack">Ready to pack</option>
+              <option value="rework_pending">Rework pending</option>
+            </optgroup>
+          </select>
+        </label>
+        <label class="lw-track-filter lw-track-filter--inline lw-track-filter--search">
+          <span>Search</span>
+          <input type="search" id="lw-track-search" class="ti-input" placeholder="Part, BOM, lot…" autocomplete="off" />
+        </label>
+        <button type="button" class="ti-btn ti-btn-sm" id="lw-track-refresh">Refresh</button>
+      </div>
+      <div id="lw-reports-toolbar-tools" class="lw-reports-toolbar-tools" hidden>
+        <label class="lw-track-filter lw-track-filter--inline">
+          <span>Report</span>
+          <select id="lw-report-view" class="ti-input lw-track-select" aria-label="Report view">
+            <!-- <option value="pipeline">Pipeline</option> -->
+            <!-- <option value="capacity">Capacity</option> -->
+            <!-- <option value="actions">Actions</option> -->
+            <option value="history">Activity</option>
+            <option value="stock">Stock</option>
+            <option value="qa">QA</option>
+            <option value="scrap">Scrap</option>
+          </select>
+        </label>
+        <div id="lw-history-toolbar-filters" class="lw-history-toolbar-filters" hidden>
+          <label id="lw-report-date-from" class="lw-track-filter lw-track-filter--inline">
+            <span>From</span>
+            <input type="date" id="lw-history-from" class="ti-input" />
+          </label>
+          <label id="lw-report-date-to" class="lw-track-filter lw-track-filter--inline">
+            <span>To</span>
+            <input type="date" id="lw-history-to" class="ti-input" />
+          </label>
+          <label id="lw-report-step-filter" class="lw-track-filter lw-track-filter--inline">
+            <span>Step</span>
+            <select id="lw-history-step" class="ti-input lw-track-select">
+              <option value="">All steps</option>
+              <option value="inspection">Inspection</option>
+              <option value="sub_assembly">Sub-Assembly</option>
+              <option value="sa_cleaning">SA Inspection</option>
+              <option value="sa_rework">SA Re-Work</option>
+              <option value="laser_welding">Laser Welding</option>
+              <option value="lw_cleaning">LW Cleaning/Inspection</option>
+              <option value="lw_rework">LW Re-Work</option>
+              <option value="packing">Packing</option>
+              <option value="qa">QA</option>
+            </select>
+          </label>
+          <label class="lw-track-filter lw-track-filter--inline lw-track-filter--search">
+            <span>Search</span>
+            <input type="search" id="lw-history-search" class="ti-input" placeholder="Part, lot, operator…" autocomplete="off" />
+          </label>
+          <button type="button" class="ti-btn ti-btn-sm" id="lw-history-refresh">Refresh</button>
+          <button type="button" class="ti-btn ti-btn-sm" id="lw-history-export" title="Export report">Export</button>
+          <span id="lw-report-count" class="lw-track-history-count"></span>
+        </div>
+      </div>
       <label class="lw-date-label" for="lw-work-date">Date</label>
       <input type="date" class="ti-input lw-work-date" id="lw-work-date" aria-label="Work date" />
       <span class="lw-count" id="lw-item-count">—</span>
@@ -29,6 +106,8 @@
     <button type="button" class="lw-tab" data-tab="packing" role="tab" aria-selected="false">Packing</button>
     <button type="button" class="lw-tab" data-tab="qa" role="tab" aria-selected="false">QA</button>
     <button type="button" class="lw-tab" data-tab="trays_carton" role="tab" aria-selected="false">Trays/Carton</button>
+    <!-- <button type="button" class="lw-tab" data-tab="tracking" role="tab" aria-selected="false">Tracking</button> -->
+    <button type="button" class="lw-tab" data-tab="reports" role="tab" aria-selected="false">Reports</button>
   </div>
 
   <!-- Inspection / Cleaning / QA / Packing grids -->
@@ -76,6 +155,7 @@
           <col class="lw-col-qa" />
           <col class="lw-col-scrap" />
           <col class="lw-col-lot" />
+          <col class="lw-col-time" />
           <col class="lw-col-ot" />
           <col class="lw-col-actions" />
         </colgroup>
@@ -90,6 +170,7 @@
             <th class="lw-col-qa">QA</th>
             <th class="lw-col-scrap">Scrap</th>
             <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-time">Time taken</th>
             <th class="lw-col-ot">OT</th>
             <th class="lw-col-actions">Action</th>
           </tr>
@@ -117,6 +198,7 @@
           <col class="lw-col-qa" />
           <col class="lw-col-scrap" />
           <col class="lw-col-lot" />
+          <col class="lw-col-time" />
           <col class="lw-col-ot" />
           <col class="lw-col-actions" />
         </colgroup>
@@ -131,6 +213,7 @@
             <th class="lw-col-qa">QA</th>
             <th class="lw-col-scrap">Scrap</th>
             <th class="lw-col-lot">Lot No</th>
+            <th class="lw-col-time">Time taken</th>
             <th class="lw-col-ot">OT</th>
             <th class="lw-col-actions">Action</th>
           </tr>
@@ -168,6 +251,159 @@
       </table>
     </div>
   </div>
+
+  <div id="lw-tracking-panel" class="lw-panel">
+    <div id="lw-tracking-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+    <div id="lw-track-dash-shell" class="lw-track-dash-shell">
+        <div id="lw-track-skeleton" class="lw-track-skeleton" aria-hidden="true">
+          <div class="lw-track-skeleton-hero lw-track-skeleton-block"></div>
+          <div class="lw-track-skeleton-secondary">
+            <div class="lw-track-skeleton-block"></div>
+            <div class="lw-track-skeleton-block"></div>
+            <div class="lw-track-skeleton-block"></div>
+          </div>
+        </div>
+        <div id="lw-track-dash-content" class="lw-track-dash-grid">
+          <section class="lw-track-hero" aria-label="Pipeline overview">
+            <div class="lw-track-hero-flow">
+              <header class="lw-track-hero-head">
+                <div class="lw-track-hero-head-text">
+                  <h3 class="lw-track-hero-title">Material flow</h3>
+                  <p class="lw-track-hero-sub">Same workflow as the tabs above — click a step to filter; Alt+click to open that tab</p>
+                </div>
+              </header>
+              <div id="lw-track-exec-flow" class="lw-track-exec-flow"></div>
+            </div>
+            <div class="lw-track-hero-divider" aria-hidden="true"></div>
+            <div class="lw-track-hero-wip">
+              <header class="lw-track-hero-head">
+                <div class="lw-track-hero-head-text">
+                  <h3 class="lw-track-hero-title">WIP distribution</h3>
+                  <p class="lw-track-hero-sub">Lot volume flowing between stages — wider bands mean more WIP at that step</p>
+                </div>
+              </header>
+              <div id="lw-track-sankey" class="lw-track-sankey-chart"></div>
+              <p id="lw-track-sankey-insight" class="lw-track-sankey-insight" hidden></p>
+            </div>
+          </section>
+
+          <section class="lw-track-dash-secondary" aria-label="Capacity, queues, and phase detail">
+            <div class="lw-track-dash-card lw-track-dash-capacity">
+              <header class="lw-track-dash-card-head lw-track-dash-card-head--compact">
+                <h3 class="lw-track-dash-section-title">Build capacity</h3>
+              </header>
+              <div id="lw-track-capacity-list" class="lw-track-capacity-list"></div>
+            </div>
+            <div class="lw-track-dash-card lw-track-dash-queues">
+              <header class="lw-track-dash-card-head lw-track-dash-card-head--compact">
+                <h3 class="lw-track-dash-section-title">Queues</h3>
+              </header>
+              <div id="lw-track-queue-tiles" class="lw-track-queue-tiles"></div>
+            </div>
+            <details class="lw-track-dash-card lw-track-dash-phase lw-track-phase-details">
+              <summary class="lw-track-phase-details-summary">
+                <span class="lw-track-dash-section-title">Phase detail by track</span>
+                <span class="lw-track-phase-details-hint">Expand to filter by phase</span>
+              </summary>
+              <div id="lw-track-phase-grid" class="lw-track-phase-grid"></div>
+            </details>
+          </section>
+        </div>
+      </div>
+  </div>
+
+  <div id="lw-reports-panel" class="lw-panel">
+    <div id="lw-reports-error" class="ti-alert ti-alert-error" style="display:none;margin:8px 4px"></div>
+
+    <div id="lw-track-pipeline-view" class="lw-track-report-view">
+      <div class="lw-track-pipeline" id="lw-track-pipeline"></div>
+    </div>
+
+    <div id="lw-track-capacity-view" class="lw-track-report-view">
+      <div class="lw-track-capacity-wrap">
+        <table class="ti-excel-table lw-track-capacity-table" id="lw-track-capacity-table">
+          <thead>
+            <tr>
+              <th>BOM</th>
+              <th>Product</th>
+              <th>Customer</th>
+              <th class="lw-track-num">Max build</th>
+              <th>Bottleneck</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-capacity-body"></tbody>
+        </table>
+        <h3 class="lw-panel-heading lw-track-sa-cap-heading">Sub-assembly capacity</h3>
+        <table class="ti-excel-table lw-track-capacity-table" id="lw-track-sa-capacity-table">
+          <thead>
+            <tr>
+              <th>BOM</th>
+              <th>SA Part</th>
+              <th class="lw-track-num">Max build</th>
+              <th>Bottleneck</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-sa-capacity-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="lw-track-actions-view" class="lw-track-report-view">
+      <div class="lw-track-actions-head">
+        <span id="lw-track-actions-count" class="lw-track-actions-count"></span>
+      </div>
+      <div class="ti-dc-scroll-wrap lw-track-actions-wrap">
+        <table class="ti-excel-table ti-excel-table--original lw-track-actions-table" id="lw-track-actions-table">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Type</th>
+              <th>Part / BOM</th>
+              <th>Lot</th>
+              <th>Phase</th>
+              <th class="lw-track-num">OK</th>
+              <th class="lw-track-num">QA</th>
+              <th class="lw-track-num">Clean</th>
+              <th class="lw-track-num">Rework</th>
+              <th class="lw-col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="lw-track-actions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="lw-track-history-view" class="lw-track-report-view lw-track-report-view--active">
+      <div id="lw-track-history-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-stock-view" class="lw-track-report-view">
+      <div id="lw-track-stock-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-qa-view" class="lw-track-report-view">
+      <div id="lw-track-qa-grid" class="lw-track-history-grid"></div>
+    </div>
+
+    <div id="lw-track-scrap-view" class="lw-track-report-view">
+      <div id="lw-track-scrap-grid" class="lw-track-history-grid"></div>
+    </div>
+  </div>
+
+  <div id="lw-track-drawer-backdrop" class="lw-track-drawer-backdrop" hidden></div>
+  <aside id="lw-track-drawer" class="lw-track-drawer" aria-hidden="true" hidden>
+    <header class="lw-track-drawer-head">
+      <div class="lw-track-drawer-head-text">
+        <div id="lw-track-drawer-badge" class="lw-track-drawer-badge"></div>
+        <h3 id="lw-track-drawer-title">Details</h3>
+      </div>
+      <button type="button" class="lw-track-drawer-close" id="lw-track-drawer-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="lw-track-drawer-body" id="lw-track-drawer-body"></div>
+    <footer class="lw-track-drawer-foot" id="lw-track-drawer-foot"></footer>
+  </aside>
 
   <datalist id="lw-parts-datalist"></datalist>
 

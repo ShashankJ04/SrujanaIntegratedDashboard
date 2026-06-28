@@ -703,6 +703,153 @@ def packing_pack() -> Any:
     return jsonify(result)
 
 
+
+
+@laser_welding_bp.route("/tracking", methods=["GET"])
+@require_access("lw")
+def tracking_snapshot() -> Any:
+    cust_raw = request.args.get("custId", "").strip()
+    cust_id: Optional[int] = None
+    if cust_raw:
+        try:
+            cust_id = int(cust_raw)
+        except ValueError:
+            return jsonify({"error": "custId must be an integer"}), 400
+    q = request.args.get("q", "").strip()
+    phase = request.args.get("phase", "").strip()
+    try:
+        data = lw.get_tracking_snapshot(cust_id=cust_id, q=q, phase=phase)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(data)
+
+
+@laser_welding_bp.route("/reports/action-history", methods=["GET"])
+@require_access("lw")
+def action_history() -> Any:
+    date_from = request.args.get("from", "").strip()
+    date_to = request.args.get("to", "").strip()
+    q = request.args.get("q", "").strip()
+    step = request.args.get("step", "").strip()
+    limit_raw = request.args.get("limit", "").strip()
+    limit = 2500
+    if limit_raw:
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+    try:
+        data = lw.get_action_history(
+            date_from=date_from,
+            date_to=date_to,
+            q=q,
+            step=step,
+            limit=limit,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(data)
+
+
+@laser_welding_bp.route("/reports/stock", methods=["GET"])
+@require_access("lw")
+def stock_report() -> Any:
+    cust_raw = request.args.get("custId", "").strip()
+    cust_id: Optional[int] = None
+    if cust_raw:
+        try:
+            cust_id = int(cust_raw)
+        except ValueError:
+            return jsonify({"error": "custId must be an integer"}), 400
+    q = request.args.get("q", "").strip()
+    try:
+        data = lw.get_stock_report(cust_id=cust_id, q=q)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(data)
+
+
+@laser_welding_bp.route("/reports/qa-history", methods=["GET"])
+@require_access("lw")
+def qa_history() -> Any:
+    date_from = request.args.get("from", "").strip()
+    date_to = request.args.get("to", "").strip()
+    q = request.args.get("q", "").strip()
+    step = request.args.get("step", "").strip()
+    limit_raw = request.args.get("limit", "").strip()
+    limit = 2500
+    if limit_raw:
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+    try:
+        data = lw.get_qa_history(
+            date_from=date_from,
+            date_to=date_to,
+            q=q,
+            step=step,
+            limit=limit,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(data)
+
+
+@laser_welding_bp.route("/reports/scrap-history", methods=["GET"])
+@require_access("lw")
+def scrap_history() -> Any:
+    date_from = request.args.get("from", "").strip()
+    date_to = request.args.get("to", "").strip()
+    q = request.args.get("q", "").strip()
+    step = request.args.get("step", "").strip()
+    limit_raw = request.args.get("limit", "").strip()
+    limit = 2500
+    if limit_raw:
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+    try:
+        data = lw.get_scrap_history(
+            date_from=date_from,
+            date_to=date_to,
+            q=q,
+            step=step,
+            limit=limit,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(data)
+
+
+@laser_welding_bp.route("/reports/export", methods=["POST"])
+@require_access("lw")
+def export_lw_report() -> Any:
+    from . import lw_report_export
+
+    data = request.get_json(force=True, silent=True) or {}
+    report_type = str(data.get("reportType") or "").strip().lower()
+    variables = data.get("variables") or {}
+    file_name = str(data.get("fileName") or "").strip()
+    try:
+        return lw_report_export.generate_lw_report_export(
+            report_type=report_type,
+            variables=variables if isinstance(variables, dict) else {},
+            file_name=file_name or None,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @laser_welding_bp.route("/bom-customers", methods=["GET"])
 @require_access("lw")
 def bom_customers() -> Any:

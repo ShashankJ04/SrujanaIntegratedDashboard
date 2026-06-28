@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from .config import Config
 from .db import execute, execute_insert, fetch_all, fetch_one, get_cursor
@@ -6387,3 +6387,1689 @@ def inspect_assembly(
         cursor.execute("DELETE FROM laser_welding_line WHERE line_id = %s", (draft_line_id,))
 
     return {"draftLineId": draft_line_id, "saved": len(non_zero)}
+
+
+# --- Tracking snapshot (from ProductionScheduling) ---
+
+_PHASE_PRIORITY = {
+    "rework_pending": 0,
+    "qa_pending": 1,
+    "awaiting_clean": 2,
+    "ready_for_weld": 3,
+    "ready_to_pack": 3,
+    "inspected_ready": 3,
+    "erp_stock": 4,
+    "consumed": 5,
+}
+
+
+def _tracking_erp_available(part_no: str, cache: Dict[str, int]) -> int:
+    part = str(part_no or "").strip()
+    if not part:
+        return 0
+    if part in cache:
+        return cache[part]
+    qty = 0
+    try:
+        if bo_inventory.is_bo_sub_assembly_part(part):
+            qty = int(bo_inventory.fetch_bo_available_qty(part) or 0)
+        else:
+            comp_id = erp_stock.resolve_comp_id(part)
+            if comp_id:
+                _, next_stages = _erp_stages_for_part(part)
+                plant_id = _erp_plant_for_part(part)
+                rows = erp_stock.fetch_lot_inventory(comp_id, plant_id, next_stages=next_stages)
+                qty = sum(int(r.get("availableQty") or 0) for r in rows if int(r.get("availableQty") or 0) > 0)
+    except (ValueError, TypeError):
+        qty = 0
+    cache[part] = max(0, qty)
+    return cache[part]
+
+
+def _classify_child_part_phase(
+    total_okayed: int,
+    total_qa: int,
+    erp_available: int,
+    has_lots: bool,
+    has_consumed: bool,
+) -> str:
+    if total_qa > 0:
+        return "qa_pending"
+    if total_okayed > 0:
+        return "inspected_ready"
+    if erp_available > 0:
+        return "erp_stock"
+    if has_consumed or has_lots:
+        return "consumed"
+    return "erp_stock"
+
+
+def _classify_assembly_lot_phase(row: Dict[str, Any], is_sa: bool) -> Optional[str]:
+    rework = int(row.get("rework_pending") or 0)
+    qa = int(row.get("total_qa") or 0)
+    insp = int(row.get("inspection_pending") or 0)
+    okayed = int(row.get("total_okayed") or 0)
+    if rework > 0:
+        return "rework_pending"
+    if qa > 0:
+        return "qa_pending"
+    if insp > 0:
+        return "awaiting_clean"
+    if okayed > 0:
+        return "ready_for_weld" if is_sa else "ready_to_pack"
+    if _is_processed(row):
+        return "consumed"
+    return None
+
+
+def _tracking_lot_summary(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "lotId": int(row["lot_id"]),
+        "lotNo": row.get("new_lot_no") or "",
+        "totalInwarded": int(row.get("total_inwarded") or 0),
+        "totalOkayed": int(row.get("total_okayed") or 0),
+        "totalQa": int(row.get("total_qa") or 0),
+        "inspectionPending": int(row.get("inspection_pending") or 0),
+        "reworkPending": int(row.get("rework_pending") or 0),
+        "scrap": int(row.get("scrap") or 0),
+    }
+
+
+def _tracking_matches_query(item: Dict[str, Any], q: str) -> bool:
+    if not q:
+        return True
+    hay = " ".join(
+        str(item.get(k) or "")
+        for k in (
+            "partNo",
+            "partName",
+            "bomNo",
+            "productName",
+            "lotNo",
+            "customerName",
+            "saPartNo",
+        )
+    ).lower()
+    return q in hay
+
+
+def _tracking_matches_phase(item: Dict[str, Any], phase: str) -> bool:
+    if not phase:
+        return True
+    return str(item.get("phase") or "") == phase
+
+
+def _compute_capacity_children(
+    children: List[Dict[str, Any]],
+    lw_okayed_by_part: Dict[str, int],
+    erp_cache: Dict[str, int],
+) -> Tuple[List[Dict[str, Any]], int, Optional[Dict[str, Any]]]:
+    child_rows: List[Dict[str, Any]] = []
+    max_build = None
+    bottleneck: Optional[Dict[str, Any]] = None
+    for ch in children:
+        part_no = str(ch.get("partNo") or "").strip()
+        bom_qty = max(1, int(ch.get("qty") or 0))
+        lw_okayed = int(lw_okayed_by_part.get(part_no) or 0)
+        erp_avail = _tracking_erp_available(part_no, erp_cache)
+        total_avail = lw_okayed + erp_avail
+        max_from = total_avail // bom_qty if bom_qty else 0
+        if lw_okayed > 0 and erp_avail > 0:
+            source = "both"
+        elif lw_okayed > 0:
+            source = "lw"
+        elif erp_avail > 0:
+            source = "erp"
+        else:
+            source = "lw"
+        row = {
+            "partNo": part_no,
+            "partName": ch.get("partName") or _part_name(part_no),
+            "bomQty": bom_qty,
+            "lwOkayed": lw_okayed,
+            "erpAvailable": erp_avail,
+            "maxFromChild": max_from,
+            "source": source,
+            "isBottleneck": False,
+        }
+        child_rows.append(row)
+        if max_build is None or max_from < max_build:
+            max_build = max_from
+            bottleneck = row
+    if bottleneck:
+        for r in child_rows:
+            r["isBottleneck"] = r["partNo"] == bottleneck["partNo"]
+    return child_rows, int(max_build or 0), bottleneck
+
+
+def get_tracking_snapshot(
+    cust_id: Optional[int] = None,
+    q: str = "",
+    phase: str = "",
+) -> Dict[str, Any]:
+    search_q = str(q or "").strip().lower()
+    phase_filter = str(phase or "").strip()
+
+    child_lot_rows = fetch_all(
+        """
+        SELECT l.*
+        FROM laser_welding_lot l
+        WHERE l.bom_id IS NULL
+        ORDER BY l.part_number, l.lot_id DESC
+        """
+    )
+
+    lw_agg_rows = fetch_all(
+        """
+        SELECT TRIM(part_number) AS part_no,
+               SUM(total_okayed) AS lw_okayed,
+               SUM(total_qa) AS qa_pending
+        FROM laser_welding_lot
+        GROUP BY TRIM(part_number)
+        """
+    )
+    lw_okayed_by_part = {
+        str(r.get("part_no") or "").strip(): int(r.get("lw_okayed") or 0)
+        for r in lw_agg_rows
+        if str(r.get("part_no") or "").strip()
+    }
+
+    erp_cache: Dict[str, int] = {}
+    parts_catalog = get_parts("production")
+    child_by_part: Dict[str, Dict[str, Any]] = {}
+
+    for lot in child_lot_rows:
+        part_no = str(lot.get("part_number") or "").strip()
+        if not part_no:
+            continue
+        entry = child_by_part.setdefault(
+            part_no,
+            {
+                "partNo": part_no,
+                "partName": _part_name(part_no),
+                "lwOkayed": 0,
+                "qaPending": 0,
+                "erpAvailable": 0,
+                "lotCount": 0,
+                "lots": [],
+                "hasConsumed": False,
+            },
+        )
+        entry["lwOkayed"] += int(lot.get("total_okayed") or 0)
+        entry["qaPending"] += int(lot.get("total_qa") or 0)
+        entry["lotCount"] += 1
+        lot_phase = _classify_child_part_phase(
+            int(lot.get("total_okayed") or 0),
+            int(lot.get("total_qa") or 0),
+            0,
+            True,
+            _is_processed(lot) and int(lot.get("total_okayed") or 0) == 0,
+        )
+        if lot_phase == "consumed":
+            entry["hasConsumed"] = True
+        if _is_processed(lot) or int(lot.get("total_okayed") or 0) > 0 or int(lot.get("total_qa") or 0) > 0:
+            entry["lots"].append({**_tracking_lot_summary(lot), "phase": lot_phase})
+
+    for p in parts_catalog:
+        part_no = str(p.get("partNo") or p.get("part_no") or "").strip()
+        if not part_no:
+            continue
+        entry = child_by_part.setdefault(
+            part_no,
+            {
+                "partNo": part_no,
+                "partName": p.get("partName") or p.get("part_name") or _part_name(part_no),
+                "lwOkayed": 0,
+                "qaPending": 0,
+                "erpAvailable": 0,
+                "lotCount": 0,
+                "lots": [],
+                "hasConsumed": False,
+            },
+        )
+        if p.get("partName") or p.get("part_name"):
+            entry["partName"] = p.get("partName") or p.get("part_name")
+
+    child_parts: List[Dict[str, Any]] = []
+    for part_no, entry in child_by_part.items():
+        erp_avail = _tracking_erp_available(part_no, erp_cache)
+        entry["erpAvailable"] = erp_avail
+        entry["lwOkayed"] = int(lw_okayed_by_part.get(part_no) or entry["lwOkayed"])
+        for r in lw_agg_rows:
+            if str(r.get("part_no") or "").strip() == part_no:
+                entry["qaPending"] = int(r.get("qa_pending") or 0)
+                break
+        entry["phase"] = _classify_child_part_phase(
+            entry["lwOkayed"],
+            entry["qaPending"],
+            erp_avail,
+            entry["lotCount"] > 0,
+            entry["hasConsumed"],
+        )
+        if entry["phase"] == "consumed" and entry["lwOkayed"] == 0 and entry["qaPending"] == 0 and erp_avail == 0:
+            if entry["lotCount"] == 0:
+                continue
+        if not _tracking_matches_query(entry, search_q):
+            continue
+        if not _tracking_matches_phase(entry, phase_filter):
+            continue
+        child_parts.append(
+            {
+                "partNo": entry["partNo"],
+                "partName": entry["partName"],
+                "phase": entry["phase"],
+                "erpAvailable": entry["erpAvailable"],
+                "lwOkayed": entry["lwOkayed"],
+                "qaPending": entry["qaPending"],
+                "lotCount": entry["lotCount"],
+                "lots": entry["lots"],
+            }
+        )
+    child_parts.sort(key=lambda x: (x["phase"], x["partNo"]))
+
+    asm_rows = fetch_all(
+        """
+        SELECT l.*, b.bom_no, b.product_name, b.cust_id,
+               COALESCE(c.CU_Name, '') AS customer_name
+        FROM laser_welding_lot l
+        LEFT JOIN bom b ON b.bom_id = l.bom_id AND b.is_latest_version = 'Y'
+        LEFT JOIN customer c ON c.CU_Id = b.cust_id
+        WHERE l.bom_id IS NOT NULL
+          AND l.new_lot_no IS NOT NULL
+          AND TRIM(l.new_lot_no) != ''
+          AND l.new_lot_no NOT LIKE %s
+        ORDER BY l.processed_at DESC, l.lot_id DESC
+        """,
+        ("LBO/%",),
+    )
+
+    sub_assemblies: List[Dict[str, Any]] = []
+    final_assemblies: List[Dict[str, Any]] = []
+
+    for row in asm_rows:
+        if cust_id is not None and int(row.get("cust_id") or 0) != int(cust_id):
+            continue
+        bom_no = str(row.get("bom_no") or "").strip()
+        is_sa = _is_sub_assembly_lot_row(row, bom_no)
+        is_fg = _is_final_assembly_lot_row(row, bom_no)
+        if not is_sa and not is_fg:
+            lot_no = str(row.get("new_lot_no") or "")
+            if lot_no.startswith("SA/"):
+                is_sa = True
+            elif lot_no.startswith("LW/"):
+                is_fg = True
+            else:
+                continue
+        lot_phase = _classify_assembly_lot_phase(row, is_sa)
+        if not lot_phase:
+            continue
+        part_no = str(row.get("part_number") or "").strip()
+        item = {
+            "bomId": str(row.get("bom_id") or ""),
+            "bomNo": bom_no,
+            "productName": row.get("product_name") or "",
+            "customerName": row.get("customer_name") or "",
+            "lotNo": row.get("new_lot_no") or "",
+            "lotId": int(row["lot_id"]),
+            "partNo": part_no,
+            "phase": lot_phase,
+            "totalInwarded": int(row.get("total_inwarded") or 0),
+            "totalOkayed": int(row.get("total_okayed") or 0),
+            "totalQa": int(row.get("total_qa") or 0),
+            "inspectionPending": int(row.get("inspection_pending") or 0),
+            "reworkPending": int(row.get("rework_pending") or 0),
+            "scrap": int(row.get("scrap") or 0),
+        }
+        if is_sa:
+            item["saPartNo"] = part_no
+            if not _tracking_matches_query(item, search_q):
+                continue
+            if not _tracking_matches_phase(item, phase_filter):
+                continue
+            sub_assemblies.append(item)
+        else:
+            if not _tracking_matches_query(item, search_q):
+                continue
+            if not _tracking_matches_phase(item, phase_filter):
+                continue
+            final_assemblies.append(item)
+
+    bom_capacity: List[Dict[str, Any]] = []
+    sa_capacity: List[Dict[str, Any]] = []
+    boms = get_boms(cust_id)
+    sa_seen: set = set()
+
+    for bom in boms:
+        bid = str(bom.get("bomId") or "")
+        children = get_laser_welding_bom_children(bid)
+        if not children:
+            continue
+        child_rows, max_build, bottleneck = _compute_capacity_children(
+            children, lw_okayed_by_part, erp_cache
+        )
+        cap_item = {
+            "bomId": bid,
+            "bomNo": bom.get("bomNo") or "",
+            "productName": bom.get("productName") or "",
+            "customerName": bom.get("customerName") or "",
+            "maxBuildQty": max_build,
+            "bottleneckPartNo": bottleneck["partNo"] if bottleneck else "",
+            "bottleneckAvailable": (
+                bottleneck["lwOkayed"] + bottleneck["erpAvailable"] if bottleneck else 0
+            ),
+            "bottleneckBomQty": bottleneck["bomQty"] if bottleneck else 0,
+            "children": child_rows,
+        }
+        if search_q:
+            hay = f"{cap_item['bomNo']} {cap_item['productName']} {cap_item['customerName']}".lower()
+            child_hay = " ".join(c["partNo"] for c in child_rows).lower()
+            if search_q not in hay and search_q not in child_hay:
+                continue
+        bom_capacity.append(cap_item)
+
+        if bom_has_sub_assembly(bid):
+            for sa in get_sub_assembly_parts(bid):
+                sa_part = str(sa.get("partNo") or "").strip()
+                key = (bid, sa_part)
+                if not sa_part or key in sa_seen:
+                    continue
+                sa_seen.add(key)
+                sa_children = get_sub_assembly_children(bid, sa_part)
+                if not sa_children:
+                    continue
+                sa_child_rows, sa_max, sa_bn = _compute_capacity_children(
+                    sa_children, lw_okayed_by_part, erp_cache
+                )
+                sa_cap = {
+                    "bomId": bid,
+                    "bomNo": bom.get("bomNo") or "",
+                    "saPartNo": sa_part,
+                    "saPartName": sa.get("partName") or _part_name(sa_part),
+                    "maxBuildQty": sa_max,
+                    "bottleneckPartNo": sa_bn["partNo"] if sa_bn else "",
+                    "bottleneckAvailable": (
+                        sa_bn["lwOkayed"] + sa_bn["erpAvailable"] if sa_bn else 0
+                    ),
+                    "bottleneckBomQty": sa_bn["bomQty"] if sa_bn else 0,
+                    "children": sa_child_rows,
+                }
+                if search_q:
+                    hay = f"{sa_cap['bomNo']} {sa_part} {sa_cap['saPartName']}".lower()
+                    if search_q not in hay:
+                        continue
+                sa_capacity.append(sa_cap)
+
+    summary = {
+        "childPartsReady": sum(1 for p in child_parts if p["phase"] == "inspected_ready"),
+        "childErpStock": sum(1 for p in child_parts if p["phase"] == "erp_stock"),
+        "childQaPending": sum(1 for p in child_parts if p["phase"] == "qa_pending"),
+        "saAwaitingClean": sum(1 for s in sub_assemblies if s["phase"] == "awaiting_clean"),
+        "saReadyForWeld": sum(1 for s in sub_assemblies if s["phase"] == "ready_for_weld"),
+        "fgAwaitingClean": sum(1 for f in final_assemblies if f["phase"] == "awaiting_clean"),
+        "fgReadyToPack": sum(1 for f in final_assemblies if f["phase"] == "ready_to_pack"),
+        "qaQueueTotal": (
+            sum(p["qaPending"] for p in child_parts)
+            + sum(s["totalQa"] for s in sub_assemblies)
+            + sum(f["totalQa"] for f in final_assemblies)
+        ),
+        "reworkPendingTotal": (
+            sum(s["reworkPending"] for s in sub_assemblies)
+            + sum(f["reworkPending"] for f in final_assemblies)
+        ),
+    }
+
+    return {
+        "summary": summary,
+        "childParts": child_parts,
+        "subAssemblies": sub_assemblies,
+        "finalAssemblies": final_assemblies,
+        "bomCapacity": sorted(bom_capacity, key=lambda x: x["maxBuildQty"]),
+        "saCapacity": sa_capacity,
+    }
+
+
+# --- Reports: action history ---
+
+HISTORY_STEP_LABELS: Dict[str, str] = {
+    "inspection": "Inspection",
+    "sub_assembly": "Sub-Assembly",
+    "sa_cleaning": "SA Inspection",
+    "sa_rework": "SA Re-Work",
+    "laser_welding": "Laser Welding",
+    "lw_cleaning": "LW Cleaning/Inspection",
+    "lw_rework": "LW Re-Work",
+    "packing": "Packing",
+    "qa": "QA",
+}
+
+HISTORY_STEP_ORDER = list(HISTORY_STEP_LABELS.keys())
+
+
+def _history_step_for_line(
+    line_type: str,
+    part_number: Optional[str],
+    bom_no: Optional[str],
+) -> Optional[str]:
+    lt = str(line_type or "").strip()
+    pn = str(part_number or "").strip()
+    bn = str(bom_no or "").strip()
+    if lt == LINE_PART_INSPECTION:
+        return "inspection"
+    if lt == LINE_SUB_ASSEMBLY_CONSUME:
+        return "sub_assembly"
+    if lt == LINE_ASSEMBLY_INSPECTION:
+        if pn and bn and pn != bn:
+            return "sa_cleaning"
+        return "lw_cleaning"
+    if lt == LINE_SUB_ASSEMBLY_REWORK:
+        return "sa_rework"
+    if lt in (LINE_WELDING_CONSUME, *LINE_WELDING_CONSUME_LEGACY):
+        return "laser_welding"
+    if lt == LINE_WELDING_REWORK:
+        return "lw_rework"
+    if lt == LINE_QA_DISPOSITION:
+        return "qa"
+    if lt == LINE_PACKING:
+        return "packing"
+    if lt == LINE_REWORK:
+        if bn and pn and pn != bn:
+            return "sa_rework"
+        if bn and pn == bn:
+            return "lw_rework"
+        return "inspection"
+    return None
+
+
+def _history_row_class(
+    wf_step: str,
+    part_number: Optional[str] = None,
+    bom_no: Optional[str] = None,
+) -> str:
+    if wf_step == "inspection":
+        return "Part"
+    if wf_step in ("sub_assembly", "sa_cleaning", "sa_rework"):
+        return "SA"
+    if wf_step in ("laser_welding", "lw_cleaning", "lw_rework", "packing"):
+        return "BOM"
+    if wf_step == "qa":
+        pn = str(part_number or "").strip()
+        bn = str(bom_no or "").strip()
+        if bn and pn == bn:
+            return "BOM"
+        if bn and pn and pn != bn:
+            return "SA"
+        return "Part"
+    return "Part"
+
+
+HISTORY_CONSUME_TYPES = frozenset({
+    LINE_SUB_ASSEMBLY_CONSUME,
+    LINE_WELDING_CONSUME,
+    *LINE_WELDING_CONSUME_LEGACY,
+})
+
+
+def _history_consume_from_row(r: Dict[str, Any]) -> Dict[str, Any]:
+    child_lot_id = r.get("child_lot_id")
+    row_class = "Part"
+    if child_lot_id:
+        child_lot = fetch_one(
+            "SELECT * FROM laser_welding_lot WHERE lot_id = %s",
+            (int(child_lot_id),),
+        )
+        if child_lot and _is_sub_assembly_lot_row(child_lot):
+            row_class = "SA"
+    lot_no = str(r.get("child_lot_no") or r.get("source_lot_no") or "").strip()
+    return {
+        "partNo": str(r.get("part_number") or "").strip(),
+        "lotNo": lot_no,
+        "rowClass": row_class,
+        "childLotId": int(child_lot_id) if child_lot_id is not None else None,
+        "consumedQty": int(r.get("inspected_qty") or 0),
+        "qaQty": int(r.get("qa_qty") or 0),
+        "scrapQty": int(r.get("scrap_qty") or 0),
+        "reworkQty": int(r.get("rework_qty") or 0),
+    }
+
+
+def _enrich_history_consumptions(
+    consumptions: List[Dict[str, Any]],
+    group_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    enriched: List[Dict[str, Any]] = []
+    for cons, r in zip(consumptions, group_rows):
+        out = dict(cons)
+        child_lot_id = r.get("child_lot_id")
+        if child_lot_id and out.get("rowClass") == "SA":
+            nested = fetch_all(
+                """
+                SELECT ln.part_number, ln.inspected_qty, ln.qa_qty, ln.scrap_qty,
+                       ln.rework_qty, cl.new_lot_no AS child_lot_no, ln.source_lot_no
+                FROM laser_welding_line ln
+                LEFT JOIN laser_welding_lot cl ON cl.lot_id = ln.child_lot_id
+                WHERE ln.lot_id = %s
+                  AND ln.line_type = %s
+                  AND ln.child_lot_id IS NOT NULL
+                ORDER BY ln.line_id
+                """,
+                (int(child_lot_id), LINE_SUB_ASSEMBLY_CONSUME),
+            )
+            out["nestedConsumptions"] = [
+                {
+                    "partNo": str(n.get("part_number") or "").strip(),
+                    "lotNo": str(n.get("child_lot_no") or n.get("source_lot_no") or "").strip(),
+                    "rowClass": "Part",
+                    "consumedQty": int(n.get("inspected_qty") or 0),
+                    "qaQty": int(n.get("qa_qty") or 0),
+                    "scrapQty": int(n.get("scrap_qty") or 0),
+                    "reworkQty": int(n.get("rework_qty") or 0),
+                }
+                for n in nested
+            ]
+        enriched.append(out)
+    return enriched
+
+
+def _history_produced_qty_from_group(
+    r: Dict[str, Any],
+    agg_rows: List[Dict[str, Any]],
+    wf_step: str,
+) -> Optional[int]:
+    """Weld/SA output qty for a consume session — not sum of child consumed qty."""
+    effective_bom_id = str(r.get("effective_bom_id") or r.get("bom_id") or "").strip()
+    if not effective_bom_id or not agg_rows:
+        return None
+    if wf_step == "laser_welding":
+        bom_children = get_laser_welding_bom_children(effective_bom_id)
+    elif wf_step == "sub_assembly":
+        sa_part = str(r.get("lot_part_number") or r.get("part_number") or "").strip()
+        if not sa_part:
+            return None
+        bom_children = get_sub_assembly_children(effective_bom_id, sa_part)
+    else:
+        return None
+    if not bom_children:
+        return None
+    line_dicts = [
+        {
+            "partNumber": str(x.get("part_number") or "").strip(),
+            "inspectedQty": int(x.get("inspected_qty") or 0),
+            "qaQty": int(x.get("qa_qty") or 0),
+            "scrapQty": int(x.get("scrap_qty") or 0),
+        }
+        for x in agg_rows
+    ]
+    return _produced_qty_from_consume_lines(line_dicts, bom_children)
+
+
+def _history_item_from_row(
+    r: Dict[str, Any],
+    *,
+    consumptions: Optional[List[Dict[str, Any]]] = None,
+    aggregate_rows: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
+    bom_no = str(r.get("bom_no") or "").strip()
+    part_no = str(r.get("part_number") or "").strip()
+    if consumptions:
+        lot_part = str(r.get("lot_part_number") or "").strip()
+        if lot_part:
+            part_no = lot_part
+    wf_step = _history_step_for_line(r.get("line_type"), part_no, bom_no)
+    if not wf_step:
+        return None
+
+    lot_no = str(r.get("lot_no") or "").strip()
+    if not lot_no:
+        src = str(r.get("source_lot_no") or "").strip()
+        if src and src != SESSION_SOURCE_LOT:
+            lot_no = src
+
+    label = part_no
+    if wf_step in ("laser_welding", "lw_cleaning", "lw_rework", "packing") and bom_no:
+        label = bom_no
+    elif wf_step in ("sub_assembly", "sa_cleaning", "sa_rework") and part_no:
+        label = part_no
+
+    pd = r.get("production_date")
+    if hasattr(pd, "strftime"):
+        work_date_iso = pd.strftime("%Y-%m-%d")
+    else:
+        work_date_iso = _parse_date(pd) or ""
+
+    agg = aggregate_rows or [r]
+    inspected = sum(int(x.get("inspected_qty") or 0) for x in agg)
+    qa = sum(int(x.get("qa_qty") or 0) for x in agg)
+    scrap = sum(int(x.get("scrap_qty") or 0) for x in agg)
+    rework = sum(int(x.get("rework_qty") or 0) for x in agg)
+    if consumptions:
+        produced = _history_produced_qty_from_group(r, agg, wf_step)
+        if produced is not None:
+            inspected = produced
+
+    row_class = _history_row_class(wf_step, part_no, bom_no)
+    detail_steps = ("sub_assembly", "laser_welding")
+    has_detail = bool(consumptions) and wf_step in detail_steps
+
+    return {
+        "lineId": int(r["line_id"]),
+        "cdLineId": int(r["cd_line_id"]) if r.get("cd_line_id") is not None else None,
+        "workDate": work_date_iso,
+        "workflowStep": wf_step,
+        "workflowLabel": HISTORY_STEP_LABELS.get(wf_step, wf_step),
+        "rowClass": row_class,
+        "rowType": row_class,
+        "partNo": part_no,
+        "bomNo": bom_no,
+        "label": label,
+        "partName": _part_name(part_no) if part_no else "",
+        "productName": str(r.get("product_name") or "").strip(),
+        "customerName": str(r.get("customer_name") or "").strip(),
+        "lotNo": lot_no,
+        "lotId": int(r["lot_id"]) if r.get("lot_id") is not None else None,
+        "lineType": str(r.get("line_type") or ""),
+        "inspectedQty": inspected,
+        "qaQty": qa,
+        "scrapQty": scrap,
+        "reworkQty": rework,
+        "scrapRemark": str(r.get("scrap_remark") or "").strip(),
+        "reworkRemark": str(r.get("rework_remark") or "").strip(),
+        "operatorId": int(r["operator_id"]) if r.get("operator_id") is not None else None,
+        "operatorName": str(r.get("operator_name") or "").strip(),
+        "operatorEcno": str(r.get("operator_ecno") or "").strip(),
+        "machineId": int(r["machine_id"]) if r.get("machine_id") is not None else None,
+        "machineName": str(r.get("machine_name") or "").strip(),
+        "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
+        "otFlag": _normalize_ot_flag(r.get("ot_flag")),
+        "hasDetail": has_detail,
+        "consumptions": consumptions or [],
+    }
+
+
+def _trace_lines_for_history(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Map sourceTrace nodes for activity detail tree (same layout as weld/SA)."""
+    out: List[Dict[str, Any]] = []
+    for ln in trace or []:
+        item: Dict[str, Any] = {
+            "partNumber": str(ln.get("partNumber") or "").strip(),
+            "sourceLotNo": str(ln.get("sourceLotNo") or "").strip(),
+            "inspectedQty": int(ln.get("inspectedQty") or 0),
+            "qaQty": int(ln.get("qaQty") or 0),
+            "scrapQty": int(ln.get("scrapQty") or 0),
+        }
+        nested = ln.get("nestedLines")
+        if nested:
+            item["nestedLines"] = _trace_lines_for_history(nested)
+        out.append(item)
+    return out
+
+
+def _pack_material_history_row_class(item_code: str) -> str:
+    code = str(item_code or "").strip().upper()
+    if code.startswith("SE-C-") or code.startswith("SE-B-"):
+        return "Carton"
+    if code.startswith("SE-"):
+        return "Tray"
+    return "Part"
+
+
+def _history_consumptions_from_packing_lines(
+    enriched_lines: List[Dict[str, Any]],
+    material_lines: List[Dict[str, Any]],
+    bom_no: str,
+    product_row_class: str,
+) -> List[Dict[str, Any]]:
+    """Packing session lines as consumption rows (unified activity detail layout)."""
+    consumptions: List[Dict[str, Any]] = []
+    for ln in enriched_lines:
+        lot_no = str(ln.get("sourceLotNo") or "").strip()
+        part_label = bom_no or str(
+            ln.get("sourcePartNumber") or ln.get("partNumber") or ""
+        ).strip()
+        trace = _trace_lines_for_history(ln.get("sourceTrace") or [])
+        cons: Dict[str, Any] = {
+            "partNo": part_label,
+            "lotNo": lot_no,
+            "rowClass": product_row_class,
+            "consumedQty": int(ln.get("inspectedQty") or 0),
+            "qaQty": int(ln.get("qaQty") or 0),
+            "scrapQty": int(ln.get("scrapQty") or 0),
+        }
+        if trace:
+            cons["traceLines"] = trace
+        consumptions.append(cons)
+
+    for ln in material_lines:
+        code = str(ln.get("partNumber") or "").strip()
+        if not code:
+            continue
+        consumptions.append(
+            {
+                "partNo": code,
+                "lotNo": "",
+                "rowClass": _pack_material_history_row_class(code),
+                "consumedQty": int(ln.get("inspectedQty") or 0),
+                "qaQty": int(ln.get("qaQty") or 0),
+                "scrapQty": int(ln.get("scrapQty") or 0),
+            }
+        )
+    return consumptions
+
+
+def _history_item_from_packing_group(
+    group_rows: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """One activity row per packing session (PCK lot + source-lot tree in detail)."""
+    material_codes = _all_packing_material_codes()
+    ordered = sorted(group_rows, key=lambda x: int(x.get("line_id") or 0))
+    product_rows = [
+        r for r in ordered
+        if str(r.get("part_number") or "").strip() not in material_codes
+    ]
+    if not product_rows:
+        return None
+
+    primary = product_rows[0]
+    bom_no = str(primary.get("bom_no") or "").strip()
+    part_no = str(primary.get("part_number") or "").strip()
+    wf_step = "packing"
+
+    pd = primary.get("production_date")
+    if hasattr(pd, "strftime"):
+        work_date_iso = pd.strftime("%Y-%m-%d")
+    else:
+        work_date_iso = _parse_date(pd) or ""
+
+    cd_id = int(primary["cd_line_id"])
+    pack_lot_id, pack_lot_no = _find_pack_lot_for_session(cd_id, part_no, work_date_iso)
+
+    enriched_lines = _enrich_packing_product_lines([_line_to_dict(r) for r in product_rows])
+    material_lines = [
+        _line_to_dict(r) for r in ordered
+        if str(r.get("part_number") or "").strip() in material_codes
+    ]
+    row_class = "BOM" if bom_no else "Part"
+    consumptions = _history_consumptions_from_packing_lines(
+        enriched_lines, material_lines, bom_no, row_class
+    )
+
+    inspected = sum(int(ln.get("inspectedQty") or 0) for ln in enriched_lines)
+    qa = sum(int(r.get("qa_qty") or 0) for r in product_rows)
+    scrap = sum(int(r.get("scrap_qty") or 0) for r in product_rows)
+    rework = sum(int(r.get("rework_qty") or 0) for r in product_rows)
+    times = [
+        int(r.get("time_taken_minutes") or 0)
+        for r in ordered
+        if int(r.get("time_taken_minutes") or 0) > 0
+    ]
+    max_time = max(times) if times else None
+    ot_vals = [_normalize_ot_flag(r.get("ot_flag")) for r in ordered]
+    session_ot = "Y" if any(f == "Y" for f in ot_vals) else "N"
+
+    label = bom_no or part_no
+    op_id = primary.get("operator_id")
+
+    return {
+        "lineId": int(primary["line_id"]),
+        "cdLineId": cd_id,
+        "workDate": work_date_iso,
+        "workflowStep": wf_step,
+        "workflowLabel": HISTORY_STEP_LABELS.get(wf_step, wf_step),
+        "rowClass": row_class,
+        "rowType": row_class,
+        "partNo": part_no,
+        "bomNo": bom_no,
+        "label": label,
+        "partName": _part_name(part_no) if part_no else "",
+        "productName": str(primary.get("product_name") or "").strip(),
+        "customerName": str(primary.get("customer_name") or "").strip(),
+        "lotNo": pack_lot_no or "",
+        "packLotNo": pack_lot_no or "",
+        "lotId": int(pack_lot_id) if pack_lot_id is not None else None,
+        "lineType": LINE_PACKING,
+        "inspectedQty": inspected,
+        "qaQty": qa,
+        "scrapQty": scrap,
+        "reworkQty": rework,
+        "scrapRemark": str(primary.get("scrap_remark") or "").strip(),
+        "reworkRemark": str(primary.get("rework_remark") or "").strip(),
+        "operatorId": int(op_id) if op_id is not None else None,
+        "operatorName": str(primary.get("operator_name") or "").strip(),
+        "operatorEcno": str(primary.get("operator_ecno") or "").strip(),
+        "machineId": int(primary["machine_id"]) if primary.get("machine_id") is not None else None,
+        "machineName": str(primary.get("machine_name") or "").strip(),
+        "timeTakenMinutes": max_time,
+        "otFlag": session_ot,
+        "hasDetail": bool(consumptions),
+        "consumptions": consumptions,
+    }
+
+
+def _history_matches_search(item: Dict[str, Any], search_q: str) -> bool:
+    if not search_q:
+        return True
+    parts = [
+        str(item.get(k) or "")
+        for k in (
+            "workflowLabel", "rowClass", "rowType", "label", "partNo", "bomNo",
+            "partName", "productName", "customerName", "lotNo", "packLotNo",
+            "operatorName", "operatorEcno", "machineName", "lineType",
+        )
+    ]
+    for cons in item.get("consumptions") or []:
+        parts.extend(str(cons.get(k) or "") for k in ("partNo", "lotNo", "rowClass"))
+        for nested in cons.get("nestedConsumptions") or []:
+            parts.extend(str(nested.get(k) or "") for k in ("partNo", "lotNo", "rowClass"))
+        for trace_ln in cons.get("traceLines") or []:
+            parts.extend(
+                str(trace_ln.get(k) or "")
+                for k in ("partNumber", "sourceLotNo")
+            )
+            for nested in trace_ln.get("nestedLines") or []:
+                parts.extend(
+                    str(nested.get(k) or "")
+                    for k in ("partNumber", "sourceLotNo")
+                )
+    return search_q in " ".join(parts).lower()
+
+
+def get_action_history(
+    date_from: str,
+    date_to: str,
+    q: str = "",
+    step: str = "",
+    limit: int = 2500,
+) -> Dict[str, Any]:
+    d_from_str = _parse_date(date_from)
+    d_to_str = _parse_date(date_to)
+    if not d_from_str or not d_to_str:
+        raise ValueError("from and to dates are required (YYYY-MM-DD)")
+    d_from = datetime.strptime(d_from_str, "%Y-%m-%d").date()
+    d_to = datetime.strptime(d_to_str, "%Y-%m-%d").date()
+    if d_from > d_to:
+        raise ValueError("from date must be on or before to date")
+    if (d_to - d_from).days > 366:
+        raise ValueError("Date range cannot exceed 366 days")
+
+    search_q = str(q or "").strip().lower()
+    step_filter = str(step or "").strip()
+    if step_filter and step_filter not in HISTORY_STEP_LABELS:
+        raise ValueError("Invalid workflow step filter")
+
+    cap = max(1, min(int(limit or 2500), 5000))
+
+    rows = fetch_all(
+        """
+        SELECT
+            ln.line_id,
+            ln.production_date,
+            ln.line_type,
+            ln.part_number,
+            ln.source_lot_no,
+            ln.inspected_qty,
+            ln.qa_qty,
+            ln.scrap_qty,
+            ln.rework_qty,
+            ln.scrap_remark,
+            ln.rework_remark,
+            ln.time_taken_minutes,
+            ln.ot_flag,
+            ln.operator_id,
+            ln.machine_id,
+            ln.bom_id,
+            ln.child_lot_id,
+            ln.cd_line_id,
+            l.new_lot_no AS lot_no,
+            l.lot_id,
+            l.part_number AS lot_part_number,
+            COALESCE(l.bom_id, ln.bom_id) AS effective_bom_id,
+            b.bom_no,
+            b.product_name,
+            COALESCE(c.CU_Name, '') AS customer_name,
+            COALESCE(op.OP_NAME, '') AS operator_name,
+            COALESCE(op.OP_ECNO, '') AS operator_ecno,
+            COALESCE(m.MCM_Name, '') AS machine_name,
+            cl.new_lot_no AS child_lot_no
+        FROM laser_welding_line ln
+        LEFT JOIN laser_welding_lot l ON l.lot_id = ln.lot_id
+        LEFT JOIN laser_welding_lot cl ON cl.lot_id = ln.child_lot_id
+        LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
+        LEFT JOIN customer c ON c.CU_Id = b.cust_id
+        LEFT JOIN operators op ON op.OP_ID = ln.operator_id
+        LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
+        WHERE ln.production_date >= %s
+          AND ln.production_date <= %s
+          AND (
+            ln.lot_id IS NOT NULL
+            OR ln.inspected_qty > 0
+            OR ln.qa_qty > 0
+            OR ln.scrap_qty > 0
+            OR ln.rework_qty > 0
+          )
+          AND NOT (
+            ln.lot_id IS NULL
+            AND ln.source_lot_no = %s
+            AND ln.inspected_qty = 0
+            AND ln.qa_qty = 0
+            AND ln.scrap_qty = 0
+            AND ln.rework_qty = 0
+          )
+        ORDER BY ln.production_date DESC, ln.line_id DESC
+        LIMIT %s
+        """,
+        (d_from, d_to, SESSION_SOURCE_LOT, cap),
+    )
+
+    consume_groups: Dict[Any, List[Dict[str, Any]]] = {}
+    packing_groups: Dict[int, List[Dict[str, Any]]] = {}
+    grouped_line_ids: set = set()
+    for r in rows:
+        lt = str(r.get("line_type") or "").strip()
+        cd = r.get("cd_line_id")
+        child = r.get("child_lot_id")
+        if cd is not None and child is not None and lt in HISTORY_CONSUME_TYPES:
+            key = (int(cd), lt)
+            consume_groups.setdefault(key, []).append(r)
+            grouped_line_ids.add(int(r["line_id"]))
+        elif cd is not None and lt == LINE_PACKING:
+            packing_groups.setdefault(int(cd), []).append(r)
+            grouped_line_ids.add(int(r["line_id"]))
+
+    out: List[Dict[str, Any]] = []
+
+    for group_rows in consume_groups.values():
+        group_rows.sort(key=lambda x: int(x["line_id"]))
+        primary = group_rows[0]
+        wf_step = _history_step_for_line(
+            primary.get("line_type"),
+            str(primary.get("part_number") or "").strip(),
+            str(primary.get("bom_no") or "").strip(),
+        )
+        if not wf_step:
+            continue
+        if step_filter and wf_step != step_filter:
+            continue
+        consumptions = [_history_consume_from_row(r) for r in group_rows]
+        if wf_step == "laser_welding":
+            consumptions = _enrich_history_consumptions(consumptions, group_rows)
+        item = _history_item_from_row(
+            primary,
+            consumptions=consumptions,
+            aggregate_rows=group_rows,
+        )
+        if not item:
+            continue
+        if not _history_matches_search(item, search_q):
+            continue
+        out.append(item)
+
+    for group_rows in packing_groups.values():
+        if step_filter and step_filter != "packing":
+            continue
+        item = _history_item_from_packing_group(group_rows)
+        if not item:
+            continue
+        if not _history_matches_search(item, search_q):
+            continue
+        out.append(item)
+
+    for r in rows:
+        if int(r["line_id"]) in grouped_line_ids:
+            continue
+        bom_no = str(r.get("bom_no") or "").strip()
+        part_no = str(r.get("part_number") or "").strip()
+        wf_step = _history_step_for_line(r.get("line_type"), part_no, bom_no)
+        if not wf_step:
+            continue
+        if step_filter and wf_step != step_filter:
+            continue
+        item = _history_item_from_row(r)
+        if not item:
+            continue
+        if not _history_matches_search(item, search_q):
+            continue
+        out.append(item)
+
+    out.sort(
+        key=lambda x: HISTORY_STEP_ORDER.index(x["workflowStep"])
+        if x.get("workflowStep") in HISTORY_STEP_ORDER
+        else 99,
+    )
+    out.sort(key=lambda x: x.get("workDate") or "", reverse=True)
+    return {
+        "from": _format_date(d_from),
+        "to": _format_date(d_to),
+        "count": len(out),
+        "rows": out,
+    }
+
+
+# --- Reports: stock, QA history, scrap history ---
+
+STOCK_STATE_KEYS: Tuple[str, ...] = (
+    "inspection_pending",
+    "fg",
+    "qa",
+    "scrap",
+    "rework_pending",
+    "packed",
+)
+
+STOCK_STATE_LABELS: Dict[str, str] = {
+    "inspection_pending": "Inspection Pending",
+    "fg": "FG",
+    "qa": "QA",
+    "scrap": "Scrap",
+    "rework_pending": "Rework Pending",
+    "packed": "Packed",
+}
+
+
+def _empty_stock_states() -> Dict[str, int]:
+    return {k: 0 for k in STOCK_STATE_KEYS}
+
+
+def _stock_states_total(states: Dict[str, int]) -> int:
+    return sum(int(states.get(k) or 0) for k in STOCK_STATE_KEYS)
+
+
+def _stock_matches_query(
+    row_type: str,
+    part_no: str,
+    bom_no: str,
+    name: str,
+    q: str,
+) -> bool:
+    if not q:
+        return True
+    hay = " ".join(
+        str(x or "")
+        for x in (row_type, part_no, bom_no, name)
+    ).lower()
+    return q in hay
+
+
+def _inventory_qty_by_item_codes(item_codes: Optional[Iterable[str]] = None) -> Dict[str, int]:
+    """On-hand qty from ERP inventory (first row per ITEM_CODE)."""
+    codes = sorted({str(c).strip() for c in (item_codes or []) if str(c).strip()})
+    if not codes:
+        return {}
+    out: Dict[str, int] = {}
+    chunk = 200
+    for i in range(0, len(codes), chunk):
+        batch = codes[i : i + chunk]
+        placeholders = ", ".join(["%s"] * len(batch))
+        rows = fetch_all(
+            f"""
+            SELECT TRIM(i.ITEM_CODE) AS item_code, i.QTY AS qty
+            FROM inventory i
+            INNER JOIN (
+                SELECT TRIM(ITEM_CODE) AS code, MIN(INVENTORY_ID) AS min_id
+                FROM inventory
+                WHERE TRIM(ITEM_CODE) IN ({placeholders})
+                GROUP BY TRIM(ITEM_CODE)
+            ) pick ON TRIM(i.ITEM_CODE) = pick.code AND i.INVENTORY_ID = pick.min_id
+            """,
+            tuple(batch),
+        )
+        for r in rows:
+            code = str(r.get("item_code") or "").strip()
+            if code:
+                out[code] = int(float(r.get("qty") or 0))
+    return out
+
+
+def _packed_qty_by_bom(bom_nos: Optional[Iterable[str]] = None) -> Dict[str, int]:
+    """Packed FG qty from ERP inventory (first row per ITEM_CODE, LW BOMs only)."""
+    codes = sorted({str(b).strip() for b in (bom_nos or []) if str(b).strip()})
+    return _inventory_qty_by_item_codes(codes)
+
+
+def _packed_qty_from_packing_lines(
+    material_codes: Optional[Iterable[str]] = None,
+) -> Dict[str, int]:
+    """Tray/carton qty consumed on packing lines."""
+    codes = sorted({str(c).strip() for c in (material_codes or []) if str(c).strip()})
+    if not codes:
+        return {}
+    out: Dict[str, int] = {}
+    chunk = 200
+    for i in range(0, len(codes), chunk):
+        batch = codes[i : i + chunk]
+        placeholders = ", ".join(["%s"] * len(batch))
+        rows = fetch_all(
+            f"""
+            SELECT TRIM(ln.part_number) AS item_code,
+                   SUM(ln.inspected_qty) AS packed_qty
+            FROM laser_welding_line ln
+            WHERE ln.line_type = %s
+              AND ln.lot_id IS NOT NULL
+              AND TRIM(ln.part_number) IN ({placeholders})
+            GROUP BY TRIM(ln.part_number)
+            """,
+            (LINE_PACKING, *batch),
+        )
+        for r in rows:
+            code = str(r.get("item_code") or "").strip()
+            if code:
+                out[code] = int(float(r.get("packed_qty") or 0))
+    return out
+
+
+def _pack_material_stock_catalog(
+    cust_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Tray and carton item codes from lw_packing_tray / lw_packing_carton."""
+    tray_sql = """
+        SELECT TRIM(t.tray_item_code) AS item_code,
+               'Tray' AS row_type,
+               COALESCE(im.ITEM_NAME, 'Tray') AS item_name,
+               t.cust_id
+        FROM lw_packing_tray t
+        LEFT JOIN ITEM_MASTER im ON TRIM(im.ITEM_CODE) = TRIM(t.tray_item_code)
+    """
+    tray_params: List[Any] = []
+    if cust_id is not None:
+        tray_sql += " WHERE t.cust_id = %s"
+        tray_params.append(int(cust_id))
+    tray_sql += " ORDER BY t.tray_item_code"
+
+    carton_sql = """
+        SELECT TRIM(c.carton_item_code) AS item_code,
+               'Carton' AS row_type,
+               COALESCE(im.ITEM_NAME, 'Carton') AS item_name,
+               NULL AS cust_id
+        FROM lw_packing_carton c
+        LEFT JOIN ITEM_MASTER im ON TRIM(im.ITEM_CODE) = TRIM(c.carton_item_code)
+        ORDER BY c.carton_item_code
+    """
+    catalog: List[Dict[str, Any]] = []
+    for r in fetch_all(tray_sql, tuple(tray_params) if tray_params else None):
+        code = str(r.get("item_code") or "").strip()
+        if code:
+            catalog.append(dict(r))
+    for r in fetch_all(carton_sql):
+        code = str(r.get("item_code") or "").strip()
+        if code:
+            catalog.append(dict(r))
+    return catalog
+
+
+def get_stock_report(
+    cust_id: Optional[int] = None,
+    q: str = "",
+) -> Dict[str, Any]:
+    search_q = str(q or "").strip().lower()
+    erp_cache: Dict[str, int] = {}
+    lw_boms = get_boms(cust_id)
+    bom_catalog: Dict[str, Dict[str, Any]] = {
+        str(b.get("bomNo") or "").strip(): b
+        for b in lw_boms
+        if str(b.get("bomNo") or "").strip()
+    }
+    packed_by_bom = _packed_qty_by_bom(bom_catalog.keys())
+
+    child_lot_rows = fetch_all(
+        """
+        SELECT l.*
+        FROM laser_welding_lot l
+        WHERE l.bom_id IS NULL
+        ORDER BY l.part_number, l.lot_id DESC
+        """
+    )
+    part_states: Dict[str, Dict[str, Any]] = {}
+
+    for lot in child_lot_rows:
+        part_no = str(lot.get("part_number") or "").strip()
+        if not part_no:
+            continue
+        entry = part_states.setdefault(
+            part_no,
+            {
+                "rowType": "Part",
+                "partNo": part_no,
+                "bomNo": "",
+                "label": part_no,
+                "partName": _part_name(part_no),
+                "states": _empty_stock_states(),
+            },
+        )
+        entry["states"]["fg"] += int(lot.get("total_okayed") or 0)
+        entry["states"]["qa"] += int(lot.get("total_qa") or 0)
+        entry["states"]["scrap"] += int(lot.get("scrap") or 0)
+        entry["states"]["rework_pending"] += int(lot.get("rework_pending") or 0)
+
+    for p in get_parts("production"):
+        part_no = str(p.get("partNo") or p.get("part_no") or "").strip()
+        if not part_no:
+            continue
+        entry = part_states.setdefault(
+            part_no,
+            {
+                "rowType": "Part",
+                "partNo": part_no,
+                "bomNo": "",
+                "label": part_no,
+                "partName": p.get("partName") or p.get("part_name") or _part_name(part_no),
+                "states": _empty_stock_states(),
+            },
+        )
+        if p.get("partName") or p.get("part_name"):
+            entry["partName"] = p.get("partName") or p.get("part_name")
+
+    for part_no, entry in part_states.items():
+        entry["states"]["inspection_pending"] = _tracking_erp_available(part_no, erp_cache)
+
+    sa_states: Dict[str, Dict[str, Any]] = {}
+    bom_states: Dict[str, Dict[str, Any]] = {}
+
+    asm_rows = fetch_all(
+        """
+        SELECT l.*, b.bom_no, b.product_name, b.cust_id,
+               COALESCE(c.CU_Name, '') AS customer_name
+        FROM laser_welding_lot l
+        LEFT JOIN bom b ON b.bom_id = l.bom_id AND b.is_latest_version = 'Y'
+        LEFT JOIN customer c ON c.CU_Id = b.cust_id
+        WHERE l.bom_id IS NOT NULL
+          AND l.new_lot_no IS NOT NULL
+          AND TRIM(l.new_lot_no) != ''
+          AND l.new_lot_no NOT LIKE %s
+        """,
+        ("LBO/%",),
+    )
+
+    for row in asm_rows:
+        if cust_id is not None and int(row.get("cust_id") or 0) != int(cust_id):
+            continue
+        bom_no = str(row.get("bom_no") or "").strip()
+        part_no = str(row.get("part_number") or "").strip()
+        is_sa = _is_sub_assembly_lot_row(row, bom_no)
+        is_fg = _is_final_assembly_lot_row(row, bom_no)
+        if not is_sa and not is_fg:
+            lot_no = str(row.get("new_lot_no") or "")
+            if lot_no.startswith("SA/"):
+                is_sa = True
+            elif lot_no.startswith("LW/"):
+                is_fg = True
+            else:
+                continue
+
+        awaiting = int(row.get("inspection_pending") or 0)
+        qa = int(row.get("total_qa") or 0)
+        ready = int(row.get("total_okayed") or 0)
+        rework = int(row.get("rework_pending") or 0)
+        scrap = int(row.get("scrap") or 0)
+        packed_avail = int(packed_by_bom.get(bom_no) or 0) if is_fg and bom_no else 0
+        if awaiting + qa + ready + rework + scrap <= 0 and packed_avail <= 0:
+            continue
+
+        if is_sa:
+            key = part_no
+            entry = sa_states.setdefault(
+                key,
+                {
+                    "rowType": "SA",
+                    "partNo": part_no,
+                    "bomNo": bom_no,
+                    "label": part_no,
+                    "partName": row.get("product_name") or _part_name(part_no),
+                    "states": _empty_stock_states(),
+                },
+            )
+            entry["states"]["inspection_pending"] += awaiting
+            entry["states"]["qa"] += qa
+            entry["states"]["fg"] += ready
+            entry["states"]["rework_pending"] += rework
+            entry["states"]["scrap"] += scrap
+        else:
+            key = bom_no or part_no
+            entry = bom_states.setdefault(
+                key,
+                {
+                    "rowType": "BOM",
+                    "partNo": part_no,
+                    "bomNo": bom_no,
+                    "label": bom_no or part_no,
+                    "partName": row.get("product_name") or "",
+                    "states": _empty_stock_states(),
+                },
+            )
+            entry["states"]["inspection_pending"] += awaiting
+            entry["states"]["qa"] += qa
+            entry["states"]["fg"] += ready
+            entry["states"]["rework_pending"] += rework
+            entry["states"]["scrap"] += scrap
+
+    for entry in bom_states.values():
+        bn = str(entry.get("bomNo") or "").strip()
+        if bn:
+            entry["states"]["packed"] = int(packed_by_bom.get(bn) or 0)
+
+    for bom_no, bom in bom_catalog.items():
+        if bom_no in bom_states:
+            continue
+        packed_qty = int(packed_by_bom.get(bom_no) or 0)
+        if packed_qty <= 0:
+            continue
+        bom_states[bom_no] = {
+            "rowType": "BOM",
+            "partNo": bom_no,
+            "bomNo": bom_no,
+            "label": bom_no,
+            "partName": bom.get("productName") or "",
+            "states": _empty_stock_states(),
+        }
+        bom_states[bom_no]["states"]["packed"] = packed_qty
+
+    out: List[Dict[str, Any]] = []
+    for bucket in (part_states, sa_states, bom_states):
+        for entry in bucket.values():
+            total = _stock_states_total(entry["states"])
+            if total <= 0:
+                continue
+            if not _stock_matches_query(
+                entry["rowType"],
+                entry["partNo"],
+                entry["bomNo"],
+                entry["partName"],
+                search_q,
+            ):
+                continue
+            row = {
+                "rowType": entry["rowType"],
+                "partNo": entry["partNo"],
+                "bomNo": entry["bomNo"],
+                "label": entry["label"],
+                "partName": entry["partName"],
+                "totalQty": total,
+            }
+            for sk in STOCK_STATE_KEYS:
+                row[sk] = int(entry["states"].get(sk) or 0)
+            out.append(row)
+
+    material_catalog = _pack_material_stock_catalog(cust_id)
+    material_codes = [str(m.get("item_code") or "").strip() for m in material_catalog]
+    material_codes = [c for c in material_codes if c]
+    fg_by_material = _inventory_qty_by_item_codes(material_codes)
+    packed_by_material = _packed_qty_from_packing_lines(material_codes)
+    seen_materials: set = set()
+    for mat in material_catalog:
+        item_code = str(mat.get("item_code") or "").strip()
+        if not item_code or item_code in seen_materials:
+            continue
+        seen_materials.add(item_code)
+        row_type = str(mat.get("row_type") or "Material")
+        item_name = str(mat.get("item_name") or item_code)
+        fg_qty = int(fg_by_material.get(item_code) or 0)
+        packed_qty = int(packed_by_material.get(item_code) or 0)
+        if fg_qty <= 0 and packed_qty <= 0:
+            continue
+        if not _stock_matches_query(row_type, item_code, "", item_name, search_q):
+            continue
+        states = _empty_stock_states()
+        states["fg"] = fg_qty
+        states["packed"] = packed_qty
+        out.append(
+            {
+                "rowType": row_type,
+                "partNo": item_code,
+                "bomNo": "",
+                "label": item_code,
+                "partName": item_name,
+                "totalQty": _stock_states_total(states),
+                **{sk: int(states.get(sk) or 0) for sk in STOCK_STATE_KEYS},
+            }
+        )
+
+    type_order = {"Part": 0, "SA": 1, "BOM": 2, "Tray": 3, "Carton": 4}
+    out.sort(key=lambda x: (type_order.get(x.get("rowType"), 9), x.get("label") or ""))
+    return {
+        "count": len(out),
+        "rows": out,
+        "stateColumns": [
+            {"key": k, "label": STOCK_STATE_LABELS[k]}
+            for k in STOCK_STATE_KEYS
+        ],
+    }
+
+
+def _report_lines_base_sql() -> str:
+    return """
+        SELECT
+            ln.line_id,
+            ln.production_date,
+            ln.line_type,
+            ln.part_number,
+            ln.source_lot_no,
+            ln.inspected_qty,
+            ln.qa_qty,
+            ln.scrap_qty,
+            ln.rework_qty,
+            ln.scrap_remark,
+            ln.rework_remark,
+            ln.time_taken_minutes,
+            ln.ot_flag,
+            ln.operator_id,
+            ln.machine_id,
+            ln.bom_id,
+            l.new_lot_no AS lot_no,
+            l.lot_id,
+            l.part_number AS lot_part_number,
+            COALESCE(l.bom_id, ln.bom_id) AS effective_bom_id,
+            b.bom_no,
+            b.product_name,
+            COALESCE(c.CU_Name, '') AS customer_name,
+            COALESCE(op.OP_NAME, '') AS operator_name,
+            COALESCE(op.OP_ECNO, '') AS operator_ecno,
+            COALESCE(m.MCM_Name, '') AS machine_name
+        FROM laser_welding_line ln
+        LEFT JOIN laser_welding_lot l ON l.lot_id = ln.lot_id
+        LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
+        LEFT JOIN customer c ON c.CU_Id = b.cust_id
+        LEFT JOIN operators op ON op.OP_ID = ln.operator_id
+        LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
+    """
+
+
+def _report_entry_from_line(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    bom_no = str(r.get("bom_no") or "").strip()
+    part_no = str(r.get("part_number") or "").strip()
+    lot_part = str(r.get("lot_part_number") or "").strip()
+    if lot_part:
+        part_no = lot_part
+    wf_step = _history_step_for_line(r.get("line_type"), part_no, bom_no)
+    if not wf_step:
+        return None
+
+    lot_no = str(r.get("lot_no") or "").strip()
+    if not lot_no:
+        src = str(r.get("source_lot_no") or "").strip()
+        if src and src != SESSION_SOURCE_LOT:
+            lot_no = src
+
+    label = part_no
+    if wf_step in ("laser_welding", "lw_cleaning", "lw_rework", "packing") and bom_no:
+        label = bom_no
+    elif wf_step in ("sub_assembly", "sa_cleaning", "sa_rework") and part_no:
+        label = part_no
+
+    pd = r.get("production_date")
+    if hasattr(pd, "strftime"):
+        work_date_iso = pd.strftime("%Y-%m-%d")
+    else:
+        work_date_iso = _parse_date(pd) or ""
+
+    row_class = _history_row_class(wf_step, part_no, bom_no)
+    return {
+        "lineId": int(r["line_id"]),
+        "workDate": work_date_iso,
+        "workflowStep": wf_step,
+        "workflowLabel": HISTORY_STEP_LABELS.get(wf_step, wf_step),
+        "rowClass": row_class,
+        "rowType": row_class,
+        "partNo": part_no,
+        "bomNo": bom_no,
+        "label": label,
+        "partName": _part_name(part_no) if part_no else "",
+        "productName": str(r.get("product_name") or "").strip(),
+        "customerName": str(r.get("customer_name") or "").strip(),
+        "lotNo": lot_no,
+        "lotId": int(r["lot_id"]) if r.get("lot_id") is not None else None,
+        "lineType": str(r.get("line_type") or ""),
+        "inspectedQty": int(r.get("inspected_qty") or 0),
+        "qaQty": int(r.get("qa_qty") or 0),
+        "scrapQty": int(r.get("scrap_qty") or 0),
+        "reworkQty": int(r.get("rework_qty") or 0),
+        "scrapRemark": str(r.get("scrap_remark") or "").strip(),
+        "reworkRemark": str(r.get("rework_remark") or "").strip(),
+        "operatorName": str(r.get("operator_name") or "").strip(),
+        "operatorEcno": str(r.get("operator_ecno") or "").strip(),
+        "machineName": str(r.get("machine_name") or "").strip(),
+        "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
+        "otFlag": _normalize_ot_flag(r.get("ot_flag")),
+    }
+
+
+def _report_entry_matches_search(item: Dict[str, Any], search_q: str) -> bool:
+    if not search_q:
+        return True
+    hay = " ".join(
+        str(item.get(k) or "")
+        for k in (
+            "workflowLabel", "rowClass", "label", "partNo", "bomNo",
+            "partName", "productName", "customerName", "lotNo",
+            "operatorName", "operatorEcno", "machineName", "lineType",
+            "scrapRemark", "reworkRemark",
+        )
+    ).lower()
+    return search_q in hay
+
+
+def get_qa_history(
+    date_from: str,
+    date_to: str,
+    q: str = "",
+    step: str = "",
+    limit: int = 2500,
+) -> Dict[str, Any]:
+    d_from_str = _parse_date(date_from)
+    d_to_str = _parse_date(date_to)
+    if not d_from_str or not d_to_str:
+        raise ValueError("from and to dates are required (YYYY-MM-DD)")
+    d_from = datetime.strptime(d_from_str, "%Y-%m-%d").date()
+    d_to = datetime.strptime(d_to_str, "%Y-%m-%d").date()
+    if d_from > d_to:
+        raise ValueError("from date must be on or before to date")
+    if (d_to - d_from).days > 366:
+        raise ValueError("Date range cannot exceed 366 days")
+
+    search_q = str(q or "").strip().lower()
+    step_filter = str(step or "").strip()
+    if step_filter and step_filter not in HISTORY_STEP_LABELS:
+        raise ValueError("Invalid workflow step filter")
+    cap = max(1, min(int(limit or 2500), 5000))
+
+    rows = fetch_all(
+        _report_lines_base_sql()
+        + """
+        WHERE ln.production_date >= %s
+          AND ln.production_date <= %s
+          AND ln.qa_qty > 0
+          AND ln.line_type <> %s
+          AND NOT (
+            ln.lot_id IS NULL
+            AND ln.source_lot_no = %s
+            AND ln.inspected_qty = 0
+            AND ln.qa_qty = 0
+            AND ln.scrap_qty = 0
+            AND ln.rework_qty = 0
+          )
+        ORDER BY ln.production_date DESC, ln.line_id DESC
+        LIMIT %s
+        """,
+        (d_from, d_to, LINE_QA_DISPOSITION, SESSION_SOURCE_LOT, cap),
+    )
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        item = _report_entry_from_line(r)
+        if not item:
+            continue
+        if item.get("workflowStep") == "qa":
+            continue
+        if step_filter and item.get("workflowStep") != step_filter:
+            continue
+        if not _report_entry_matches_search(item, search_q):
+            continue
+        out.append(item)
+
+    out.sort(key=lambda x: x.get("workDate") or "", reverse=True)
+    return {
+        "from": _format_date(d_from),
+        "to": _format_date(d_to),
+        "count": len(out),
+        "rows": out,
+    }
+
+
+def get_scrap_history(
+    date_from: str,
+    date_to: str,
+    q: str = "",
+    step: str = "",
+    limit: int = 2500,
+) -> Dict[str, Any]:
+    d_from_str = _parse_date(date_from)
+    d_to_str = _parse_date(date_to)
+    if not d_from_str or not d_to_str:
+        raise ValueError("from and to dates are required (YYYY-MM-DD)")
+    d_from = datetime.strptime(d_from_str, "%Y-%m-%d").date()
+    d_to = datetime.strptime(d_to_str, "%Y-%m-%d").date()
+    if d_from > d_to:
+        raise ValueError("from date must be on or before to date")
+    if (d_to - d_from).days > 366:
+        raise ValueError("Date range cannot exceed 366 days")
+
+    search_q = str(q or "").strip().lower()
+    step_filter = str(step or "").strip()
+    if step_filter and step_filter not in HISTORY_STEP_LABELS:
+        raise ValueError("Invalid workflow step filter")
+    cap = max(1, min(int(limit or 2500), 5000))
+
+    rows = fetch_all(
+        _report_lines_base_sql()
+        + """
+        WHERE ln.production_date >= %s
+          AND ln.production_date <= %s
+          AND ln.scrap_qty > 0
+          AND NOT (
+            ln.lot_id IS NULL
+            AND ln.source_lot_no = %s
+            AND ln.inspected_qty = 0
+            AND ln.qa_qty = 0
+            AND ln.scrap_qty = 0
+            AND ln.rework_qty = 0
+          )
+        ORDER BY ln.production_date DESC, ln.line_id DESC
+        LIMIT %s
+        """,
+        (d_from, d_to, SESSION_SOURCE_LOT, cap),
+    )
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        item = _report_entry_from_line(r)
+        if not item:
+            continue
+        if step_filter and item.get("workflowStep") != step_filter:
+            continue
+        if not _report_entry_matches_search(item, search_q):
+            continue
+        out.append(item)
+
+    out.sort(key=lambda x: x.get("workDate") or "", reverse=True)
+    return {
+        "from": _format_date(d_from),
+        "to": _format_date(d_to),
+        "count": len(out),
+        "rows": out,
+    }
