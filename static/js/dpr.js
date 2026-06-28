@@ -161,6 +161,22 @@ window.DprPage = (() => {
     if (modal) modal.classList.add("dpr-hidden");
   }
 
+  function openDprWarningModal(message) {
+    const modal = document.getElementById("dpr-warning-modal");
+    const messageEl = document.getElementById("dpr-warning-modal-message");
+    if (!modal || !messageEl) {
+      notify(message || "Selection blocked", true);
+      return;
+    }
+    messageEl.textContent = message || "Selection blocked";
+    modal.classList.remove("dpr-hidden");
+  }
+
+  function closeDprWarningModal() {
+    const modal = document.getElementById("dpr-warning-modal");
+    if (modal) modal.classList.add("dpr-hidden");
+  }
+
   async function refreshQrMap() {
     try {
       const res = await Api.qrList();
@@ -241,6 +257,18 @@ window.DprPage = (() => {
     return Number.isFinite(Number(q));
   }
 
+  async function toolHasActiveBreakdown(toolNo) {
+    const normalized = String(toolNo || "").trim();
+    if (!normalized) return false;
+    try {
+      const rows = await Api.breakdownList({ status: "active", toolNo: normalized, limit: 1 });
+      return Array.isArray(rows) && rows.length > 0;
+    } catch (e) {
+      console.warn("Breakdown check failed:", e);
+      return false;
+    }
+  }
+
   function syncBreakdownButton(tr, row) {
     if (!tr || !breakdownAccess) return;
     const brBtn = tr.querySelector(".dpr-breakdown-btn");
@@ -248,7 +276,7 @@ window.DprPage = (() => {
     const ok = hasDprProducedQty(row);
     brBtn.disabled = !ok;
     brBtn.title = ok
-      ? "Raise tool breakdown"
+      ? "Raise tooldown"
       : "Enter Produced Qty on this line first (0 is allowed)";
   }
 
@@ -295,7 +323,7 @@ window.DprPage = (() => {
     const success = document.getElementById("dpr-breakdown-success");
     const cancelBtn = document.getElementById("dpr-breakdown-cancel");
     const submitBtn = document.getElementById("dpr-breakdown-submit");
-    if (title) title.textContent = isSuccess ? "Request Raised Successfully" : "Raise Tool Breakdown";
+    if (title) title.textContent = isSuccess ? "Request Raised Successfully" : "Raise Tooldown";
     if (form) form.style.display = isSuccess ? "none" : "flex";
     if (success) success.style.display = "none";
     if (cancelBtn) cancelBtn.textContent = isSuccess ? "Close" : "Cancel";
@@ -324,7 +352,7 @@ window.DprPage = (() => {
     const modal = document.getElementById("dpr-breakdown-modal");
     if (!modal) return;
     if (!hasDprProducedQty(row)) {
-      notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+      notify("Enter Produced Qty on this line before raising a tooldown (0 is allowed).", true);
       return;
     }
     const rowIdx = pendingRows.indexOf(row);
@@ -333,7 +361,7 @@ window.DprPage = (() => {
       await saveRow(rowIdx, dateVal, { silent: true });
       row = pendingRows[rowIdx];
       if (!hasDprProducedQty(row)) {
-        notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+        notify("Enter Produced Qty on this line before raising a tooldown (0 is allowed).", true);
         return;
       }
     }
@@ -347,6 +375,7 @@ window.DprPage = (() => {
     const partName = row?.partName || "";
     const issueInput = document.getElementById("dpr-breakdown-issue");
     const priorityInput = document.getElementById("dpr-breakdown-priority");
+    const toolDownInput = document.getElementById("dpr-breakdown-tooldown");
     const operatorInput = document.getElementById("dpr-breakdown-operator");
     const submitBtn = document.getElementById("dpr-breakdown-submit");
     const now = new Date();
@@ -366,9 +395,10 @@ window.DprPage = (() => {
     if (producedEl) producedEl.value = formatCellNumber(row?.producedQty);
     if (issueInput) issueInput.value = "";
     if (priorityInput) priorityInput.value = "Immediate";
+    if (toolDownInput) toolDownInput.value = "Breakdown";
     if (operatorInput) operatorInput.value = "";
     if (submitBtn) submitBtn.disabled = true;
-    setBreakdownWarning("Checking for existing open breakdowns...");
+    setBreakdownWarning("Checking for existing open tooldowns...");
 
     breakdownModalState = {
       row,
@@ -386,7 +416,7 @@ window.DprPage = (() => {
     const hasOpen = await checkOpenBreakdown(toolNo);
     if (submitBtn) submitBtn.disabled = hasOpen;
     setBreakdownWarning(
-      hasOpen ? "An open breakdown already exists for this tool." : ""
+      hasOpen ? "An open tooldown already exists for this tool." : ""
     );
     if (submitBtn && !hasOpen) submitBtn.disabled = false;
   }
@@ -1296,9 +1326,43 @@ window.DprPage = (() => {
         inp.value = row.partNo || "";
         inp.addEventListener("change", async () => {
           const partNo = String(inp.value || "").trim();
+          if (!partNo) {
+            pendingRows[idx].partNo = "";
+            pendingRows[idx].partName = "";
+            pendingRows[idx].toolNo = null;
+            pendingRows[idx].rmIssued = null;
+            pendingRows[idx].rmAvailable = null;
+            pendingRows[idx].rmCode = null;
+            pendingRows[idx].rmCoverageNos = null;
+            pendingRows[idx].rmAllocated = null;
+            pendingRows[idx].strokesConsumed = null;
+            pendingRows[idx].pmDue = null;
+            await autoSaveReadyRow(idx, dateVal);
+            render();
+            return;
+          }
           pendingRows[idx].partNo = partNo;
           pendingRows[idx].partName = partNameFor(partNo);
           await refreshDerived(idx);
+          const toolNo = String(pendingRows[idx].toolNo || "").trim();
+          if (toolNo && (await toolHasActiveBreakdown(toolNo))) {
+            pendingRows[idx].partNo = "";
+            pendingRows[idx].partName = "";
+            pendingRows[idx].toolNo = null;
+            pendingRows[idx].rmIssued = null;
+            pendingRows[idx].rmAvailable = null;
+            pendingRows[idx].rmCode = null;
+            pendingRows[idx].rmCoverageNos = null;
+            pendingRows[idx].rmAllocated = null;
+            pendingRows[idx].strokesConsumed = null;
+            pendingRows[idx].pmDue = null;
+            inp.value = "";
+            openDprWarningModal(
+                `Tool ${toolNo} is in an active tooldown and has not been closed yet. Please choose a different part number.`
+            );
+            render();
+            return;
+          }
           await autoSaveReadyRow(idx, dateVal);
           render();
         });
@@ -1416,7 +1480,7 @@ window.DprPage = (() => {
           const brBtn = document.createElement("button");
           brBtn.type = "button";
           brBtn.className = "ti-btn ti-btn--xs ti-btn--ghost dpr-breakdown-btn";
-          brBtn.textContent = "Breakdown";
+          brBtn.textContent = "Tooldown";
           brBtn.addEventListener("click", () => openBreakdownModal(pendingRows[idx]));
           syncBreakdownButton(tr, row);
           actionCell.appendChild(brBtn);
@@ -1700,6 +1764,11 @@ window.DprPage = (() => {
     if (qrClose) qrClose.addEventListener("click", closeQrModal);
     if (qrBackdrop) qrBackdrop.addEventListener("click", closeQrModal);
 
+    const warnClose = document.getElementById("dpr-warning-modal-close");
+    const warnBackdrop = document.getElementById("dpr-warning-modal-backdrop");
+    if (warnClose) warnClose.addEventListener("click", closeDprWarningModal);
+    if (warnBackdrop) warnBackdrop.addEventListener("click", closeDprWarningModal);
+
     if (breakdownAccess) {
       const brCancel = document.getElementById("dpr-breakdown-cancel");
       if (brCancel) brCancel.addEventListener("click", closeBreakdownModal);
@@ -1711,11 +1780,12 @@ window.DprPage = (() => {
             pendingRows.find((r) => r.id && r.id === breakdownModalState.dprRowId) ||
             breakdownModalState.row;
           if (!hasDprProducedQty(liveRow)) {
-            notify("Enter Produced Qty on this line before raising a breakdown (0 is allowed).", true);
+            notify("Enter Produced Qty on this line before raising a tooldown (0 is allowed).", true);
             return;
           }
           const issueInput = document.getElementById("dpr-breakdown-issue");
           const priorityInput = document.getElementById("dpr-breakdown-priority");
+          const toolDownInput = document.getElementById("dpr-breakdown-tooldown");
           const operatorInput = document.getElementById("dpr-breakdown-operator");
           const issue = String(issueInput?.value || "").trim();
           if (!issue) {
@@ -1723,6 +1793,7 @@ window.DprPage = (() => {
             return;
           }
           const priority = String(priorityInput?.value || "Immediate").trim();
+          const toolDown = String(toolDownInput?.value || "Breakdown").trim() || "Breakdown";
           const operatorLabel = String(operatorInput?.value || "").trim();
           const operator = breakdownOperatorByLabel.get(operatorLabel);
           if (!operator) {
@@ -1740,6 +1811,7 @@ window.DprPage = (() => {
               machineName: breakdownModalState.machineName,
               issue,
               priority,
+              toolDown,
               operatorId: operator.id,
               dprRowId: breakdownModalState.dprRowId,
               dprProducedQty: liveRow.producedQty,
@@ -1756,7 +1828,7 @@ window.DprPage = (() => {
             }
           } catch (e) {
             console.error(e);
-            notify(e.message || "Failed to raise breakdown.", true);
+            notify(e.message || "Failed to raise tooldown.", true);
             brSubmit.disabled = false;
           }
         });

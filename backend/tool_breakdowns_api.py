@@ -262,6 +262,7 @@ def _breakdown_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": row.get("id"),
         "toolNo": row.get("tool_no"),
+        "toolDown": row.get("tool_down") or "Breakdown",
         "partNo": row.get("part_no"),
         "partName": row.get("part_name"),
         "machineId": row.get("machine_id"),
@@ -373,6 +374,10 @@ def create_breakdown():
     if priority not in {"Immediate", "Next Day", "Delayed"}:
         return jsonify({"error": "Invalid priority"}), 400
 
+    tool_down = str(payload.get("toolDown") or "Breakdown").strip() or "Breakdown"
+    if tool_down not in {"Breakdown", "Schedule Complete", "RM Complete"}:
+        return jsonify({"error": "Invalid toolDown"}), 400
+
     operator_id = payload.get("operatorId")
     operator_row = _fetch_active_operator(operator_id)
     if not operator_row:
@@ -437,12 +442,12 @@ def create_breakdown():
         INSERT INTO tool_breakdowns
             (tool_no, part_no, part_name, machine_id, machine_name,
              dpr_row_id, dpr_review_date, dpr_produced_qty, issue,
-             priority, operator_user_id, operator_login, operator_name,
+             tool_down, priority, operator_user_id, operator_login, operator_name,
              downtime_at, created_by, updated_by)
         VALUES
             (%s, %s, %s, %s, %s,
              %s, %s, %s, %s,
-             %s, %s, %s, %s,
+             %s, %s, %s, %s, %s,
              NOW(), %s, %s)
         """,
         (
@@ -455,6 +460,7 @@ def create_breakdown():
             dpr_review_date.isoformat() if dpr_review_date else None,
             dpr_produced_qty,
             issue,
+            tool_down,
             priority,
             operator_row.get("id"),
             operator_row.get("ecno"),
@@ -468,7 +474,7 @@ def create_breakdown():
 
 
 _BREAKDOWN_SELECT_COLUMNS = """
-            id, tool_no, part_no, part_name, machine_id, machine_name,
+            id, tool_no, tool_down, part_no, part_name, machine_id, machine_name,
             dpr_row_id, dpr_review_date, dpr_produced_qty,
             issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
             root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,
@@ -501,6 +507,7 @@ def _parse_month_year_filters() -> tuple[Optional[int], Optional[int], Optional[
 def _fetch_breakdown_rows(
     status: str,
     tool_no_raw: Optional[str] = None,
+    tool_down_raw: Optional[str] = None,
     limit_raw: Optional[str] = None,
 ) -> tuple[Optional[List[Dict[str, Any]]], Optional[tuple]]:
     where_parts: List[str] = []
@@ -524,6 +531,13 @@ def _fetch_breakdown_rows(
         if tool_no:
             where_parts.append("tool_no = %s")
             params.append(tool_no)
+
+    if tool_down_raw:
+        tool_down = str(tool_down_raw or "").strip()
+        if tool_down not in {"Breakdown", "Schedule Complete", "RM Complete"}:
+            return None, (jsonify({"error": "Invalid toolDown"}), 400)
+        where_parts.append("COALESCE(tool_down, 'Breakdown') = %s")
+        params.append(tool_down)
 
     limit_clause = ""
     if limit_raw not in (None, ""):
@@ -567,6 +581,7 @@ def _breakdown_export_title_line(
 def _breakdown_export_headers(*, closed: bool) -> List[str]:
     headers = [
         "Tool No",
+        "Tool Down",
         "Priority",
         "Part No",
         "Part Name",
@@ -593,6 +608,7 @@ def _breakdown_export_row(rec: Dict[str, Any], *, closed: bool) -> List[Any]:
     completed_by = rec.get("completedByName") or rec.get("completedByLogin") or ""
     vals: List[Any] = [
         rec.get("toolNo") or "",
+        rec.get("toolDown") or "Breakdown",
         rec.get("priority") or "Immediate",
         rec.get("partNo") or "",
         rec.get("partName") or "",
@@ -624,6 +640,7 @@ def list_breakdowns():
     rows, err = _fetch_breakdown_rows(
         status,
         tool_no_raw=request.args.get("toolNo"),
+        tool_down_raw=request.args.get("toolDown"),
         limit_raw=request.args.get("limit"),
     )
     if err:
@@ -641,7 +658,12 @@ def export_breakdowns():
     if status not in {"active", "closed"}:
         return jsonify({"error": "Invalid status"}), 400
 
-    rows, err = _fetch_breakdown_rows(status)
+    rows, err = _fetch_breakdown_rows(
+        status,
+        tool_no_raw=request.args.get("toolNo"),
+        tool_down_raw=request.args.get("toolDown"),
+        limit_raw=request.args.get("limit"),
+    )
     if err:
         return err
 
@@ -795,7 +817,7 @@ def update_breakdown(breakdown_id: int):
     row = fetch_one(
         """
         SELECT
-            id, tool_no, part_no, part_name, machine_id, machine_name,
+            id, tool_no, tool_down, part_no, part_name, machine_id, machine_name,
             dpr_row_id, dpr_review_date, dpr_produced_qty,
             issue, priority, operator_user_id, operator_login, operator_name, downtime_at,
             root_cause, root_cause_at, analysis, action_taken, action_taken_at, remarks, spare_consumed,

@@ -137,6 +137,24 @@
   </div>
 </div>
 
+<!-- DPR warning modal -->
+<div
+  id="dpr-warning-modal"
+  class="dpr-qr-modal dpr-hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="dpr-warning-modal-title"
+>
+  <div class="dpr-qr-modal-backdrop" id="dpr-warning-modal-backdrop"></div>
+  <div class="dpr-qr-modal-card">
+    <div class="dpr-qr-modal-head">
+      <h3 id="dpr-warning-modal-title" class="dpr-qr-modal-title">Selection blocked</h3>
+      <button type="button" id="dpr-warning-modal-close" class="ti-btn ti-btn-outline ti-btn-sm">Close</button>
+    </div>
+    <p id="dpr-warning-modal-message" class="dpr-qr-modal-hint" style="margin-top:0.5rem"></p>
+  </div>
+</div>
+
 <!-- Tool Breakdown Modal -->
 <div class="ti-modal-overlay" id="dpr-breakdown-modal">
   <div class="ti-modal">
@@ -159,6 +177,14 @@
             <option value="Immediate">Immediate</option>
             <option value="Next Day">Next Day</option>
             <option value="Delayed">Delayed</option>
+          </select>
+        </div>
+        <div>
+          <label class="ti-form-label">Tool Down</label>
+          <select class="ti-input" id="dpr-breakdown-tooldown" style="width:100%">
+            <option value="Breakdown">Breakdown</option>
+            <option value="Schedule Complete">Schedule Complete</option>
+            <option value="RM Complete">RM Complete</option>
           </select>
         </div>
         <div>

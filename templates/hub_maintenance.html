@@ -7,7 +7,7 @@
     <button class="ti-tab active" data-tab="tools">🔧 Tools Today</button>
     <button class="ti-tab" data-tab="pm">🛠️ Preventive Maintenance</button>
     <button class="ti-tab" data-tab="life">📊 Life Report</button>
-    <button class="ti-tab" data-tab="breakdown">🧯 Breakdown</button>
+    <button class="ti-tab" data-tab="breakdown">🧯 Tooldown</button>
   </div>
   <div class="ti-tabs__inline ti-tabs__inline--pm" id="maint-inline-pm" hidden>
     <span id="pmStatusCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:4px;padding:4px 8px;letter-spacing:0.05em"></span>
@@ -23,9 +23,25 @@
     <input type="text" class="ti-input" id="lifeSearch" placeholder="Filter tool no…" style="width:min(200px,32vw)" autocomplete="off"/>
   </div>
   <div class="ti-tabs__inline ti-tabs__inline--breakdown" id="maint-inline-breakdown" hidden>
-    <div class="ti-breakdown-status-tabs" id="breakdown-tabs" role="tablist" aria-label="Breakdown status">
+    <div class="ti-breakdown-status-tabs" id="breakdown-tabs" role="tablist" aria-label="Tooldown status">
       <button type="button" class="ti-breakdown-tab active" data-breakdown-tab="active" role="tab" aria-selected="true">Active</button>
       <button type="button" class="ti-breakdown-tab" data-breakdown-tab="closed" role="tab" aria-selected="false">Closed</button>
+    </div>
+    <div class="ti-dc-week-filter" role="group" aria-label="Tool down filter">
+      <span class="ti-dc-week-filter-label" id="breakdown-tool-down-lbl">Tool Down</span>
+      <div class="ti-period-select">
+        <button type="button" class="ti-period-select__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="breakdown-tool-down-lbl">
+          <span class="ti-period-select__value">All</span>
+          <span class="ti-period-select__chev" aria-hidden="true">▾</span>
+        </button>
+        <ul class="ti-period-select__menu" role="listbox" aria-labelledby="breakdown-tool-down-lbl">
+          <li class="ti-period-select__option is-selected" role="option" data-value="">All</li>
+          <li class="ti-period-select__option" role="option" data-value="Breakdown">Breakdown</li>
+          <li class="ti-period-select__option" role="option" data-value="Schedule Complete">Schedule Complete</li>
+          <li class="ti-period-select__option" role="option" data-value="RM Complete">RM Complete</li>
+        </ul>
+        <input type="hidden" id="breakdown-tool-down" value="">
+      </div>
     </div>
     <div class="ti-dc-week-filter" role="group" aria-label="Breakdown month">
       <span class="ti-dc-week-filter-label" id="breakdown-month-lbl">Month</span>
@@ -77,6 +93,7 @@
       </div>
     </div>
     <button type="button" class="ti-btn ti-btn-outline ti-btn-sm" id="breakdownExportBtn">⬇ Export</button>
+    <span id="breakdownCount" style="font-size:11px;font-weight:800;color:var(--ti-text-muted);border:1px solid var(--ti-border);border-radius:999px;padding:4px 10px;letter-spacing:0.05em;margin-left:8px;min-width:36px;text-align:center">Total 0</span>
   </div>
 </div>
 
@@ -177,7 +194,7 @@
     <div id="breakdownActiveGrid" class="ti-hub-section-fill__grid"></div>
     <div id="breakdownActiveEmpty" class="ti-empty" style="display:none">
       <div class="ti-empty-icon">🧯</div>
-      <div class="ti-empty-text">No active breakdowns</div>
+      <div class="ti-empty-text">No active tooldowns</div>
     </div>
   </div>
 
@@ -185,7 +202,7 @@
     <div id="breakdownClosedGrid" class="ti-hub-section-fill__grid"></div>
     <div id="breakdownClosedEmpty" class="ti-empty" style="display:none">
       <div class="ti-empty-icon">✅</div>
-      <div class="ti-empty-text">No closed breakdowns</div>
+      <div class="ti-empty-text">No closed tooldowns</div>
     </div>
   </div>
 </div>
@@ -915,6 +932,7 @@ function initBreakdownPeriodPickers() {
 
   if (!_breakdownPeriodDefaultsSet) {
     const now = new Date();
+    setBreakdownPeriodValue('breakdown-tool-down', '');
     setBreakdownPeriodValue('breakdown-month', now.getMonth() + 1);
     setBreakdownPeriodValue('breakdown-year', now.getFullYear());
     _breakdownPeriodDefaultsSet = true;
@@ -922,12 +940,19 @@ function initBreakdownPeriodPickers() {
 }
 
 function breakdownPeriodQuery() {
+  const toolDownHidden = document.getElementById('breakdown-tool-down');
   const monthHidden = document.getElementById('breakdown-month');
   const yearHidden = document.getElementById('breakdown-year');
+  const toolDown = toolDownHidden ? String(toolDownHidden.value || '').trim() : '';
   const month = monthHidden ? parseInt(monthHidden.value, 10) : NaN;
   const year = yearHidden ? parseInt(yearHidden.value, 10) : NaN;
-  if (!Number.isFinite(month) || !Number.isFinite(year)) return '';
-  return 'month=' + encodeURIComponent(month) + '&year=' + encodeURIComponent(year);
+  const qs = [];
+  if (toolDown) qs.push('toolDown=' + encodeURIComponent(toolDown));
+  if (Number.isFinite(month) && Number.isFinite(year)) {
+    qs.push('month=' + encodeURIComponent(month));
+    qs.push('year=' + encodeURIComponent(year));
+  }
+  return qs.join('&');
 }
 
 function breakdownEscape(value) {
@@ -1026,6 +1051,7 @@ async function loadBreakdownCompleteOperators() {
 function breakdownActiveColumns() {
   return [
     { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:120 },
+    { key:'toolDown', label:'Tool Down', width:160, format:v=>breakdownEscape(v || 'Breakdown') },
     { key:'priority', label:'Priority', width:120, format:v=>breakdownEscape(v||'Immediate') },
     { key:'partNo', label:'Part No', width:140, format:v=>breakdownEscape(v||'—') },
     { key:'partName', label:'Part Name', width:180, format:v=>breakdownEscape(v||'—') },
@@ -1046,6 +1072,7 @@ function breakdownActiveColumns() {
 function breakdownClosedColumns() {
   return [
     { key:'toolNo', label:'Tool No', className:'val-bold', pinned:true, width:120 },
+    { key:'toolDown', label:'Tool Down', width:160, format:v=>breakdownEscape(v || 'Breakdown') },
     { key:'priority', label:'Priority', width:120, format:v=>breakdownEscape(v||'Immediate') },
     { key:'partNo', label:'Part No', width:140, format:v=>breakdownEscape(v||'—') },
     { key:'partName', label:'Part Name', width:180, format:v=>breakdownEscape(v||'—') },
@@ -1134,6 +1161,12 @@ function renderBreakdownGrids() {
       options: { search: false, exportBtn: false, omitToolbar: true }
     });
   }
+  // Update the breakdown count pill for the currently visible tab
+  const countEl = document.getElementById('breakdownCount');
+  if (countEl) {
+    const count = (_breakdownTab === 'closed') ? (_breakdownClosed || []).length : (_breakdownActive || []).length;
+    countEl.textContent = 'Total ' + String(count);
+  }
 }
 
 async function loadBreakdownData(opts) {
@@ -1176,6 +1209,11 @@ function setBreakdownTab(name) {
   });
   document.getElementById('breakdownActivePanel').classList.toggle('active', name === 'active');
   document.getElementById('breakdownClosedPanel').classList.toggle('active', name === 'closed');
+  const countEl = document.getElementById('breakdownCount');
+  if (countEl) {
+    const count = (_breakdownTab === 'closed') ? (_breakdownClosed || []).length : (_breakdownActive || []).length;
+    countEl.textContent = 'Total ' + String(count);
+  }
 }
 
 document.getElementById('breakdownExportBtn').addEventListener('click', function() {
