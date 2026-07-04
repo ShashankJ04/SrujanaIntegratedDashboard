@@ -512,6 +512,19 @@
     syncReportsPicker(null);
   }
 
+  function canAutoRunReport(report) {
+    const vars = report?.variables || [];
+    if (!vars.length) return true;
+    return vars.every(v => {
+      const u = v.toUpperCase();
+      if (u === 'MONTH' || u.endsWith('_MONTH')) return true;
+      if (u === 'YEAR' || u === 'Y' || u.endsWith('_YEAR')) return true;
+      if (u === 'WEEK' || u.endsWith('_WEEK')) return true;
+      if ((u.includes('DATE') || u.endsWith('_DT') || u === 'AS_ON') && !u.endsWith('_MONTH') && !u.endsWith('_YEAR')) return true;
+      return false;
+    });
+  }
+
   function openRunReport(report) {
     currentRunReport = report;
     currentViewMode = 'root';
@@ -629,8 +642,7 @@
     try {
       const report = await apiFetch('/api/reports/reports/' + encodeURIComponent(reportId));
       openRunReport(report);
-      const vars = report.variables || [];
-      if (!vars.length) await runReportExecute();
+      if (canAutoRunReport(report)) await runReportExecute();
     } catch (err) {
       document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message || 'Failed to load report'}</div>`;
       document.getElementById('runError').style.display = 'block';

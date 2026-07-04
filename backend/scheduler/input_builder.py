@@ -44,7 +44,7 @@ def _to_float(v: Any) -> float:
 def _fetch_machines() -> List[Dict[str, Any]]:
     return fetch_all(
         "SELECT MCM_Id AS id, MCM_Name AS label, MCM_Capacity AS capacity, "
-        "MCM_Make AS make FROM machinemaster WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
+        "MCM_Make AS make FROM machinemaster WHERE MCM_ACTIVEYN = 'Y' AND MCM_Type=1 ORDER BY MCM_Name"
     )
 
 

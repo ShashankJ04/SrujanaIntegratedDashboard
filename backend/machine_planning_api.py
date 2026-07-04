@@ -12,6 +12,7 @@ from flask import Blueprint, current_app, g, jsonify, request, send_file
 from .auth import api_login_required
 from .rbac import require_access, require_plus_access
 from . import machine_planning as mp
+from .models import build_enriched_inventory_rows_for_period
 
 machine_planning_bp = Blueprint(
     "machine_planning_bp", __name__, url_prefix="/api/machine-planning"
@@ -211,8 +212,11 @@ def export_excel():
     wb = Workbook()
     wb.remove(wb.active)
 
+    inv_month, inv_year = int(ym[1]), int(ym[0])
+    shared_inv_rows = build_enriched_inventory_rows_for_period(inv_month, inv_year)
+
     for machine_id in machine_ids:
-        plan = mp.get_plan(machine_id, month)
+        plan = mp.get_plan(machine_id, month, inv_rows=shared_inv_rows)
         mc = plan.get("machine") or {}
         rows = plan.get("rows") or []
 
@@ -262,7 +266,7 @@ def export_excel():
         ws["G2"].value = "UNIT"
         ws["H2"].value = "MONTH/YEAR"
         ws["K2"].value = "Rev No. / Date"
-        ws["L2"].value = f"REV.NO.00 Dt {datetime.now().strftime('%d-%m-%Y')}"
+        ws["L2"].value = f"REV.NO.00 Dt 24-03-2026"
         _style_row(2, fill_label, lbl_font)
 
         # ── Row 3: Header values ──

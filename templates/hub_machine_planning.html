@@ -227,6 +227,9 @@
     width: 100%;
     table-layout: fixed;
   }
+  #mp-table.mp-readonly {
+    table-layout: auto;
+  }
   #mp-table .mp-remarks-col,
   #mp-table .mp-remarks-cell {
     width: auto;
@@ -234,7 +237,8 @@
   }
   #mp-table.mp-readonly .mp-remarks-col,
   #mp-table.mp-readonly .mp-remarks-cell {
-    width: 100%;
+    width: auto;
+    min-width: 200px;
   }
   #mp-table .mp-action-col,
   #mp-table .mp-action-cell {
@@ -247,7 +251,8 @@
     padding: 10px 4px;
     cursor: default;
   }
-  #mp-table.mp-readonly .mp-action-col {
+  #mp-table.mp-readonly .mp-action-col,
+  #mp-table.mp-readonly .mp-action-cell {
     display: none;
   }
   #mp-grid-root.mp-readonly {

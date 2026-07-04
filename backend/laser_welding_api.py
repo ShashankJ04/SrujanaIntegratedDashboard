@@ -13,6 +13,47 @@ from . import laser_welding as lw
 laser_welding_bp = Blueprint("laser_welding_bp", __name__, url_prefix="/api/laser-welding")
 
 
+def _parse_operator_request(body: dict) -> str:
+    """Return sorted CSV of operator IDs from request body."""
+    ids = body.get("operatorIds")
+    if ids:
+        return lw._operator_ids_csv(ids)
+    single = body.get("operatorId")
+    if single:
+        return lw._operator_ids_csv(single)
+    return ""
+
+
+def _apply_weld_parent_inspection(body: dict, result: dict, user: dict) -> None:
+    qa_qty = int(body.get("qaQty") or 0)
+    scrap_qty = int(body.get("scrapQty") or 0)
+    if qa_qty <= 0 and scrap_qty <= 0:
+        return
+    weld_qty = int(body.get("weldQty") or body.get("reworkQty") or 0)
+    if qa_qty + scrap_qty > weld_qty:
+        raise ValueError("QA + Scrap cannot exceed weld quantity")
+    lot_id = result.get("lotId")
+    if not lot_id:
+        return
+    ids_csv = _parse_operator_request(body)
+    if not ids_csv:
+        raise ValueError("Operator is required for QA/Scrap entry")
+    inspection_time = int(body.get("inspectionTimeTakenMinutes") or 0)
+    if not inspection_time:
+        raise ValueError("Inspection time is required for QA/Scrap entry")
+    lw.apply_weld_inspection(
+        lot_id=int(lot_id),
+        work_date=str(body.get("workDate") or "").strip(),
+        qa_qty=qa_qty,
+        scrap_qty=scrap_qty,
+        operator_ids=ids_csv,
+        time_taken_minutes=inspection_time,
+        scrap_remark=str(body.get("scrapRemark") or "").strip() or None,
+        processed_by=user.get("userId"),
+        ot_flag=body.get("otFlag"),
+    )
+
+
 @laser_welding_bp.before_request
 def _auth():
     result = api_login_required()
@@ -122,7 +163,7 @@ def child_parts_save() -> Any:
     batch_mode = str(body.get("batchMode") or "production").strip()
     lines = body.get("lines") or []
     lot_id = body.get("lotId")
-    operator_id = body.get("operatorId")
+    ids_csv = _parse_operator_request(body)
 
     if not part_number or not work_date:
         return jsonify({"error": "partNumber and workDate are required"}), 400
@@ -135,7 +176,7 @@ def child_parts_save() -> Any:
             batch_mode=batch_mode,
             lines=lines,
             lot_id=int(lot_id) if lot_id else None,
-            operator_id=int(operator_id) if operator_id else None,
+            operator_ids=ids_csv or None,
             created_by=user.get("userId"),
         )
     except ValueError as exc:
@@ -152,17 +193,17 @@ def child_parts_pending() -> Any:
     body = request.get_json(silent=True) or {}
     part_number = str(body.get("partNumber") or "").strip()
     work_date = str(body.get("workDate") or "").strip()
-    operator_id = body.get("operatorId")
     if not part_number or not work_date:
         return jsonify({"error": "partNumber and workDate are required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_lot(
             part_number=part_number,
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             work_date=work_date,
             created_by=user.get("userId"),
         )
@@ -325,17 +366,17 @@ def qa_pending() -> Any:
     body = request.get_json(silent=True) or {}
     part_number = str(body.get("partNumber") or body.get("partNo") or "").strip()
     work_date = str(body.get("workDate") or "").strip()
-    operator_id = body.get("operatorId")
     if not part_number or not work_date:
         return jsonify({"error": "partNumber and workDate are required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_qa(
             part_number=part_number,
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             work_date=work_date,
             created_by=user.get("userId"),
         )
@@ -620,17 +661,17 @@ def packing_pending() -> Any:
     body = request.get_json(silent=True) or {}
     part_number = str(body.get("partNumber") or body.get("partNo") or "").strip()
     work_date = str(body.get("workDate") or "").strip()
-    operator_id = body.get("operatorId")
     if not part_number or not work_date:
         return jsonify({"error": "partNumber and workDate are required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_packing(
             part_no=part_number,
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             work_date=work_date,
             created_by=user.get("userId"),
         )
@@ -910,16 +951,17 @@ def assembly_pending() -> Any:
         return jsonify({"error": "bomId is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
     if not machine_id:
         return jsonify({"error": "Machine is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_assembly(
             bom_id=str(bom_id).strip(),
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             machine_id=int(machine_id),
             work_date=work_date,
             created_by=user.get("userId"),
@@ -959,7 +1001,7 @@ def assembly_weld() -> Any:
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
 
-    operator_id = body.get("operatorId")
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
@@ -969,10 +1011,11 @@ def assembly_weld() -> Any:
             weld_qty=int(weld_qty or 0),
             time_taken_minutes=int(time_taken or 0),
             consumptions=consumptions,
-            operator_id=int(operator_id) if operator_id else None,
+            operator_ids=ids_csv or None,
             processed_by=user.get("userId"),
             ot_flag=body.get("otFlag"),
         )
+        _apply_weld_parent_inspection(body, result, user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1048,16 +1091,17 @@ def assembly_rework_pending() -> Any:
         return jsonify({"error": "bomId is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
     if not machine_id:
         return jsonify({"error": "Machine is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_rework_weld(
             bom_id=str(bom_id).strip(),
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             machine_id=int(machine_id),
             work_date=work_date,
             created_by=user.get("userId"),
@@ -1087,7 +1131,7 @@ def assembly_rework_weld() -> Any:
     if not target_lot_id:
         return jsonify({"error": "Target assembly lot is required"}), 400
 
-    operator_id = body.get("operatorId")
+    ids_csv = _parse_operator_request(body)
     user = g.get("current_user") or {}
     try:
         result = lw.weld_rework_assembly(
@@ -1097,10 +1141,11 @@ def assembly_rework_weld() -> Any:
             rework_qty=int(rework_qty or 0),
             time_taken_minutes=int(time_taken or 0),
             consumptions=consumptions,
-            operator_id=int(operator_id) if operator_id else None,
+            operator_ids=ids_csv or None,
             processed_by=user.get("userId"),
             ot_flag=body.get("otFlag"),
         )
+        _apply_weld_parent_inspection(body, result, user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1153,14 +1198,15 @@ def cleaning_pending() -> Any:
         return jsonify({"error": "bomId is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_cleaning(
             bom_id=str(bom_id).strip(),
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             work_date=work_date,
             created_by=user.get("userId"),
             sub_assembly_part_no=str(sub_assembly_part_no).strip() if sub_assembly_part_no else None,
@@ -1284,16 +1330,17 @@ def sub_assembly_pending() -> Any:
         return jsonify({"error": "subAssemblyPartNo is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
     if not machine_id:
         return jsonify({"error": "Machine is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_sub_assembly(
             sub_assembly_part_no=sub_assembly_part_no,
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             machine_id=int(machine_id),
             work_date=work_date,
             bom_id=str(bom_id).strip() if bom_id else None,
@@ -1329,12 +1376,12 @@ def sub_assembly_weld() -> Any:
     weld_qty = body.get("weldQty")
     time_taken = body.get("timeTakenMinutes")
     consumptions = body.get("consumptions") or []
-    operator_id = body.get("operatorId")
     if not draft_line_id:
         return jsonify({"error": "Pending sub-assembly row is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
 
+    ids_csv = _parse_operator_request(body)
     user = g.get("current_user") or {}
     try:
         result = lw.weld_sub_assembly(
@@ -1343,10 +1390,11 @@ def sub_assembly_weld() -> Any:
             weld_qty=int(weld_qty or 0),
             time_taken_minutes=int(time_taken or 0),
             consumptions=consumptions,
-            operator_id=int(operator_id) if operator_id else None,
+            operator_ids=ids_csv or None,
             processed_by=user.get("userId"),
             ot_flag=body.get("otFlag"),
         )
+        _apply_weld_parent_inspection(body, result, user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1443,14 +1491,15 @@ def sub_assembly_rework_pending() -> Any:
         return jsonify({"error": "subAssemblyPartNo is required"}), 400
     if not work_date:
         return jsonify({"error": "workDate is required"}), 400
-    if not operator_id:
+    if not body.get("operatorId") and not body.get("operatorIds"):
         return jsonify({"error": "Operator is required"}), 400
+    ids_csv = _parse_operator_request(body)
 
     user = g.get("current_user") or {}
     try:
         result = lw.create_pending_rework_sub_assembly(
             sub_assembly_part_no=sub_assembly_part_no,
-            operator_id=int(operator_id),
+            operator_ids=ids_csv,
             work_date=work_date,
             bom_id=str(bom_id).strip() if bom_id else None,
             created_by=user.get("userId"),
@@ -1473,7 +1522,6 @@ def sub_assembly_rework_weld() -> Any:
     rework_qty = body.get("reworkQty") or body.get("weldQty")
     time_taken = body.get("timeTakenMinutes")
     consumptions = body.get("consumptions") or []
-    operator_id = body.get("operatorId")
     if not draft_line_id:
         return jsonify({"error": "Pending re-work sub-assembly row is required"}), 400
     if not work_date:
@@ -1481,6 +1529,7 @@ def sub_assembly_rework_weld() -> Any:
     if not target_lot_id:
         return jsonify({"error": "Target sub-assembly lot is required"}), 400
 
+    ids_csv = _parse_operator_request(body)
     user = g.get("current_user") or {}
     try:
         result = lw.weld_rework_sub_assembly(
@@ -1490,10 +1539,11 @@ def sub_assembly_rework_weld() -> Any:
             rework_qty=int(rework_qty or 0),
             time_taken_minutes=int(time_taken or 0),
             consumptions=consumptions,
-            operator_id=int(operator_id) if operator_id else None,
+            operator_ids=ids_csv or None,
             processed_by=user.get("userId"),
             ot_flag=body.get("otFlag"),
         )
+        _apply_weld_parent_inspection(body, result, user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:

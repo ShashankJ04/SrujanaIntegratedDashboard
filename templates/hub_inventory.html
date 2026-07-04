@@ -319,8 +319,8 @@
       const rf = inventoryRowFilter();
       const period = getInventoryPeriod();
       const result = await ApiClient.getDashboardRows({
-        page: state.page,
-        pageSize: state.pageSize,
+        page: 1,
+        pageSize: -1,
         search: state.search,
         sortBy: state.sortBy,
         sortDir: state.sortDir,
@@ -332,7 +332,7 @@
       if (result.isReadOnly && result.snapshotAvailable === false) {
         return;
       }
-      DataTable.setExternalState({ columns: result.columns, rows: result.rows, page: result.page, pageSize: result.pageSize, totalCount: result.totalCount, totalPages: Math.max(1, Math.ceil(result.totalCount / result.pageSize || 1)) });
+      DataTable.setExternalState({ columns: result.columns, rows: result.rows, page: 1, pageSize: -1, totalCount: result.totalCount, totalPages: 1 });
       DataTable.renderTable();
     } catch (err) { console.error(err); if (c) c.innerHTML = '<div class="ti-placeholder">Error loading data.</div>'; }
     finally { if (c) c.classList.remove('loading'); }

@@ -154,8 +154,30 @@ def _part_inspection_part_no(part_number: str) -> str:
     return str(part_number or "").strip()
 
 
+_part_inspection_parent_ids_cache: Optional[Tuple[int, ...]] = None
+
+
+def _clear_part_inspection_parent_ids_cache() -> None:
+    global _part_inspection_parent_ids_cache
+    _part_inspection_parent_ids_cache = None
+
+
 def _part_inspection_parent_ids() -> Tuple[int, ...]:
-    return tuple(getattr(Config, "LW_PART_INSPECTION_PARENT_IDS", ()) or ())
+    global _part_inspection_parent_ids_cache
+    if _part_inspection_parent_ids_cache is not None:
+        return _part_inspection_parent_ids_cache
+    rows = fetch_all(
+        """
+        SELECT parent_id
+        FROM lw_non_lw_part
+        WHERE is_active = 1
+        ORDER BY parent_id
+        """
+    )
+    _part_inspection_parent_ids_cache = tuple(
+        int(r["parent_id"]) for r in rows if r.get("parent_id") is not None
+    )
+    return _part_inspection_parent_ids_cache
 
 
 def _part_inspection_parent_id_placeholders() -> str:
@@ -360,18 +382,19 @@ def _insert_line_row(
     rework_qty: int = 0,
     scrap_remark: Optional[str] = None,
     rework_remark: Optional[str] = None,
-    operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     machine_id: Optional[int] = None,
     time_taken_minutes: Optional[int] = None,
     ot_flag: str = "N",
     cd_line_id: Optional[int] = None,
+    operator_id: Optional[int] = None,  # ignored, kept for legacy call-site compat
 ) -> int:
     cursor.execute(
         """
         INSERT INTO laser_welding_line (
             part_number, lot_id, child_lot_id, bom_id, line_type, source_lot_no,
             production_date, inspected_qty, qa_qty, scrap_qty, rework_qty,
-            scrap_remark, rework_remark, operator_id, machine_id,
+            scrap_remark, rework_remark, operator_ids, machine_id,
             time_taken_minutes, ot_flag, cd_line_id
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
@@ -389,7 +412,7 @@ def _insert_line_row(
             int(rework_qty or 0),
             scrap_remark,
             rework_remark,
-            operator_id,
+            operator_ids or "",
             machine_id,
             time_taken_minutes,
             _normalize_ot_flag(ot_flag),
@@ -501,6 +524,86 @@ def _fetch_operator(operator_id: Any) -> Optional[Dict[str, Any]]:
     )
 
 
+def _operator_ids_csv(value: Any) -> str:
+    """Normalize operator id list to a sorted, deduplicated CSV string."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, str):
+        parts = [p.strip() for p in value.split(",") if p.strip()]
+    elif isinstance(value, (list, tuple, set)):
+        parts = [str(x).strip() for x in value if x is not None and str(x).strip()]
+    else:
+        parts = [str(value).strip()]
+    seen: Set[int] = set()
+    for part in parts:
+        try:
+            seen.add(int(part))
+        except (TypeError, ValueError):
+            continue
+    return ",".join(str(x) for x in sorted(seen))
+
+
+def _resolve_operator_ids(operator_ids: Any) -> str:
+    """Normalize any operator input to a sorted CSV string."""
+    csv = _operator_ids_csv(operator_ids)
+    if not csv:
+        raise ValueError("Operator is required")
+    return csv
+
+
+def _validate_operator_ids_csv(ids_csv: str) -> None:
+    csv = _operator_ids_csv(ids_csv)
+    if not csv:
+        raise ValueError("Operator is required")
+    for part in csv.split(","):
+        if not _fetch_operator(int(part)):
+            raise ValueError("Invalid operator — select active laser-welding operators")
+
+
+def _fetch_operators_detail(ids_csv: Any) -> List[Dict[str, Any]]:
+    csv = _operator_ids_csv(ids_csv)
+    if not csv:
+        return []
+    ids = [int(x) for x in csv.split(",") if x.strip()]
+    if not ids:
+        return []
+    placeholders = ",".join(["%s"] * len(ids))
+    rows = fetch_all(
+        f"""
+        SELECT
+            OP_ID AS id,
+            COALESCE(OP_ECNO, '') AS ecno,
+            COALESCE(OP_NAME, '') AS name
+        FROM operators
+        WHERE OP_ACTIVEYN = 'Y' AND OP_OTID = 3 AND OP_ID IN ({placeholders})
+        """,
+        tuple(ids),
+    )
+    by_id = {int(r["id"]): r for r in rows}
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def _fetch_operators_csv(ids_csv: Any) -> str:
+    detail = _fetch_operators_detail(ids_csv)
+    return ", ".join(_operator_label(r) for r in detail)
+
+
+def _line_operator_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    csv = str(row.get("operator_ids") or "").strip()
+    ids_list = [int(x) for x in csv.split(",") if x.strip()] if csv else []
+    detail = _fetch_operators_detail(csv) if csv else []
+    names = ", ".join(_operator_label(r) for r in detail)
+    ecnos = ", ".join(str(r.get("ecno") or "") for r in detail)
+    return {
+        "operatorId": ids_list[0] if ids_list else None,
+        "operatorIds": ids_list,
+        "operatorName": names.split(", ")[0] if names else "",
+        "operatorNames": names,
+        "operatorEcno": ecnos.split(", ")[0] if ecnos else "",
+        "operatorEcnos": ecnos,
+    }
+
+
 def _default_lw_machine_type() -> int:
     return int(getattr(Config, "LW_WELDING_MACHINE_TYPE", 3))
 
@@ -573,8 +676,7 @@ def _is_qa_approved(row: Dict[str, Any]) -> bool:
 def _line_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
     lot_id = row.get("lot_id")
     child_lot_id = row.get("child_lot_id")
-    op_id = row.get("operator_id")
-    op_row = _fetch_operator(op_id) if op_id is not None else None
+    op_fields = _line_operator_fields(row)
     machine_id = row.get("machine_id")
     machine_row = _fetch_lw_machine(machine_id) if machine_id is not None else None
     return {
@@ -593,8 +695,10 @@ def _line_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "reworkQty": int(row.get("rework_qty") or 0),
         "scrapRemark": str(row.get("scrap_remark") or "").strip(),
         "reworkRemark": str(row.get("rework_remark") or "").strip(),
-        "operatorId": int(op_id) if op_id is not None else None,
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "machineId": int(machine_id) if machine_id is not None else None,
         "machineName": _machine_label(machine_row) if machine_row else "",
         "timeTakenMinutes": int(row["time_taken_minutes"]) if row.get("time_taken_minutes") is not None else None,
@@ -619,7 +723,7 @@ def _lot_to_dict(row: Dict[str, Any], lines: Optional[List[Dict[str, Any]]] = No
     if not part_name and not bom_id:
         part_name = _part_name(part_no)
     line_list = lines if lines is not None else []
-    first_op = next((ln for ln in line_list if ln.get("operatorId")), None)
+    first_op = next((ln for ln in line_list if ln.get("operatorId") or ln.get("operatorNames")), None)
     return {
         "lotId": int(row["lot_id"]),
         "partNumber": part_no,
@@ -627,7 +731,9 @@ def _lot_to_dict(row: Dict[str, Any], lines: Optional[List[Dict[str, Any]]] = No
         "bomId": str(bom_id) if bom_id is not None else None,
         "productName": row.get("product_name") or "",
         "operatorId": first_op.get("operatorId") if first_op else None,
+        "operatorIds": first_op.get("operatorIds") if first_op else [],
         "operatorName": first_op.get("operatorName") if first_op else "",
+        "operatorNames": first_op.get("operatorNames") if first_op else "",
         "newLotNo": row.get("new_lot_no"),
         "workDate": work_date_str,
         "totalInwarded": int(row.get("total_inwarded") or 0),
@@ -748,9 +854,9 @@ def _find_bo_part_inspection_lot(
     *,
     part: str,
     production_date: str,
-    operator_id: int,
+    operator_ids: str,
 ) -> Optional[Dict[str, Any]]:
-    """Existing LBO lot for same part, operator, and work date."""
+    """Existing LBO lot for same part, operator(s), and work date."""
     cursor.execute(
         """
         SELECT l.lot_id, l.new_lot_no, l.part_number
@@ -761,12 +867,12 @@ def _find_bo_part_inspection_lot(
           AND l.new_lot_no LIKE %s
           AND ln.line_type = %s
           AND ln.production_date = %s
-          AND ln.operator_id = %s
+          AND ln.operator_ids = %s
         ORDER BY l.lot_id DESC
         LIMIT 1
         FOR UPDATE
         """,
-        (part, "LBO/%", LINE_PART_INSPECTION, production_date, operator_id),
+        (part, "LBO/%", LINE_PART_INSPECTION, production_date, operator_ids),
     )
     return cursor.fetchone()
 
@@ -825,7 +931,7 @@ def _get_or_add_bo_part_inspection_lot(
         cursor,
         part=part,
         production_date=wd,
-        operator_id=operator_id,
+        operator_ids=str(operator_id),
     )
     okayed = inspected - scrap
     inwarded = inspected
@@ -896,7 +1002,7 @@ def _insert_part_inspection_line(
         rework_qty=rework_qty,
         scrap_remark=scrap_remark,
         rework_remark=rework_remark,
-        operator_id=operator_id,
+        operator_ids=str(operator_id),
         time_taken_minutes=time_taken_minutes,
         ot_flag=ot_flag,
         cd_line_id=cd_line_id,
@@ -950,8 +1056,7 @@ def _draft_session_row_from_line(
     customer_name: str = "",
 ) -> Dict[str, Any]:
     part_no = line.get("part_number") or ""
-    op_id = line.get("operator_id")
-    op_row = _fetch_operator(op_id) if op_id is not None else None
+    op_fields = _line_operator_fields(line)
     machine_id = line.get("machine_id")
     machine_row = _fetch_lw_machine(machine_id) if machine_id is not None else None
     pd = line.get("production_date")
@@ -969,8 +1074,10 @@ def _draft_session_row_from_line(
         "productName": product_name,
         "bomId": str(bom_id) if bom_id else None,
         "customerName": customer_name or line.get("customer_name") or "",
-        "operatorId": int(op_id) if op_id is not None else None,
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "machineId": int(machine_id) if machine_id is not None else None,
         "machineName": _machine_label(machine_row) if machine_row else "",
         "newLotNo": None,
@@ -1398,8 +1505,7 @@ def _session_row_from_cd_group(
     ordered = sorted(lines, key=lambda ln: int(ln.get("line_id") or 0))
     first = ordered[0]
     part_no = str(first.get("part_number") or "").strip()
-    op_id = int(first.get("operator_id") or 0)
-    op_row = _fetch_operator(op_id) if op_id else None
+    op_fields = _line_operator_fields(first)
     machine_id = first.get("machine_id")
     machine_row = _fetch_lw_machine(machine_id) if machine_id is not None else None
     line_dicts = [_line_to_dict(ln) for ln in ordered]
@@ -1416,8 +1522,10 @@ def _session_row_from_cd_group(
         "cdLineId": int(cd_line_id),
         "partNumber": part_no,
         "partName": _part_name(part_no) if batch_mode not in ("cleaning", "assembly") else part_no,
-        "operatorId": op_id or None,
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "machineId": int(machine_id) if machine_id is not None else None,
         "machineName": _machine_label(machine_row) if machine_row else "",
         "workDate": wd,
@@ -1529,12 +1637,12 @@ def _find_pack_lot_for_session(
 
 def _production_row_from_operator_session(
     part: str,
-    operator_id: int,
+    operator_ids: str,
     lines: List[Dict[str, Any]],
     wd: str,
 ) -> Dict[str, Any]:
     part_no = str(part or "").strip()
-    op_row = _fetch_operator(operator_id)
+    op_fields = _line_operator_fields(lines[0]) if lines else _line_operator_fields({"operator_ids": operator_ids})
     line_dicts = [_line_to_dict(ln) for ln in lines]
     times = [
         int(ln.get("time_taken_minutes") or 0)
@@ -1543,11 +1651,13 @@ def _production_row_from_operator_session(
     ]
     max_time = max(times) if times else None
     return {
-        "rowKey": f"prod:{part_no}:{int(operator_id)}:{wd}",
+        "rowKey": f"prod:{part_no}:{operator_ids}:{wd}",
         "partNumber": part_no,
         "partName": _part_name(part_no),
-        "operatorId": int(operator_id),
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "workDate": wd,
         "inspectedQty": 0,
         "qaQty": 0,
@@ -1633,7 +1743,7 @@ def get_production_inspect_rows(work_date: str) -> List[Dict[str, Any]]:
 
 def create_pending_lot(
     part_number: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     created_by: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -1643,9 +1753,8 @@ def create_pending_lot(
     if not part or not wd:
         raise ValueError("Part number and work date are required")
 
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
 
     if not get_source_lots(part)["lots"] and not (
         bo_inventory.is_bo_sub_assembly_part(part)
@@ -1660,9 +1769,9 @@ def create_pending_lot(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND part_number = %s
-          AND operator_id = %s AND production_date = %s AND source_lot_no = %s
+          AND operator_ids = %s AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_PART_INSPECTION, part, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_PART_INSPECTION, part, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open inspection row already exists for this part and operator today")
@@ -1671,10 +1780,10 @@ def create_pending_lot(
         """
         INSERT INTO laser_welding_line (
             part_number, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids
         ) VALUES (%s, NULL, %s, %s, %s, 0, 0, 0, %s)
         """,
-        (part, LINE_PART_INSPECTION, SESSION_SOURCE_LOT, wd, int(operator_id)),
+        (part, LINE_PART_INSPECTION, SESSION_SOURCE_LOT, wd, ids_csv),
     )
     if not line_id:
         raise ValueError("Failed to create pending inspection row — please try again")
@@ -1709,6 +1818,7 @@ def save_child_parts(
     lines: List[Dict[str, Any]],
     lot_id: Optional[int] = None,
     operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     created_by: Optional[int] = None,
 ) -> Dict[str, Any]:
     part = str(part_number or "").strip()
@@ -1794,16 +1904,17 @@ def save_child_parts(
             "line": _line_to_dict(saved_line) if saved_line else None,
         }
 
+    ids_csv = _operator_ids_csv(operator_ids or operator_id or "")
     non_zero = [v for v in validated if v["inspectedQty"] > 0 or v["qaQty"] > 0]
     if not non_zero:
-        if operator_id is not None:
+        if ids_csv:
             execute(
                 """
                 DELETE FROM laser_welding_line
                 WHERE lot_id IS NULL AND part_number = %s AND line_type = 'Part_Inspection'
-                  AND production_date = %s AND operator_id = %s
+                  AND production_date = %s AND operator_ids = %s
                 """,
-                (part, wd, int(operator_id)),
+                (part, wd, ids_csv),
             )
         else:
             execute(
@@ -1828,15 +1939,15 @@ def save_child_parts(
     saved = 0
     for v in non_zero:
         kept_source.add(v["sourceLotNo"])
-        if operator_id is not None:
+        if ids_csv:
             existing = fetch_one(
                 """
                 SELECT * FROM laser_welding_line
                 WHERE lot_id IS NULL AND part_number = %s AND line_type = 'Part_Inspection'
                   AND source_lot_no = %s AND production_date = %s
-                  AND operator_id = %s
+                  AND operator_ids = %s
                 """,
-                (part, v["sourceLotNo"], wd, int(operator_id)),
+                (part, v["sourceLotNo"], wd, ids_csv),
             )
         else:
             existing = fetch_one(
@@ -1858,15 +1969,15 @@ def save_child_parts(
                 (v["inspectedQty"], v["qaQty"], existing["line_id"]),
             )
         else:
-            if operator_id is not None:
+            if ids_csv:
                 execute(
                     """
                     INSERT INTO laser_welding_line
                     (part_number, lot_id, line_type, source_lot_no, production_date,
-                     inspected_qty, qa_qty, operator_id)
+                     inspected_qty, qa_qty, operator_ids)
                     VALUES (%s, NULL, 'Part_Inspection', %s, %s, %s, %s, %s)
                     """,
-                    (part, v["sourceLotNo"], wd, v["inspectedQty"], v["qaQty"], int(operator_id)),
+                    (part, v["sourceLotNo"], wd, v["inspectedQty"], v["qaQty"], ids_csv),
                 )
             else:
                 execute(
@@ -1881,15 +1992,15 @@ def save_child_parts(
 
     if kept_source:
         placeholders = ",".join(["%s"] * len(kept_source))
-        if operator_id is not None:
+        if ids_csv:
             execute(
                 f"""
                 DELETE FROM laser_welding_line
                 WHERE lot_id IS NULL AND part_number = %s AND line_type = 'Part_Inspection'
-                  AND production_date = %s AND operator_id = %s
+                  AND production_date = %s AND operator_ids = %s
                   AND source_lot_no NOT IN ({placeholders})
                 """,
-                (part, wd, int(operator_id), *kept_source),
+                (part, wd, ids_csv, *kept_source),
             )
         else:
             execute(
@@ -1901,15 +2012,15 @@ def save_child_parts(
                 (part, wd, *kept_source),
             )
 
-    if operator_id is not None:
+    if ids_csv:
         saved_lines = fetch_all(
             """
             SELECT * FROM laser_welding_line
             WHERE lot_id IS NULL AND part_number = %s AND line_type = 'Part_Inspection'
-              AND production_date = %s AND operator_id = %s
+              AND production_date = %s AND operator_ids = %s
             ORDER BY line_id
             """,
-            (part, wd, int(operator_id)),
+            (part, wd, ids_csv),
         )
     else:
         saved_lines = fetch_all(
@@ -1958,8 +2069,8 @@ def inspect_production(
             raise ValueError("Pending inspection row not found — add part and operator first")
 
         part = _part_inspection_part_no(draft.get("part_number") or "")
-        operator_id = int(draft.get("operator_id") or 0)
-        if not operator_id:
+        draft_operator_ids = str(draft.get("operator_ids") or "").strip()
+        if not draft_operator_ids:
             raise ValueError("Operator is required on the pending inspection row")
         pd = draft.get("production_date")
         draft_wd = pd.strftime("%Y-%m-%d") if hasattr(pd, "strftime") else str(pd or "")[:10]
@@ -1985,13 +2096,14 @@ def inspect_production(
             bo_inventory.validate_bo_qty(part, total_insp, cursor=cursor)
 
             work_d = datetime.strptime(wd, "%Y-%m-%d").date()
+            draft_op_int = int(draft_operator_ids.split(",")[0]) if draft_operator_ids else 0
             lot_id, lbo_lot_no = _get_or_add_bo_part_inspection_lot(
                 cursor,
                 part=part,
                 wd=wd,
                 inspected=total_insp,
                 scrap=total_scrap,
-                operator_id=operator_id,
+                operator_id=draft_op_int,
                 work_d=work_d,
                 processed_by=processed_by,
             )
@@ -2009,7 +2121,7 @@ def inspect_production(
                     "scrap_remark": _remark_or_none(
                         next((v.get("scrapRemark") for v in non_zero if v.get("scrapRemark")), None)
                     ) if total_scrap > 0 else None,
-                    "operator_id": operator_id,
+                    "operator_ids": draft_operator_ids,
                     "time_taken_minutes": time_taken_minutes,
                     "ot_flag": session_ot,
                 }],
@@ -2140,7 +2252,7 @@ def inspect_production(
                 "rework_qty": int(v.get("reworkQty") or 0),
                 "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
                 "rework_remark": v.get("reworkRemark"),
-                "operator_id": operator_id,
+                "operator_ids": draft_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": line_ot,
             })
@@ -2509,12 +2621,12 @@ def _enrich_consume_lines_with_nested_sa(
 
 def _qa_row_from_operator_session(
     part: str,
-    operator_id: int,
+    operator_ids: str,
     lines: List[Dict[str, Any]],
     wd: str,
 ) -> Dict[str, Any]:
     part_no = str(part or "").strip()
-    op_row = _fetch_operator(operator_id)
+    op_fields = _line_operator_fields(lines[0]) if lines else _line_operator_fields({"operator_ids": operator_ids})
     line_dicts = [_line_to_dict(ln) for ln in lines]
     times = [
         int(ln.get("time_taken_minutes") or 0)
@@ -2523,11 +2635,13 @@ def _qa_row_from_operator_session(
     ]
     max_time = max(times) if times else None
     return {
-        "rowKey": f"qa:{part_no}:{int(operator_id)}:{wd}",
+        "rowKey": f"qa:{part_no}:{operator_ids}:{wd}",
         "partNumber": part_no,
         "partName": _part_name(part_no),
-        "operatorId": int(operator_id),
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "workDate": wd,
         "totalQty": _row_total_qty_from_lines(line_dicts, qty_mode="qa"),
         "isDraft": False,
@@ -2610,7 +2724,7 @@ def get_qa_eligible_parts(work_date: Optional[str] = None) -> List[Dict[str, Any
 
 def create_pending_qa(
     part_number: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     created_by: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -2619,9 +2733,8 @@ def create_pending_qa(
     if not part or not wd:
         raise ValueError("Part number and work date are required")
 
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
 
     if not get_qa_source_lots(part):
         raise ValueError(
@@ -2632,9 +2745,9 @@ def create_pending_qa(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND part_number = %s
-          AND operator_id = %s AND production_date = %s AND source_lot_no = %s
+          AND operator_ids = %s AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_QA_DISPOSITION, part, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_QA_DISPOSITION, part, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open QA row already exists for this part and operator today")
@@ -2643,10 +2756,10 @@ def create_pending_qa(
         """
         INSERT INTO laser_welding_line (
             part_number, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids
         ) VALUES (%s, NULL, %s, %s, %s, 0, 0, 0, %s)
         """,
-        (part, LINE_QA_DISPOSITION, SESSION_SOURCE_LOT, wd, int(operator_id)),
+        (part, LINE_QA_DISPOSITION, SESSION_SOURCE_LOT, wd, ids_csv),
     )
     if not line_id:
         raise ValueError("Failed to create pending QA row — please try again")
@@ -2718,7 +2831,7 @@ def _apply_qa_disposition_for_lot(
     qa_passed: int,
     scrap: int,
     rework: int,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     time_taken_minutes: int,
     scrap_remark: Optional[str] = None,
@@ -2766,7 +2879,7 @@ def _apply_qa_disposition_for_lot(
         rework_qty=rw,
         scrap_remark=scrap_remark if sc > 0 else None,
         rework_remark=rework_remark if rw > 0 else None,
-        operator_id=operator_id,
+        operator_ids=operator_ids,
         time_taken_minutes=time_taken_minutes,
         ot_flag=ot_flag,
         cd_line_id=cd_line_id,
@@ -2812,8 +2925,8 @@ def inspect_qa(
             raise ValueError("Pending QA row not found — add part and operator first")
 
         part = _part_inspection_part_no(draft.get("part_number") or "")
-        operator_id = int(draft.get("operator_id") or 0)
-        if not operator_id:
+        qa_operator_ids = str(draft.get("operator_ids") or "").strip()
+        if not qa_operator_ids:
             raise ValueError("Operator is required on the pending QA row")
         pd = draft.get("production_date")
         draft_wd = pd.strftime("%Y-%m-%d") if hasattr(pd, "strftime") else str(pd or "")[:10]
@@ -2841,7 +2954,7 @@ def inspect_qa(
                 qa_passed=int(v.get("qaPassed") or 0),
                 scrap=int(v.get("scrapQty") or 0),
                 rework=int(v.get("rework") or v.get("reworkQty") or 0),
-                operator_id=operator_id,
+                operator_ids=qa_operator_ids,
                 work_date=wd,
                 time_taken_minutes=time_taken_minutes,
                 scrap_remark=v.get("scrapRemark"),
@@ -2890,7 +3003,7 @@ def approve_qa(
             qa_passed=qa_passed,
             scrap=scrap,
             rework=rework,
-            operator_id=int(approved_by or 0),
+            operator_ids=str(approved_by or ""),
             work_date=date.today().strftime("%Y-%m-%d"),
             time_taken_minutes=0,
             processed_by=approved_by,
@@ -3117,7 +3230,7 @@ def _reduce_pack_material_qty(cursor: Any, item_code: str, qty: int) -> None:
 
 def create_pending_packing(
     part_no: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     created_by: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -3126,9 +3239,8 @@ def create_pending_packing(
     if not part or not wd:
         raise ValueError("Part number and work date are required")
 
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
 
     if not get_packing_source_lots(part):
         raise ValueError(
@@ -3139,9 +3251,9 @@ def create_pending_packing(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND part_number = %s
-          AND operator_id = %s AND production_date = %s AND source_lot_no = %s
+          AND operator_ids = %s AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_PACKING, part, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_PACKING, part, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open packing row already exists for this part and operator today")
@@ -3150,10 +3262,10 @@ def create_pending_packing(
         """
         INSERT INTO laser_welding_line (
             part_number, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids
         ) VALUES (%s, NULL, %s, %s, %s, 0, 0, 0, %s)
         """,
-        (part, LINE_PACKING, SESSION_SOURCE_LOT, wd, int(operator_id)),
+        (part, LINE_PACKING, SESSION_SOURCE_LOT, wd, ids_csv),
     )
     if not line_id:
         raise ValueError("Failed to create pending packing row — please try again")
@@ -3165,12 +3277,12 @@ def create_pending_packing(
 
 def _packing_row_from_operator_session(
     part: str,
-    operator_id: int,
+    operator_ids: str,
     lines: List[Dict[str, Any]],
     wd: str,
 ) -> Dict[str, Any]:
     part_no = str(part or "").strip()
-    op_row = _fetch_operator(operator_id)
+    op_fields = _line_operator_fields(lines[0]) if lines else _line_operator_fields({"operator_ids": operator_ids})
     material_codes = _all_packing_material_codes()
     product_lines = [
         ln for ln in lines
@@ -3184,11 +3296,13 @@ def _packing_row_from_operator_session(
     ]
     max_time = max(times) if times else None
     return {
-        "rowKey": f"pack:{part_no}:{int(operator_id)}:{wd}",
+        "rowKey": f"pack:{part_no}:{operator_ids}:{wd}",
         "partNumber": part_no,
         "partName": _part_name(part_no) or part_no,
-        "operatorId": int(operator_id),
-        "operatorName": _operator_label(op_row) if op_row else "",
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "workDate": wd,
         "totalQty": sum(int(ln.get("inspected_qty") or 0) for ln in product_lines),
         "isDraft": False,
@@ -3418,8 +3532,8 @@ def inspect_packing(
             raise ValueError("Pending packing row not found — add part and operator first")
 
         part = str(draft.get("part_number") or "").strip()
-        operator_id = int(draft.get("operator_id") or 0)
-        if not operator_id:
+        pack_operator_ids = str(draft.get("operator_ids") or "").strip()
+        if not pack_operator_ids:
             raise ValueError("Operator is required on the pending packing row")
         pd = draft.get("production_date")
         draft_wd = pd.strftime("%Y-%m-%d") if hasattr(pd, "strftime") else str(pd or "")[:10]
@@ -3493,7 +3607,7 @@ def inspect_packing(
                 "qa_qty": qa,
                 "scrap_qty": scrap,
                 "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
-                "operator_id": operator_id,
+                "operator_ids": pack_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": line_ot,
             })
@@ -3538,7 +3652,7 @@ def inspect_packing(
                 "source_lot_no": SESSION_SOURCE_LOT,
                 "production_date": wd,
                 "inspected_qty": int(tray_qty),
-                "operator_id": operator_id,
+                "operator_ids": pack_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": line_ot,
             })
@@ -3551,7 +3665,7 @@ def inspect_packing(
                 "source_lot_no": SESSION_SOURCE_LOT,
                 "production_date": wd,
                 "inspected_qty": int(carton_qty),
-                "operator_id": operator_id,
+                "operator_ids": pack_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": line_ot,
             })
@@ -3603,7 +3717,7 @@ def pack_lot(
             """
             INSERT INTO laser_welding_line (
                 part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-                inspected_qty, qa_qty, scrap_qty, operator_id
+                inspected_qty, qa_qty, scrap_qty, operator_ids
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, 0, 0, %s)
             """,
             (
@@ -3614,7 +3728,7 @@ def pack_lot(
                 lot.get("new_lot_no") or "",
                 wd,
                 qty,
-                packed_by,
+                str(packed_by or ""),
             ),
         )
 
@@ -3926,7 +4040,7 @@ def get_assembly_rows(work_date: str) -> List[Dict[str, Any]]:
 
 def create_pending_assembly(
     bom_id: str,
-    operator_id: int,
+    operator_ids: str,
     machine_id: int,
     work_date: str,
     created_by: Optional[int] = None,
@@ -3937,9 +4051,8 @@ def create_pending_assembly(
     wd = _parse_date(work_date)
     if not wd:
         raise ValueError("Invalid work date")
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
     machine = _fetch_lw_machine(machine_id, machine_type=_default_lw_machine_type())
     if not machine:
         raise ValueError("Invalid machine — select an active laser welding machine")
@@ -3960,9 +4073,9 @@ def create_pending_assembly(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND bom_id = %s
-          AND operator_id = %s AND production_date = %s AND source_lot_no = %s
+          AND operator_ids = %s AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_WELDING_CONSUME, bid, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_WELDING_CONSUME, bid, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open assembly row already exists for this BOM and operator today")
@@ -3971,10 +4084,10 @@ def create_pending_assembly(
         """
         INSERT INTO laser_welding_line (
             part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id, machine_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids, machine_id
         ) VALUES (%s, %s, NULL, %s, %s, %s, 0, 0, 0, %s, %s)
         """,
-        (bom_no, bid, LINE_WELDING_CONSUME, SESSION_SOURCE_LOT, wd, int(operator_id), int(machine_id)),
+        (bom_no, bid, LINE_WELDING_CONSUME, SESSION_SOURCE_LOT, wd, ids_csv, int(machine_id)),
     )
     if not line_id:
         raise ValueError("Failed to create pending assembly row — please try again")
@@ -4032,7 +4145,7 @@ def weld_assembly(
     weld_qty: int,
     time_taken_minutes: int,
     consumptions: List[Dict[str, Any]],
-    operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     processed_by: Optional[int] = None,
     ot_flag: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -4065,8 +4178,8 @@ def weld_assembly(
             raise ValueError("Work date does not match the pending row")
 
         bom_id = str(draft.get("bom_id") or "").strip()
-        line_operator = int(operator_id or draft.get("operator_id") or 0)
-        if not line_operator:
+        line_operator_ids = _operator_ids_csv(operator_ids or draft.get("operator_ids") or "")
+        if not line_operator_ids:
             raise ValueError("Operator is required")
         line_machine = int(draft.get("machine_id") or 0)
         if not line_machine:
@@ -4179,7 +4292,7 @@ def weld_assembly(
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
                 "rework_remark": extras["rework_remark"],
-                "operator_id": line_operator,
+                "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": extras["ot_flag"],
@@ -4544,7 +4657,7 @@ def get_rework_weld_rows(work_date: str) -> List[Dict[str, Any]]:
 
 def create_pending_rework_weld(
     bom_id: str,
-    operator_id: int,
+    operator_ids: str,
     machine_id: int,
     work_date: str,
     created_by: Optional[int] = None,
@@ -4555,9 +4668,8 @@ def create_pending_rework_weld(
     wd = _parse_date(work_date)
     if not wd:
         raise ValueError("Invalid work date")
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
     machine = _fetch_lw_machine(machine_id, machine_type=_default_lw_machine_type())
     if not machine:
         raise ValueError("Invalid machine — select an active laser welding machine")
@@ -4577,9 +4689,9 @@ def create_pending_rework_weld(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND bom_id = %s
-          AND operator_id = %s AND production_date = %s AND source_lot_no = %s
+          AND operator_ids = %s AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_WELDING_REWORK, bid, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_WELDING_REWORK, bid, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open re-work welding row already exists for this BOM and operator today")
@@ -4588,10 +4700,10 @@ def create_pending_rework_weld(
         """
         INSERT INTO laser_welding_line (
             part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id, machine_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids, machine_id
         ) VALUES (%s, %s, NULL, %s, %s, %s, 0, 0, 0, %s, %s)
         """,
-        (bom_no, bid, LINE_WELDING_REWORK, SESSION_SOURCE_LOT, wd, int(operator_id), int(machine_id)),
+        (bom_no, bid, LINE_WELDING_REWORK, SESSION_SOURCE_LOT, wd, ids_csv, int(machine_id)),
     )
     if not line_id:
         raise ValueError("Failed to create pending re-work welding row — please try again")
@@ -4624,7 +4736,7 @@ def weld_rework_assembly(
     rework_qty: int,
     time_taken_minutes: int,
     consumptions: List[Dict[str, Any]],
-    operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     processed_by: Optional[int] = None,
     ot_flag: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -4660,8 +4772,8 @@ def weld_rework_assembly(
             raise ValueError("Work date does not match the pending row")
 
         bom_id = str(draft.get("bom_id") or "").strip()
-        line_operator = int(operator_id or draft.get("operator_id") or 0)
-        if not line_operator:
+        line_operator_ids = _operator_ids_csv(operator_ids or draft.get("operator_ids") or "")
+        if not line_operator_ids:
             raise ValueError("Operator is required")
         line_machine = int(draft.get("machine_id") or 0)
         if not line_machine:
@@ -4803,7 +4915,7 @@ def weld_rework_assembly(
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
                 "rework_remark": extras["rework_remark"],
-                "operator_id": line_operator,
+                "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": extras["ot_flag"],
@@ -5074,7 +5186,7 @@ def get_sub_assembly_rows(work_date: str) -> List[Dict[str, Any]]:
 
 def create_pending_sub_assembly(
     sub_assembly_part_no: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     machine_id: int,
     bom_id: Optional[str] = None,
@@ -5087,9 +5199,8 @@ def create_pending_sub_assembly(
     wd = _parse_date(work_date)
     if not wd:
         raise ValueError("Invalid work date")
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
     machine = _fetch_lw_machine(machine_id, machine_type=_default_sa_machine_type())
     if not machine:
         raise ValueError("Invalid machine — select an active sub-assembly machine")
@@ -5113,10 +5224,10 @@ def create_pending_sub_assembly(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND bom_id = %s
-          AND part_number = %s AND operator_id = %s
+          AND part_number = %s AND operator_ids = %s
           AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_SUB_ASSEMBLY_CONSUME, bid, sa_part, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_SUB_ASSEMBLY_CONSUME, bid, sa_part, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError(
@@ -5127,10 +5238,10 @@ def create_pending_sub_assembly(
         """
         INSERT INTO laser_welding_line (
             part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id, machine_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids, machine_id
         ) VALUES (%s, %s, NULL, %s, %s, %s, 0, 0, 0, %s, %s)
         """,
-        (sa_part, bid, LINE_SUB_ASSEMBLY_CONSUME, SESSION_SOURCE_LOT, wd, int(operator_id), int(machine_id)),
+        (sa_part, bid, LINE_SUB_ASSEMBLY_CONSUME, SESSION_SOURCE_LOT, wd, ids_csv, int(machine_id)),
     )
     if not line_id:
         raise ValueError("Failed to create pending sub-assembly row — please try again")
@@ -5191,7 +5302,7 @@ def weld_sub_assembly(
     weld_qty: int,
     time_taken_minutes: int,
     consumptions: List[Dict[str, Any]],
-    operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     processed_by: Optional[int] = None,
     ot_flag: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -5225,8 +5336,8 @@ def weld_sub_assembly(
 
         bom_id = str(draft.get("bom_id") or "").strip()
         sa_part = str(draft.get("part_number") or "").strip()
-        line_operator = int(operator_id or draft.get("operator_id") or 0)
-        if not line_operator:
+        line_operator_ids = _operator_ids_csv(operator_ids or draft.get("operator_ids") or "")
+        if not line_operator_ids:
             raise ValueError("Operator is required")
         line_machine = int(draft.get("machine_id") or 0)
         if not line_machine:
@@ -5363,7 +5474,7 @@ def weld_sub_assembly(
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
                 "rework_remark": extras["rework_remark"],
-                "operator_id": line_operator,
+                "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": extras["ot_flag"],
@@ -5649,7 +5760,7 @@ def get_rework_sub_assembly_rows(work_date: str) -> List[Dict[str, Any]]:
 
 def create_pending_rework_sub_assembly(
     sub_assembly_part_no: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     bom_id: Optional[str] = None,
     created_by: Optional[int] = None,
@@ -5661,9 +5772,8 @@ def create_pending_rework_sub_assembly(
     wd = _parse_date(work_date)
     if not wd:
         raise ValueError("Invalid work date")
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
 
     bom = fetch_one(
         "SELECT bom_id, bom_no, product_name, cust_id FROM bom WHERE bom_id = %s AND is_latest_version = 'Y'",
@@ -5679,10 +5789,10 @@ def create_pending_rework_sub_assembly(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND bom_id = %s
-          AND part_number = %s AND operator_id = %s
+          AND part_number = %s AND operator_ids = %s
           AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_SUB_ASSEMBLY_REWORK, bid, sa_part, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_SUB_ASSEMBLY_REWORK, bid, sa_part, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError(
@@ -5693,10 +5803,10 @@ def create_pending_rework_sub_assembly(
         """
         INSERT INTO laser_welding_line (
             part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids
         ) VALUES (%s, %s, NULL, %s, %s, %s, 0, 0, 0, %s)
         """,
-        (sa_part, bid, LINE_SUB_ASSEMBLY_REWORK, SESSION_SOURCE_LOT, wd, int(operator_id)),
+        (sa_part, bid, LINE_SUB_ASSEMBLY_REWORK, SESSION_SOURCE_LOT, wd, ids_csv),
     )
     if not line_id:
         raise ValueError("Failed to create pending re-work sub-assembly row — please try again")
@@ -5809,7 +5919,7 @@ def weld_rework_sub_assembly(
     rework_qty: int,
     time_taken_minutes: int,
     consumptions: List[Dict[str, Any]],
-    operator_id: Optional[int] = None,
+    operator_ids: Optional[str] = None,
     processed_by: Optional[int] = None,
     ot_flag: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -5846,8 +5956,8 @@ def weld_rework_sub_assembly(
 
         bom_id = str(draft.get("bom_id") or "").strip()
         sa_part = str(draft.get("part_number") or "").strip()
-        line_operator = int(operator_id or draft.get("operator_id") or 0)
-        if not line_operator:
+        line_operator_ids = _operator_ids_csv(operator_ids or draft.get("operator_ids") or "")
+        if not line_operator_ids:
             raise ValueError("Operator is required")
 
         cursor.execute(
@@ -5995,7 +6105,7 @@ def weld_rework_sub_assembly(
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
                 "rework_remark": extras["rework_remark"],
-                "operator_id": line_operator,
+                "operator_ids": line_operator_ids,
                 "machine_id": int(draft.get("machine_id") or 0) or None,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": extras["ot_flag"],
@@ -6191,7 +6301,7 @@ def get_cleaning_rows(work_date: str, scope: Optional[str] = None) -> List[Dict[
 
 def create_pending_cleaning(
     bom_id: str,
-    operator_id: int,
+    operator_ids: str,
     work_date: str,
     created_by: Optional[int] = None,
     sub_assembly_part_no: Optional[str] = None,
@@ -6202,9 +6312,8 @@ def create_pending_cleaning(
     if not bid or not wd:
         raise ValueError("BOM and work date are required")
 
-    op = _fetch_operator(operator_id)
-    if not op:
-        raise ValueError("Invalid operator — select an active laser-welding operator")
+    ids_csv = _resolve_operator_ids(operator_ids)
+    _validate_operator_ids_csv(ids_csv)
 
     bom = fetch_one(
         "SELECT bom_id, bom_no, product_name FROM bom WHERE bom_id = %s AND is_latest_version = 'Y'",
@@ -6222,10 +6331,10 @@ def create_pending_cleaning(
         """
         SELECT line_id FROM laser_welding_line
         WHERE lot_id IS NULL AND line_type = %s AND bom_id = %s
-          AND part_number = %s AND operator_id = %s
+          AND part_number = %s AND operator_ids = %s
           AND production_date = %s AND source_lot_no = %s
         """,
-        (LINE_ASSEMBLY_INSPECTION, bid, line_part_no, int(operator_id), wd, SESSION_SOURCE_LOT),
+        (LINE_ASSEMBLY_INSPECTION, bid, line_part_no, ids_csv, wd, SESSION_SOURCE_LOT),
     )
     if existing:
         raise ValueError("An open cleaning row already exists for this selection and operator today")
@@ -6234,10 +6343,10 @@ def create_pending_cleaning(
         """
         INSERT INTO laser_welding_line (
             part_number, bom_id, lot_id, line_type, source_lot_no, production_date,
-            inspected_qty, qa_qty, scrap_qty, operator_id
+            inspected_qty, qa_qty, scrap_qty, operator_ids
         ) VALUES (%s, %s, NULL, %s, %s, %s, 0, 0, 0, %s)
         """,
-        (line_part_no, bid, LINE_ASSEMBLY_INSPECTION, SESSION_SOURCE_LOT, wd, int(operator_id)),
+        (line_part_no, bid, LINE_ASSEMBLY_INSPECTION, SESSION_SOURCE_LOT, wd, ids_csv),
     )
     if not line_id:
         raise ValueError("Failed to create pending cleaning row — please try again")
@@ -6259,6 +6368,131 @@ def create_pending_cleaning(
     )
     row.update(_cleaning_sub_assembly_flags(line_part_no, bom_no))
     return row
+
+
+def _apply_inspection_to_lot(
+    cursor: Any,
+    target: Dict[str, Any],
+    *,
+    inspected_qty: int,
+    qa_qty: int,
+    scrap_qty: int,
+    scrap_remark: Optional[str],
+    operator_ids: str,
+    part_number: str,
+    bom_id: Optional[str],
+    production_date: str,
+    time_taken_minutes: int,
+    ot_flag: str,
+    processed_by: Optional[int],
+    source_lot_no: Optional[str] = None,
+) -> Dict[str, Any]:
+    target_lot_id = int(target["lot_id"])
+    pending = int(target.get("inspection_pending") or 0)
+    if inspected_qty > pending:
+        raise ValueError(
+            f"Inspected QTY exceeds inspection pending ({pending}) "
+            f"for lot {target.get('new_lot_no')}"
+        )
+    totals = _aggregate_lines([{
+        "inspectedQty": inspected_qty,
+        "qaQty": qa_qty,
+        "scrapQty": scrap_qty,
+    }])
+    cursor.execute(
+        """
+        UPDATE laser_welding_lot SET
+            inspection_pending = inspection_pending - %s,
+            total_inwarded = total_inwarded + %s,
+            total_qa = total_qa + %s,
+            scrap = scrap + %s,
+            total_okayed = total_okayed + %s,
+            processed_by = %s
+        WHERE lot_id = %s
+        """,
+        (
+            totals["total_inspected"],
+            totals["total_inspected"],
+            totals["total_qa"],
+            totals["total_scrap"],
+            totals["total_okayed"],
+            processed_by,
+            target_lot_id,
+        ),
+    )
+    source_no = source_lot_no or str(target.get("new_lot_no") or "")
+    scrap = int(scrap_qty or 0)
+    return {
+        "part_number": part_number or target.get("part_number"),
+        "bom_id": bom_id or target.get("bom_id"),
+        "lot_id": target_lot_id,
+        "line_type": LINE_ASSEMBLY_INSPECTION,
+        "source_lot_no": source_no,
+        "production_date": production_date,
+        "inspected_qty": inspected_qty,
+        "qa_qty": qa_qty,
+        "scrap_qty": scrap,
+        "rework_qty": 0,
+        "scrap_remark": scrap_remark if scrap > 0 else None,
+        "rework_remark": None,
+        "operator_ids": operator_ids,
+        "time_taken_minutes": time_taken_minutes,
+        "ot_flag": ot_flag,
+    }
+
+
+def apply_weld_inspection(
+    lot_id: int,
+    work_date: str,
+    qa_qty: int,
+    scrap_qty: int,
+    operator_ids: str,
+    time_taken_minutes: int,
+    scrap_remark: Optional[str] = None,
+    processed_by: Optional[int] = None,
+    ot_flag: Optional[str] = None,
+) -> None:
+    """Apply parent-level QA/scrap to a freshly welded lot (Assembly_Inspection line)."""
+    inspected = int(qa_qty or 0) + int(scrap_qty or 0)
+    if inspected <= 0:
+        return
+    wd = _parse_date(work_date)
+    if not wd:
+        raise ValueError("Invalid work date")
+    ids_csv = _operator_ids_csv(operator_ids)
+    if not ids_csv:
+        raise ValueError("Operator is required")
+    session_ot = _normalize_ot_flag(ot_flag)
+
+    with get_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT * FROM laser_welding_lot
+            WHERE lot_id = %s AND bom_id IS NOT NULL AND new_lot_no IS NOT NULL
+            FOR UPDATE
+            """,
+            (int(lot_id),),
+        )
+        target = cursor.fetchone()
+        if not target:
+            raise ValueError(f"Target assembly lot {lot_id} not found")
+
+        line_spec = _apply_inspection_to_lot(
+            cursor,
+            target,
+            inspected_qty=inspected,
+            qa_qty=int(qa_qty or 0),
+            scrap_qty=int(scrap_qty or 0),
+            scrap_remark=scrap_remark,
+            operator_ids=ids_csv,
+            part_number=str(target.get("part_number") or ""),
+            bom_id=str(target.get("bom_id") or "") or None,
+            production_date=wd,
+            time_taken_minutes=int(time_taken_minutes or 0),
+            ot_flag=session_ot,
+            processed_by=processed_by,
+        )
+        _insert_line_batch(cursor, [line_spec])
 
 
 def inspect_assembly(
@@ -6299,7 +6533,7 @@ def inspect_assembly(
         if not draft:
             raise ValueError("Pending cleaning row not found — add BOM and operator first")
 
-        operator_id = int(draft.get("operator_id") or 0)
+        draft_operator_ids = str(draft.get("operator_ids") or "").strip()
         bom_id = str(draft.get("bom_id") or "").strip()
         pd = draft.get("production_date")
         draft_wd = pd.strftime("%Y-%m-%d") if hasattr(pd, "strftime") else str(pd or "")[:10]
@@ -6376,7 +6610,7 @@ def inspect_assembly(
                     "rework_qty": int(v.get("reworkQty") or 0),
                     "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
                     "rework_remark": v.get("reworkRemark"),
-                    "operator_id": operator_id,
+                    "operator_ids": draft_operator_ids,
                     "time_taken_minutes": time_taken_minutes,
                     "ot_flag": line_ot,
                 })
@@ -7049,6 +7283,7 @@ def _history_item_from_row(
     row_class = _history_row_class(wf_step, part_no, bom_no)
     detail_steps = ("sub_assembly", "laser_welding")
     has_detail = bool(consumptions) and wf_step in detail_steps
+    op_fields = _line_operator_fields(r)
 
     return {
         "lineId": int(r["line_id"]),
@@ -7073,9 +7308,11 @@ def _history_item_from_row(
         "reworkQty": rework,
         "scrapRemark": str(r.get("scrap_remark") or "").strip(),
         "reworkRemark": str(r.get("rework_remark") or "").strip(),
-        "operatorId": int(r["operator_id"]) if r.get("operator_id") is not None else None,
-        "operatorName": str(r.get("operator_name") or "").strip(),
-        "operatorEcno": str(r.get("operator_ecno") or "").strip(),
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
+        "operatorEcno": op_fields["operatorEcno"],
         "machineId": int(r["machine_id"]) if r.get("machine_id") is not None else None,
         "machineName": str(r.get("machine_name") or "").strip(),
         "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
@@ -7206,7 +7443,7 @@ def _history_item_from_packing_group(
     session_ot = "Y" if any(f == "Y" for f in ot_vals) else "N"
 
     label = bom_no or part_no
-    op_id = primary.get("operator_id")
+    op_fields = _line_operator_fields(primary)
 
     return {
         "lineId": int(primary["line_id"]),
@@ -7232,9 +7469,11 @@ def _history_item_from_packing_group(
         "reworkQty": rework,
         "scrapRemark": str(primary.get("scrap_remark") or "").strip(),
         "reworkRemark": str(primary.get("rework_remark") or "").strip(),
-        "operatorId": int(op_id) if op_id is not None else None,
-        "operatorName": str(primary.get("operator_name") or "").strip(),
-        "operatorEcno": str(primary.get("operator_ecno") or "").strip(),
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
+        "operatorEcno": op_fields["operatorEcno"],
         "machineId": int(primary["machine_id"]) if primary.get("machine_id") is not None else None,
         "machineName": str(primary.get("machine_name") or "").strip(),
         "timeTakenMinutes": max_time,
@@ -7313,7 +7552,7 @@ def get_action_history(
             ln.rework_remark,
             ln.time_taken_minutes,
             ln.ot_flag,
-            ln.operator_id,
+            ln.operator_ids,
             ln.machine_id,
             ln.bom_id,
             ln.child_lot_id,
@@ -7325,8 +7564,6 @@ def get_action_history(
             b.bom_no,
             b.product_name,
             COALESCE(c.CU_Name, '') AS customer_name,
-            COALESCE(op.OP_NAME, '') AS operator_name,
-            COALESCE(op.OP_ECNO, '') AS operator_ecno,
             COALESCE(m.MCM_Name, '') AS machine_name,
             cl.new_lot_no AS child_lot_no
         FROM laser_welding_line ln
@@ -7334,7 +7571,6 @@ def get_action_history(
         LEFT JOIN laser_welding_lot cl ON cl.lot_id = ln.child_lot_id
         LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
-        LEFT JOIN operators op ON op.OP_ID = ln.operator_id
         LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
         WHERE ln.production_date >= %s
           AND ln.production_date <= %s
@@ -7848,7 +8084,7 @@ def _report_lines_base_sql() -> str:
             ln.rework_remark,
             ln.time_taken_minutes,
             ln.ot_flag,
-            ln.operator_id,
+            ln.operator_ids,
             ln.machine_id,
             ln.bom_id,
             l.new_lot_no AS lot_no,
@@ -7858,14 +8094,11 @@ def _report_lines_base_sql() -> str:
             b.bom_no,
             b.product_name,
             COALESCE(c.CU_Name, '') AS customer_name,
-            COALESCE(op.OP_NAME, '') AS operator_name,
-            COALESCE(op.OP_ECNO, '') AS operator_ecno,
             COALESCE(m.MCM_Name, '') AS machine_name
         FROM laser_welding_line ln
         LEFT JOIN laser_welding_lot l ON l.lot_id = ln.lot_id
         LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
-        LEFT JOIN operators op ON op.OP_ID = ln.operator_id
         LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
     """
 
@@ -7921,8 +8154,10 @@ def _report_entry_from_line(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "reworkQty": int(r.get("rework_qty") or 0),
         "scrapRemark": str(r.get("scrap_remark") or "").strip(),
         "reworkRemark": str(r.get("rework_remark") or "").strip(),
-        "operatorName": str(r.get("operator_name") or "").strip(),
-        "operatorEcno": str(r.get("operator_ecno") or "").strip(),
+        "operatorId": _line_operator_fields(r)["operatorId"],
+        "operatorIds": _line_operator_fields(r)["operatorIds"],
+        "operatorName": _line_operator_fields(r)["operatorName"],
+        "operatorNames": _line_operator_fields(r)["operatorNames"],
         "machineName": str(r.get("machine_name") or "").strip(),
         "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
         "otFlag": _normalize_ot_flag(r.get("ot_flag")),

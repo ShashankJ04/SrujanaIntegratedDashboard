@@ -20,12 +20,14 @@ env/
 *.db
 build/
 dist/
+data/
 pm-attachments/
 qr-codes/
 data/Untitled*
 .cursor/
 dashboards.code-workspace
 scripts/
+static/sql/
 
 # PM date OCR / ML dev (feature branch — not in StableVersion git or PyInstaller exe)
 backend/pm_date_*.py
@@ -42,3 +44,6 @@ Thumbs.db
 .env
 .env.example
 /dashboards
+
+# Personal Obsidian vault (local documentation only)
+obsidian/
