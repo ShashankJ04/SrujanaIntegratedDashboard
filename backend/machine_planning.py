@@ -32,7 +32,7 @@ def get_machines() -> List[Dict[str, Any]]:
     return fetch_all(
         "SELECT MCM_Id AS id, MCM_Name AS label, MCM_Capacity AS capacity, "
         "MCM_Make AS make FROM machinemaster "
-        "WHERE MCM_ACTIVEYN = 'Y' ORDER BY MCM_Name"
+        "WHERE MCM_ACTIVEYN = 'Y' AND MCM_Type=1 ORDER BY MCM_Name"
     )
 
 
@@ -162,7 +162,7 @@ def _fetch_spm_by_tool(tool_numbers: set) -> Dict[str, float]:
 
 # ── Plan CRUD ────────────────────────────────────────────────────────────
 
-def get_plan(machine_id: int, month_year: str) -> Dict[str, Any]:
+def get_plan(machine_id: int, month_year: str, inv_rows: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """Full plan for a machine + month, with auto-populated fields.
 
     `month_year` is ISO format 'YYYY-MM' (day is ignored, stored as first-of-month).
@@ -182,9 +182,10 @@ def get_plan(machine_id: int, month_year: str) -> Dict[str, Any]:
     details = _lookup_part_details(part_numbers) if part_numbers else {}
 
     # Pull production_pending & produced_qty from the same source as Inventory Report
-    ym_parts = month_year.split("-")
-    inv_month, inv_year = int(ym_parts[1]), int(ym_parts[0])
-    inv_rows = build_enriched_inventory_rows_for_period(inv_month, inv_year)
+    if inv_rows is None:
+        ym_parts = month_year.split("-")
+        inv_month, inv_year = int(ym_parts[1]), int(ym_parts[0])
+        inv_rows = build_enriched_inventory_rows_for_period(inv_month, inv_year)
     inv_by_part: Dict[str, Dict[str, Any]] = {}
     for ir in inv_rows:
         pk = str(ir.get("part_no") or "").strip()

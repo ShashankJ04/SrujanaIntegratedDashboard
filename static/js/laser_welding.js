@@ -73,7 +73,7 @@ window.LaserWeldingPage = (() => {
   let _tcEditBinSeq = null;
   let _weldModalDraftLineId = null;
   let _weldModalBomId = null;
-  let _weldModalOperatorId = null;
+  let _weldModalOperatorIds = [];
   let _weldModalTargetLotId = null;
   let _weldModalChildren = [];
   let _weldModalContext = 'assembly';
@@ -448,6 +448,7 @@ window.LaserWeldingPage = (() => {
         r.partName || partNameFor(r.partNumber),
         r.partNo,
         r.productName,
+        r.operatorNames,
         r.operatorName,
         r.newLotNo,
         r.workDate,
@@ -459,7 +460,7 @@ window.LaserWeldingPage = (() => {
   }
 
   function groupDisplayKey(row) {
-    const op = String(row.operatorId ?? '');
+    const op = String(row.operatorIds?.join(',') ?? '');
     if (isCleaningTab()) {
       const bom = String(row.bomId || bomIdForPartNo(row.partNumber) || row.partNumber || '').trim();
       return `${bom}|${op}`;
@@ -852,7 +853,7 @@ window.LaserWeldingPage = (() => {
 
     const partNo = row.partNumber || row.partNo || '';
     const partName = row.partName || partNameFor(partNo);
-    const operatorName = row.operatorName || '—';
+    const operatorName = operatorDisplayName(row);
     const timeStr = rowTimeTakenDisplay(row) || '—';
 
     tr.innerHTML = `
@@ -890,6 +891,119 @@ window.LaserWeldingPage = (() => {
       html += `<option value="${op.id}"${sel}>${escapeHtml(op.label || op.name || '')}</option>`;
     });
     return html;
+  }
+
+  function operatorDisplayName(row) {
+    const names = String(row?.operatorNames || row?.operatorName || '').trim();
+    return names || '—';
+  }
+
+  function operatorMultiSelectHtml(selectedIds) {
+    const selected = new Set((selectedIds || []).map(id => Number(id)).filter(id => id > 0));
+    let checks = '';
+    _operators.forEach(op => {
+      const checked = selected.has(Number(op.id)) ? ' checked' : '';
+      checks += `<label class="lw-operator-multi-item"><input type="checkbox" value="${op.id}"${checked} /><span>${escapeHtml(op.label || op.name || '')}</span></label>`;
+    });
+    const labels = _operators
+      .filter(op => selected.has(Number(op.id)))
+      .map(op => op.label || op.name || '')
+      .filter(Boolean);
+    const summary = labels.length ? labels.join(', ') : 'Select operators…';
+    return `<div class="lw-operator-multi">
+      <button type="button" class="lw-operator-multi-toggle ti-input">${escapeHtml(summary)}</button>
+      <div class="lw-operator-multi-menu">${checks || '<span class="lw-operator-multi-empty">No operators</span>'}</div>
+    </div>`;
+  }
+
+  function updateOperatorMultiLabel(wrap) {
+    if (!wrap) return;
+    const btn = wrap.querySelector('.lw-operator-multi-toggle');
+    const checked = [...wrap.querySelectorAll('input[type="checkbox"]:checked')];
+    const labels = checked.map(inp => {
+      const span = inp.closest('label')?.querySelector('span');
+      return String(span?.textContent || '').trim();
+    }).filter(Boolean);
+    const summary = labels.length ? labels.join(', ') : 'Select operators…';
+    if (btn) {
+      btn.textContent = summary;
+      btn.title = summary;
+    }
+  }
+
+  function positionOperatorMultiMenu(wrap) {
+    const btn = wrap?.querySelector('.lw-operator-multi-toggle');
+    const menu = wrap?.querySelector('.lw-operator-multi-menu');
+    if (!btn || !menu) return;
+    const rect = btn.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.left = `${Math.max(8, rect.left)}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.width = `${Math.max(rect.width, 180)}px`;
+    menu.style.right = 'auto';
+  }
+
+  function resetOperatorMultiMenuPosition(wrap) {
+    const menu = wrap?.querySelector('.lw-operator-multi-menu');
+    if (!menu) return;
+    menu.style.position = '';
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.width = '';
+    menu.style.right = '';
+  }
+
+  function initOperatorMultiSelect(root) {
+    const scope = root || document;
+    scope.querySelectorAll('.lw-operator-multi:not([data-bound])').forEach(wrap => {
+      wrap.dataset.bound = '1';
+      const btn = wrap.querySelector('.lw-operator-multi-toggle');
+      const menu = wrap.querySelector('.lw-operator-multi-menu');
+      btn?.addEventListener('click', e => {
+        e.stopPropagation();
+        const willOpen = !wrap.classList.contains('is-open');
+        document.querySelectorAll('.lw-operator-multi.is-open').forEach(other => {
+          if (other !== wrap) {
+            other.classList.remove('is-open');
+            resetOperatorMultiMenuPosition(other);
+          }
+        });
+        wrap.classList.toggle('is-open', willOpen);
+        if (willOpen) positionOperatorMultiMenu(wrap);
+        else resetOperatorMultiMenuPosition(wrap);
+      });
+      menu?.addEventListener('change', () => updateOperatorMultiLabel(wrap));
+      updateOperatorMultiLabel(wrap);
+    });
+  }
+
+  function getOperatorIdsFromMulti(container) {
+    if (!container) return [];
+    const wrap = container.classList?.contains('lw-operator-multi')
+      ? container
+      : (container.querySelector?.('.lw-operator-multi') || container.closest?.('.lw-operator-multi'));
+    if (!wrap) return [];
+    return [...wrap.querySelectorAll('input[type="checkbox"]:checked')]
+      .map(inp => parseInt(inp.value, 10))
+      .filter(id => Number.isFinite(id) && id > 0);
+  }
+
+  function resetOperatorMulti(container) {
+    if (!container) return;
+    const wrap = container.classList?.contains('lw-operator-multi')
+      ? container
+      : (container.querySelector?.('.lw-operator-multi') || container.closest?.('.lw-operator-multi'));
+    if (!wrap) return;
+    wrap.querySelectorAll('input[type="checkbox"]').forEach(inp => { inp.checked = false; });
+    wrap.classList.remove('is-open');
+    resetOperatorMultiMenuPosition(wrap);
+    updateOperatorMultiLabel(wrap);
+  }
+
+  function operatorPayloadFromMulti(container) {
+    const ids = getOperatorIdsFromMulti(container);
+    if (!ids.length) return null;
+    return { operatorId: ids[0], operatorIds: ids };
   }
 
   function machineSelectHtml(selectedId) {
@@ -1022,6 +1136,7 @@ window.LaserWeldingPage = (() => {
       await apiPost('/api/laser-welding/cleaning/pending', {
         bomId,
         operatorId,
+        operatorIds: [operatorId],
         workDate: _workDate,
         subAssemblyPartNo: partMatch.isSubAssembly ? (partMatch.subAssemblyPartNo || bomNo) : undefined,
       });
@@ -1074,6 +1189,7 @@ window.LaserWeldingPage = (() => {
       await apiPost(pendingUrl, {
         partNumber,
         operatorId,
+        operatorIds: [operatorId],
         workDate: _workDate,
       });
       partInput.value = '';
@@ -2144,7 +2260,7 @@ window.LaserWeldingPage = (() => {
       partEl.textContent = partNo ? label : '—';
       partEl.dataset.partNumber = partNo;
     }
-    if (operatorEl) operatorEl.textContent = row?.operatorName || '—';
+    if (operatorEl) operatorEl.textContent = operatorDisplayName(row);
     if (otInp) otInp.checked = false;
 
     const hoursInp = $('#lw-prod-modal-hours');
@@ -2665,6 +2781,7 @@ window.LaserWeldingPage = (() => {
     return rows.filter(r => {
       const hay = [
         r.customerName, r.partNumber, r.productName, r.partName,
+        r.operatorNames,
         r.operatorName, r.machineName, r.newLotNo,
       ].join(' ').toLowerCase();
       return hay.includes(q);
@@ -2677,20 +2794,25 @@ window.LaserWeldingPage = (() => {
     return rows.filter(r => {
       const hay = [
         r.customerName, r.partNumber, r.productName, r.partName,
-        r.subAssemblyPartNo, r.bomNo, r.operatorName, r.machineName,
+        r.subAssemblyPartNo, r.bomNo, r.operatorNames, r.operatorName, r.machineName,
       ].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }
 
   function updateEligibleAssignButton(tr, requireMachine) {
-    const opSel = tr?.querySelector('.lw-eligible-operator');
     const machineSel = tr?.querySelector('.lw-eligible-machine');
     const btn = tr?.querySelector('.lw-eligible-act-assign');
     if (!btn) return;
-    const operatorId = parseInt(opSel?.value, 10);
+    const singleSel = tr?.querySelector('.lw-eligible-operator');
+    let hasOperator;
+    if (singleSel) {
+      hasOperator = !!parseInt(singleSel.value, 10);
+    } else {
+      hasOperator = getOperatorIdsFromMulti(tr?.querySelector('.lw-col-operator')).length > 0;
+    }
     const machineId = requireMachine ? parseInt(machineSel?.value, 10) : true;
-    btn.disabled = !(operatorId && machineId);
+    btn.disabled = !(hasOperator && machineId);
   }
 
   function buildEligibleAsmRow(row) {
@@ -2703,9 +2825,7 @@ window.LaserWeldingPage = (() => {
     const pendingQty = Number(row.pendingQty) || 0;
     const btnLabel = completeActionLabel(true, false);
     const editable = canEdit();
-    const operatorCell = editable
-      ? `<select class="ti-input lw-eligible-operator">${operatorSelectHtml()}</select>`
-      : '—';
+    const operatorCell = editable ? operatorMultiSelectHtml() : '—';
     const machineCell = editable
       ? `<select class="ti-input lw-eligible-machine">${machineSelectHtml()}</select>`
       : '—';
@@ -2727,8 +2847,9 @@ window.LaserWeldingPage = (() => {
       <td class="lw-col-actions lw-actions-cell">${actionCell}</td>
     `;
     if (editable) {
+      initOperatorMultiSelect(tr);
       const onChange = () => updateEligibleAssignButton(tr, true);
-      tr.querySelector('.lw-eligible-operator')?.addEventListener('change', onChange);
+      tr.querySelector('.lw-col-operator')?.addEventListener('change', onChange);
       tr.querySelector('.lw-eligible-machine')?.addEventListener('change', onChange);
     }
     return tr;
@@ -2810,13 +2931,13 @@ window.LaserWeldingPage = (() => {
   async function assignEligibleAsmRow(eligibleKey, tr) {
     const row = _asmEligibleRows.find(r => r.eligibleKey === eligibleKey);
     if (!row || !canEdit()) return;
-    const operatorId = parseInt(tr?.querySelector('.lw-eligible-operator')?.value, 10);
+    const opPayload = operatorPayloadFromMulti(tr?.querySelector('.lw-col-operator'));
     const machineId = parseInt(tr?.querySelector('.lw-eligible-machine')?.value, 10);
-    if (!row.bomId || !operatorId || !machineId) return;
+    if (!row.bomId || !opPayload || !machineId) return;
     try {
       const draft = await apiPost('/api/laser-welding/assembly/rework/pending', {
         bomId: row.bomId,
-        operatorId,
+        ...opPayload,
         machineId,
         workDate: _workDate,
       });
@@ -2839,6 +2960,7 @@ window.LaserWeldingPage = (() => {
         bomId: row.bomId,
         subAssemblyPartNo: saPart,
         operatorId,
+        operatorIds: [operatorId],
         machineId,
         workDate: _workDate,
       });
@@ -2859,6 +2981,7 @@ window.LaserWeldingPage = (() => {
       const draft = await apiPost('/api/laser-welding/qa/pending', {
         partNumber,
         operatorId,
+        operatorIds: [operatorId],
         workDate: _workDate,
       });
       await loadGridRows(true);
@@ -2925,7 +3048,7 @@ window.LaserWeldingPage = (() => {
       + (row.isDraft ? ' lw-data-row--draft' : '');
     tr.dataset.rowKey = row.rowKey;
     const product = row.productName || row.partName || '';
-    const operatorName = row.operatorName || '—';
+    const operatorName = operatorDisplayName(row);
     const machineName = row.machineName || '—';
     const customerName = row.customerName || '—';
     tr.innerHTML = `
@@ -3015,9 +3138,7 @@ window.LaserWeldingPage = (() => {
         <select class="ti-input lw-asm-new-bom">${bomSelectHtml('', '')}</select>
       </td>
       <td class="lw-col-name lw-asm-new-product">—</td>
-      <td class="lw-col-operator lw-edit-cell">
-        <select class="ti-input lw-asm-new-operator">${operatorSelectHtml()}</select>
-      </td>
+      <td class="lw-col-operator lw-edit-cell lw-new-operator-cell">${operatorMultiSelectHtml()}</td>
       <td class="lw-col-machine lw-edit-cell">
         <select class="ti-input lw-asm-new-machine">${machineSelectHtml()}</select>
       </td>
@@ -3031,26 +3152,27 @@ window.LaserWeldingPage = (() => {
     tbody.appendChild(tr);
     const custSel = tr.querySelector('.lw-asm-new-customer');
     const bomSel = tr.querySelector('.lw-asm-new-bom');
-    const opSel = tr.querySelector('.lw-asm-new-operator');
+    const operatorWrap = tr.querySelector('.lw-new-operator-cell');
     const machineSel = tr.querySelector('.lw-asm-new-machine');
     const productEl = tr.querySelector('.lw-asm-new-product');
+    initOperatorMultiSelect(tr);
 
     custSel?.addEventListener('change', () => refreshAsmNewRowBomSelect(tr));
     bomSel?.addEventListener('change', () => {
       const bom = _boms.find(b => bomIdKey(b.bomId) === bomIdKey(bomSel.value));
       if (productEl) productEl.textContent = bom ? (bom.productName || '—') : '—';
       if (bom?.custId && custSel && !custSel.value) custSel.value = String(bom.custId);
-      tryCommitAsmNewRow(custSel, bomSel, opSel, machineSel);
+      tryCommitAsmNewRow(custSel, bomSel, operatorWrap, machineSel);
     });
-    opSel?.addEventListener('change', () => tryCommitAsmNewRow(custSel, bomSel, opSel, machineSel));
-    machineSel?.addEventListener('change', () => tryCommitAsmNewRow(custSel, bomSel, opSel, machineSel));
+    operatorWrap?.addEventListener('change', () => tryCommitAsmNewRow(custSel, bomSel, operatorWrap, machineSel));
+    machineSel?.addEventListener('change', () => tryCommitAsmNewRow(custSel, bomSel, operatorWrap, machineSel));
   }
 
-  async function tryCommitAsmNewRow(custSel, bomSel, opSel, machineSel) {
+  async function tryCommitAsmNewRow(custSel, bomSel, operatorWrap, machineSel) {
     const bomId = bomIdKey(bomSel?.value);
-    const operatorId = parseInt(opSel?.value, 10);
+    const opPayload = operatorPayloadFromMulti(operatorWrap);
     const machineId = parseInt(machineSel?.value, 10);
-    if (!bomId || !operatorId || !machineId) return;
+    if (!bomId || !opPayload || !machineId) return;
 
     const bom = _boms.find(b => bomIdKey(b.bomId) === bomId);
     const custId = parseInt(custSel?.value, 10);
@@ -3063,10 +3185,10 @@ window.LaserWeldingPage = (() => {
       const pendingUrl = isReworkWeldingMode()
         ? '/api/laser-welding/assembly/rework/pending'
         : '/api/laser-welding/assembly/pending';
-      await apiPost(pendingUrl, { bomId, operatorId, machineId, workDate: _workDate });
+      await apiPost(pendingUrl, { bomId, ...opPayload, machineId, workDate: _workDate });
       if (custSel) custSel.value = '';
       if (bomSel) { bomSel.value = ''; bomSel.innerHTML = bomSelectHtml('', ''); }
-      if (opSel) opSel.value = '';
+      resetOperatorMulti(operatorWrap);
       if (machineSel) machineSel.value = '';
       const productEl = custSel?.closest('tr')?.querySelector('.lw-asm-new-product');
       if (productEl) productEl.textContent = '—';
@@ -3090,6 +3212,7 @@ window.LaserWeldingPage = (() => {
       });
     }
     appendAsmNewRow(tbody);
+    initOperatorMultiSelect(tbody);
     updateRowCount();
   }
 
@@ -3173,7 +3296,7 @@ window.LaserWeldingPage = (() => {
     return rows.filter(r => {
       const hay = [
         r.customerName, r.partNumber, r.subAssemblyPartNo, r.partName,
-        r.productName, r.operatorName, r.machineName, r.newLotNo,
+        r.productName, r.operatorNames, r.operatorName, r.machineName, r.newLotNo,
       ].join(' ').toLowerCase();
       return hay.includes(q);
     });
@@ -3190,11 +3313,12 @@ window.LaserWeldingPage = (() => {
       + (row.isDraft ? ' lw-data-row--draft' : '');
     tr.dataset.rowKey = row.rowKey;
     const saPart = row.subAssemblyPartNo || row.partName || '—';
+    const operatorName = operatorDisplayName(row);
     tr.innerHTML = `
       <td class="lw-col-customer" title="${escapeAttr(row.customerName || '')}">${escapeHtml(row.customerName || '—')}</td>
       <td class="lw-col-bom val-bold" title="${escapeAttr(row.partNumber)}">${escapeHtml(row.partNumber || '—')}</td>
       <td class="lw-col-part" title="${escapeAttr(saPart)}">${escapeHtml(saPart)}</td>
-      <td class="lw-col-operator" title="${escapeAttr(row.operatorName || '')}">${escapeHtml(row.operatorName || '—')}</td>
+      <td class="lw-col-operator" title="${escapeAttr(operatorName)}">${escapeHtml(operatorName)}</td>
       <td class="lw-col-machine" title="${escapeAttr(row.machineName || '')}">${escapeHtml(row.machineName || '—')}</td>
       <td class="lw-col-qty">${primaryQtyCellHtml(row)}</td>
       <td class="lw-col-qa">${qaTotalCellHtml(row)}</td>
@@ -3376,6 +3500,7 @@ window.LaserWeldingPage = (() => {
         bomId,
         subAssemblyPartNo: saPart,
         operatorId,
+        operatorIds: [operatorId],
         machineId,
         workDate: _workDate,
       });
@@ -3527,6 +3652,16 @@ window.LaserWeldingPage = (() => {
     }
     if (targetWrap) targetWrap.style.display = isRw ? '' : 'none';
     if (qtyInp) qtyInp.removeAttribute('max');
+    syncWeldParentScrapRemarkVisibility();
+  }
+
+  function syncWeldParentScrapRemarkVisibility() {
+    const qa = parseInt($('#lw-weld-modal-parent-qa')?.value, 10) || 0;
+    const scrap = parseInt($('#lw-weld-modal-parent-scrap')?.value, 10) || 0;
+    const remarkWrap = $('#lw-weld-modal-parent-scrap-remark-wrap');
+    if (remarkWrap) remarkWrap.style.display = scrap > 0 ? '' : 'none';
+    const timeWrap = $('#lw-weld-modal-parent-time-wrap');
+    if (timeWrap) timeWrap.style.display = (qa > 0 || scrap > 0) ? '' : 'none';
   }
 
   function populateWeldTargetLotSelect(lots, selectedLotId) {
@@ -3835,7 +3970,7 @@ window.LaserWeldingPage = (() => {
     _weldModalContext = SA_TABS.has(_tab) ? 'sub_assembly' : 'assembly';
     _weldModalDraftLineId = row.draftLineId || row.lineId || null;
     _weldModalBomId = row.bomId;
-    _weldModalOperatorId = row.operatorId || null;
+    _weldModalOperatorIds = row.operatorIds || [];
     _weldModalSubAssemblyPartNo = _weldModalContext === 'sub_assembly'
       ? (row.subAssemblyPartNo || row.partNumber || null)
       : null;
@@ -3848,12 +3983,23 @@ window.LaserWeldingPage = (() => {
       : (row.partNumber ? `${row.partNumber} — ${row.productName || ''}` : '—');
     $('#lw-weld-modal-bom').textContent = bomLabel;
     $('#lw-weld-modal-bom').dataset.bomId = String(row.bomId || '');
-    $('#lw-weld-modal-operator').textContent = row.operatorName || '—';
+    $('#lw-weld-modal-operator').textContent = operatorDisplayName(row);
     const machineEl = $('#lw-weld-modal-machine');
     if (machineEl) machineEl.textContent = row.machineName || '—';
     $('#lw-weld-modal-hours').value = '0';
     $('#lw-weld-modal-mins').value = '0';
     $('#lw-weld-modal-qty').value = '0';
+    const parentQa = $('#lw-weld-modal-parent-qa');
+    const parentScrap = $('#lw-weld-modal-parent-scrap');
+    const parentScrapRemark = $('#lw-weld-modal-parent-scrap-remark');
+    if (parentQa) parentQa.value = '0';
+    if (parentScrap) parentScrap.value = '0';
+    if (parentScrapRemark) parentScrapRemark.value = '';
+    const parentHours = $('#lw-weld-modal-parent-hours');
+    const parentMins = $('#lw-weld-modal-parent-mins');
+    if (parentHours) parentHours.value = '0';
+    if (parentMins) parentMins.value = '0';
+    syncWeldParentScrapRemarkVisibility();
     const otInp = $('#lw-weld-modal-ot');
     if (otInp) otInp.checked = false;
 
@@ -3895,13 +4041,23 @@ window.LaserWeldingPage = (() => {
     overlay.setAttribute('aria-hidden', 'true');
     _weldModalDraftLineId = null;
     _weldModalBomId = null;
-    _weldModalOperatorId = null;
+    _weldModalOperatorIds = [];
     _weldModalTargetLotId = null;
     _weldModalChildren = [];
     _weldModalSubAssemblyPartNo = null;
     _weldModalContext = 'assembly';
     const otInp = $('#lw-weld-modal-ot');
     if (otInp) otInp.checked = false;
+    const parentQa = $('#lw-weld-modal-parent-qa');
+    const parentScrap = $('#lw-weld-modal-parent-scrap');
+    const parentScrapRemark = $('#lw-weld-modal-parent-scrap-remark');
+    if (parentQa) parentQa.value = '0';
+    if (parentScrap) parentScrap.value = '0';
+    if (parentScrapRemark) parentScrapRemark.value = '';
+    const parentHours = $('#lw-weld-modal-parent-hours');
+    const parentMins = $('#lw-weld-modal-parent-mins');
+    if (parentHours) parentHours.value = '0';
+    if (parentMins) parentMins.value = '0';
   }
 
   async function saveWeldModal() {
@@ -3945,6 +4101,38 @@ window.LaserWeldingPage = (() => {
     if (timeTakenMinutes <= 0) {
       showSnackbar('Time taken is required', 'error');
       return;
+    }
+
+    const parentQa = parseInt($('#lw-weld-modal-parent-qa')?.value, 10) || 0;
+    const parentScrap = parseInt($('#lw-weld-modal-parent-scrap')?.value, 10) || 0;
+    const parentScrapRemark = ($('#lw-weld-modal-parent-scrap-remark')?.value || '').trim();
+    if (parentQa < 0 || parentScrap < 0) {
+      showSnackbar('QA and Scrap QTY cannot be negative', 'error');
+      return;
+    }
+    if (parentQa + parentScrap > weldQty) {
+      showSnackbar('QA + Scrap cannot exceed weld QTY', 'error');
+      return;
+    }
+    if (parentScrap > 0 && !parentScrapRemark) {
+      showSnackbar('Remark is required when scrap QTY > 0', 'error');
+      return;
+    }
+    let parentInspection = null;
+    if (parentQa > 0 || parentScrap > 0) {
+      const pHours = parseInt($('#lw-weld-modal-parent-hours')?.value, 10) || 0;
+      const pMins = parseInt($('#lw-weld-modal-parent-mins')?.value, 10) || 0;
+      const inspectionTimeTakenMinutes = pHours * 60 + pMins;
+      if (inspectionTimeTakenMinutes <= 0) {
+        showSnackbar('Inspection time is required when QA or Scrap > 0', 'error');
+        return;
+      }
+      parentInspection = {
+        qaQty: parentQa,
+        scrapQty: parentScrap,
+        scrapRemark: parentScrap > 0 ? parentScrapRemark : undefined,
+        inspectionTimeTakenMinutes,
+      };
     }
 
     const consumptions = [];
@@ -4024,9 +4212,10 @@ window.LaserWeldingPage = (() => {
           targetLotId: _weldModalTargetLotId,
           reworkQty: weldQty,
           timeTakenMinutes,
-          operatorId: _weldModalOperatorId || undefined,
+          operatorIds: _weldModalOperatorIds.length ? _weldModalOperatorIds : undefined,
           consumptions,
           otFlag,
+          ...(parentInspection || {}),
         });
         showSnackbar(`Re-work saved — Lot No: ${data.newLotNo || ''}`, 'success');
       } else {
@@ -4038,9 +4227,10 @@ window.LaserWeldingPage = (() => {
           workDate: _workDate,
           weldQty,
           timeTakenMinutes,
-          operatorId: _weldModalOperatorId || undefined,
+          operatorIds: _weldModalOperatorIds.length ? _weldModalOperatorIds : undefined,
           consumptions,
           otFlag,
+          ...(parentInspection || {}),
         });
         showSnackbar(`${completeActionLabel(false, isSa)} — Lot No: ${data.newLotNo || ''}`, 'success');
       }
@@ -4779,10 +4969,10 @@ window.LaserWeldingPage = (() => {
   }
 
   function historyOperatorLabel(row) {
-    const name = String(row.operatorName || '').trim();
+    const names = String(row.operatorNames || row.operatorName || '').trim();
     const ecno = String(row.operatorEcno || '').trim();
-    if (name && ecno) return `${name} (${ecno})`;
-    return name || ecno || '—';
+    if (names && ecno) return `${names} (${ecno})`;
+    return names || ecno || '—';
   }
 
   function historyOtHtml(row) {
@@ -5537,6 +5727,7 @@ window.LaserWeldingPage = (() => {
     renderTrackPipeline();
     renderTrackCapacity();
     renderTrackActionsTable();
+    ensureHistoryDateDefaults();
     setTrackReportView(_trackReportView);
   }
 
@@ -6024,7 +6215,6 @@ window.LaserWeldingPage = (() => {
       renderTrackDashboard();
     } else if (_tab === 'reports') {
       renderTrackReports();
-      setTrackReportView(_trackReportView);
     }
   }
 
@@ -6074,6 +6264,14 @@ window.LaserWeldingPage = (() => {
     const root = $('#lw-root');
     if (!root || root.dataset.lwBound === '1') return;
     root.dataset.lwBound = '1';
+
+    document.addEventListener('click', e => {
+      if (e.target.closest('.lw-operator-multi')) return;
+      document.querySelectorAll('.lw-operator-multi.is-open').forEach(wrap => {
+        wrap.classList.remove('is-open');
+        resetOperatorMultiMenuPosition(wrap);
+      });
+    });
 
     $$('.lw-tab').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -6131,6 +6329,8 @@ window.LaserWeldingPage = (() => {
       if (e.target.id === 'lw-weld-modal-overlay') closeWeldModal();
     });
     $('#lw-weld-modal-qty')?.addEventListener('input', () => renderWeldModalChildren());
+    $('#lw-weld-modal-parent-scrap')?.addEventListener('input', syncWeldParentScrapRemarkVisibility);
+    $('#lw-weld-modal-parent-qa')?.addEventListener('input', syncWeldParentScrapRemarkVisibility);
     $('#lw-weld-modal-target-lot')?.addEventListener('change', onWeldTargetLotChange);
     $('#lw-weld-modal-children')?.addEventListener('click', onWeldModalClick);
     $('#lw-weld-modal-children')?.addEventListener('change', onWeldModalChange);

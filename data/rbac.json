@@ -15,13 +15,12 @@
       ],
       "plusAccess": [
         "preventive_maintenance",
-        "edit_dpr",
         "edit_buffer",
         "rept_plus",
         "rm_correction_plus",
         "lw_plus"
       ],
-      "updatedAt": "2026-06-12T13:29:26.267621+00:00"
+      "updatedAt": "2026-07-04T11:31:51.134601+00:00"
     },
     {
       "userId": 2,
@@ -243,5 +242,5 @@
       "updatedAt": "2026-05-18T09:30:40.066978+00:00"
     }
   ],
-  "updatedAt": "2026-06-12T13:29:26.267621+00:00"
+  "updatedAt": "2026-07-04T11:31:51.134601+00:00"
 }

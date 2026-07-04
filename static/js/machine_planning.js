@@ -192,11 +192,11 @@ window.MachinePlanningPage = (() => {
     tr.dataset.mpId = r.mp_id;
     const canEdit = _canEdit();
     tr.innerHTML = `
-      ${canEdit
-        ? `<td data-col-name="actions" class="mp-action-cell" style="text-align:center">
-            <button class="mp-delete-btn" data-mp-id="${r.mp_id}" title="Remove part">✕</button>
-          </td>`
+      <td data-col-name="actions" class="mp-action-cell" style="text-align:center${canEdit ? '' : ';display:none'}">
+        ${canEdit
+        ? `<button class="mp-delete-btn" data-mp-id="${r.mp_id}" title="Remove part">✕</button>`
         : ''}
+      </td>
       <td data-col-name="part_number" title="${_esc(r.part_number)}">${_esc(r.part_number)}</td>
       <td data-col-name="part_name" title="${_esc(r.part_name)}">${_esc(r.part_name)}</td>
       <td data-col-name="production_pending" style="text-align:right">${fmt(r.production_pending)}</td>
@@ -243,7 +243,6 @@ window.MachinePlanningPage = (() => {
       <td data-col-name="remarks" class="mp-remarks-cell mp-edit-cell">
         <input type="text" id="mp-new-remarks" class="mp-cell-input mp-cell-input--text" value="" placeholder="Add remarks…" />
       </td>
-      <td data-col-name="actions"></td>
     `;
     tbody.appendChild(tr);
 
@@ -487,36 +486,32 @@ window.MachinePlanningPage = (() => {
     if (!headerRow) return;
     const editable = _canEdit();
     const ths = Array.from(headerRow.querySelectorAll('th[data-col-name]'));
-    const available = ths
+    const allColNames = ths
       .map(th => String(th.dataset.colName || ''))
-      .filter(c => c && c !== 'sl' && (editable || c !== MP_FROZEN_ACTIONS_COL));
+      .filter(c => c && c !== 'sl');
     mpLayout.order = mpLayout.order.filter(c => c !== 'sl' && c !== MP_FROZEN_ACTIONS_COL);
     mpLayout.pinnedLeft = mpLayout.pinnedLeft.filter(c => c !== 'sl' && c !== MP_FROZEN_ACTIONS_COL);
     if (!editable) mpLayout.order = mpLayout.order.filter(c => c !== MP_FROZEN_ACTIONS_COL);
+    const dataColNames = allColNames.filter(c => c !== MP_FROZEN_ACTIONS_COL);
     let order = [
-      ...mpLayout.order.filter(c => available.includes(c)),
-      ...available.filter(c => !mpLayout.order.includes(c) && c !== MP_FROZEN_ACTIONS_COL),
+      ...mpLayout.order.filter(c => dataColNames.includes(c)),
+      ...dataColNames.filter(c => !mpLayout.order.includes(c)),
     ];
     const pinned = order.filter(c => mpLayout.pinnedLeft.includes(c));
     const unpinned = order.filter(c => !mpLayout.pinnedLeft.includes(c));
     order = [...pinned, ...unpinned];
-    if (editable) order = [MP_FROZEN_ACTIONS_COL, ...order.filter(c => c !== MP_FROZEN_ACTIONS_COL)];
+    order = [MP_FROZEN_ACTIONS_COL, ...order];
     mpLayout.order = order;
     headerRow.innerHTML = '';
     order.forEach(name => {
       const th = ths.find(x => String(x.dataset.colName || '') === name);
       if (th) {
-        if (name === MP_FROZEN_ACTIONS_COL) th.classList.remove('dpr-layout-hidden');
+        if (name === MP_FROZEN_ACTIONS_COL) {
+          th.classList.toggle('dpr-layout-hidden', !editable);
+        }
         headerRow.appendChild(th);
       }
     });
-    if (!editable) {
-      const actionsTh = ths.find(x => String(x.dataset.colName || '') === MP_FROZEN_ACTIONS_COL);
-      if (actionsTh && !headerRow.contains(actionsTh)) {
-        actionsTh.classList.add('dpr-layout-hidden');
-        headerRow.insertBefore(actionsTh, headerRow.firstChild);
-      }
-    }
 
     table.querySelectorAll('tbody tr').forEach(tr => {
       const tds = Array.from(tr.querySelectorAll('td[data-col-name]'));
@@ -524,7 +519,12 @@ window.MachinePlanningPage = (() => {
       tds.forEach(td => td.remove());
       order.forEach(name => {
         const td = map.get(name);
-        if (td) tr.appendChild(td);
+        if (td) {
+          if (!editable && name === MP_FROZEN_ACTIONS_COL) {
+            td.style.display = 'none';
+          }
+          tr.appendChild(td);
+        }
       });
     });
 

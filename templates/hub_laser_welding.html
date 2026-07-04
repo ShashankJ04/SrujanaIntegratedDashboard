@@ -501,6 +501,27 @@
             <label for="lw-weld-modal-qty" id="lw-weld-modal-qty-label">Weld QTY <span class="lw-required">*</span></label>
             <input type="number" id="lw-weld-modal-qty" class="ti-input" min="1" step="1" value="0" />
           </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field">
+            <label for="lw-weld-modal-parent-qa">QA QTY</label>
+            <input type="number" id="lw-weld-modal-parent-qa" class="ti-input" min="0" step="1" value="0" />
+          </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field">
+            <label for="lw-weld-modal-parent-scrap">Scrap QTY</label>
+            <input type="number" id="lw-weld-modal-parent-scrap" class="ti-input" min="0" step="1" value="0" />
+          </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field" id="lw-weld-modal-parent-scrap-remark-wrap" style="display:none">
+            <label for="lw-weld-modal-parent-scrap-remark">Remark <span class="lw-required">*</span></label>
+            <input type="text" id="lw-weld-modal-parent-scrap-remark" class="ti-input" placeholder="Reason for scrap…" />
+          </div>
+          <div class="lw-prod-meta-item lw-weld-qty-field" id="lw-weld-modal-parent-time-wrap" style="display:none">
+            <label>Inspection Time</label>
+            <div class="lw-prod-time-inputs">
+              <input type="number" id="lw-weld-modal-parent-hours" class="ti-input" min="0" step="1" value="0" aria-label="Hours" />
+              <span class="lw-prod-time-unit">h</span>
+              <input type="number" id="lw-weld-modal-parent-mins" class="ti-input" min="0" max="60" step="1" value="0" aria-label="Minutes" />
+              <span class="lw-prod-time-unit">m</span>
+            </div>
+          </div>
         </div>
         <div id="lw-weld-modal-children" class="lw-weld-modal-children"></div>
       </div>

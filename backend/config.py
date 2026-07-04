@@ -36,16 +36,6 @@ def resolve_runtime_path(raw_path: str, fallback_relative: str) -> str:
     return str((_runtime_base_dir() / p).resolve())
 
 
-def _parse_int_tuple_env(env_key: str, default_csv: str) -> tuple:
-    raw = str(os.environ.get(env_key, "") or "").strip() or default_csv
-    values: list[int] = []
-    for piece in raw.split(","):
-        piece = piece.strip()
-        if piece:
-            values.append(int(piece))
-    return tuple(values)
-
-
 class Config:
     """Application configuration.
 
@@ -154,11 +144,6 @@ class Config:
     LW_PACKING_INWARD_STAGE_ID = int(os.environ.get("LW_PACKING_INWARD_STAGE_ID", "6"))
     LW_CT_SOURCE_STOCK_TRANSFER = int(os.environ.get("LW_CT_SOURCE_STOCK_TRANSFER", "18"))
     LW_CR_SRC_FG_SEGREGATION = int(os.environ.get("LW_CR_SRC_FG_SEGREGATION", "9"))
-    # Part Inspection whitelist — stable component family ids (CO_PARENTID), not part numbers.
-    LW_PART_INSPECTION_PARENT_IDS: tuple = _parse_int_tuple_env(
-        "LW_PART_INSPECTION_PARENT_IDS",
-        "1624,1775,1776,1782,1656,1654,1655,1668,1538,1539,1540",
-    )
     LW_WELDING_MACHINE_TYPE = int(os.environ.get("LW_WELDING_MACHINE_TYPE", "3"))
     LW_SUB_ASSEMBLY_MACHINE_TYPE = int(os.environ.get("LW_SUB_ASSEMBLY_MACHINE_TYPE", "4"))
 

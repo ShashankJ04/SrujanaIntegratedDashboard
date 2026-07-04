@@ -126,8 +126,7 @@
       "variables": [],
       "createdAt": "2026-06-08T20:30:00.000Z",
       "updatedAt": "2026-06-12T18:54:54.350105+00:00",
-      "pinned": true,
-      "drilldowns": []
+      "pinned": true
     },
     {
       "id": "c65ce59b-550d-4193-abc8-f703c772054b",
@@ -722,9 +721,10 @@
       "variables": [
         "year"
       ],
-      "pinned": false,
+      "pinned": true,
       "createdAt": "2026-05-20T15:21:14.785213+00:00",
-      "updatedAt": "2026-05-20T15:21:14.785213+00:00"
+      "updatedAt": "2026-07-04T12:09:25.691012+00:00",
+      "drilldowns": []
     },
     {
       "id": "b9612579-cb55-43f2-8ffd-715bc9d19b39",

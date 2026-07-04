@@ -6,12 +6,14 @@ Port of dashboards/backend/src/routes/reports.ts.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from io import BytesIO
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request, send_file
 
 _EXPORT_DT_FMT = "%d-%m-%Y, %H:%M:%S"
+_EXCEL_INTEGER_FORMAT = "#,##0"
 _EXCEL_NUMERIC_FORMAT = "#,##0.000000"
 _EXCEL_HIGH_PRECISION_FORMAT = "#,##0." + ("0" * 10)
 
@@ -24,6 +26,31 @@ def _is_high_precision_column(col_name: str) -> bool:
     if "conval" in key or "con val" in key or "input rm" in key:
         return True
     return False
+
+
+def _excel_number_format_for(col_name: str) -> str:
+    return (
+        _EXCEL_HIGH_PRECISION_FORMAT
+        if _is_high_precision_column(col_name)
+        else _EXCEL_NUMERIC_FORMAT
+    )
+
+
+def _excel_cell_value_and_format(val, col_name: str):
+    """Preserve text identifiers; only format true numeric values."""
+    if val is None or isinstance(val, bool):
+        return val, None
+    if isinstance(val, int):
+        return val, _EXCEL_INTEGER_FORMAT
+    if isinstance(val, Decimal):
+        if val == val.to_integral_value():
+            return int(val), _EXCEL_INTEGER_FORMAT
+        return float(val), _excel_number_format_for(col_name)
+    if isinstance(val, float):
+        if val.is_integer():
+            return int(val), _EXCEL_INTEGER_FORMAT
+        return val, _excel_number_format_for(col_name)
+    return val, None
 
 from .auth import api_login_required
 from .rbac import require_access, require_plus_access
@@ -294,19 +321,10 @@ def export_report(report_id):
         for ci, col in enumerate(columns, 1):
             val = row.get(col)
             cell = ws.cell(row=ri, column=ci)
-            if val is not None and not isinstance(val, bool):
-                try:
-                    num = float(val)
-                    cell.value = num
-                    cell.number_format = (
-                        _EXCEL_HIGH_PRECISION_FORMAT
-                        if _is_high_precision_column(col)
-                        else _EXCEL_NUMERIC_FORMAT
-                    )
-                except (TypeError, ValueError):
-                    cell.value = val
-            else:
-                cell.value = val
+            cell_value, number_format = _excel_cell_value_and_format(val, col)
+            cell.value = cell_value
+            if number_format:
+                cell.number_format = number_format
             cell.border = thin_border
 
     output = BytesIO()

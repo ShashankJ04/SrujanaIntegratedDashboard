@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_line (
   scrap_remark        VARCHAR(255) NULL,
   rework_qty          INT NOT NULL DEFAULT 0,
   rework_remark       VARCHAR(255) NULL,
-  operator_id         INT NULL,
+  operator_ids        VARCHAR(500) NOT NULL DEFAULT '',
   machine_id          INT NULL,
   time_taken_minutes  INT NULL,
   ot_flag             CHAR(1) NOT NULL DEFAULT 'N',
@@ -71,4 +71,9 @@ CREATE TABLE IF NOT EXISTS lw_re_work_scrap (
 -- ALTER TABLE laser_welding_line
 --   MODIFY line_type ENUM('Part_Inspection','Assembly_Inspection','Welding_Consume','Welding_Rework','SubAssembly_Consume','SubAssembly_Rework','QA_Disposition','Packing') NOT NULL DEFAULT 'Part_Inspection';
 -- ALTER TABLE laser_welding_line ADD COLUMN machine_id INT NULL AFTER operator_id;
+-- ALTER TABLE laser_welding_line ADD COLUMN operator_ids VARCHAR(500) NULL AFTER operator_id;
+-- Migration: replace operator_id with operator_ids
+-- UPDATE laser_welding_line SET operator_ids = CAST(operator_id AS CHAR) WHERE (operator_ids IS NULL OR operator_ids = '') AND operator_id IS NOT NULL;
+-- ALTER TABLE laser_welding_line DROP COLUMN operator_id;
+-- ALTER TABLE laser_welding_line MODIFY operator_ids VARCHAR(500) NOT NULL DEFAULT '';
 
