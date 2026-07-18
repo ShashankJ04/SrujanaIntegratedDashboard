@@ -129,6 +129,7 @@ def create_report():
             query_template=data.get("queryTemplate", ""),
             drilldowns=data.get("drilldowns", []),
             pinned=bool(data.get("pinned", False)),
+            no_format_columns=data.get("noFormatColumns", []),
         )
         return jsonify(report), 201
     except ValueError as e:
@@ -150,6 +151,7 @@ def update_report(report_id):
                 if isinstance(data, dict) and "pinned" in data
                 else None
             ),
+            no_format_columns=data.get("noFormatColumns") if isinstance(data, dict) and "noFormatColumns" in data else None,
         )
         return jsonify(report)
     except ValueError as e:
@@ -251,6 +253,7 @@ def run_report(report_id):
         "rowCount": len(rows),
         "executedAt": datetime.utcnow().isoformat(),
         "drilldowns": report.get("drilldowns", []),
+        "noFormatColumns": report.get("noFormatColumns", []),
     })
 
 

@@ -52,6 +52,7 @@
   const runViewStack = [];
   let pickerIgnoreChange = false;
   let _prevSidebarState = null; // remember sidebar state before auto-collapse
+  let _activeNoFormatColumns = new Set(); // columns that should not receive number grouping
 
   /* ── Auto-collapse sidebar for max grid width ── */
   function autoCollapseSidebar() {
@@ -219,9 +220,17 @@
     return false;
   }
 
+  function isNoFormatColumn(columnKey) {
+    if (!columnKey) return false;
+    return _activeNoFormatColumns.has(String(columnKey).trim().toLowerCase());
+  }
+
   function formatIndianValue(value, columnKey) {
     if (value === null || value === undefined || value === '') return '';
     if (columnKey && isIdentifierColumnName(columnKey)) {
+      return String(value);
+    }
+    if (columnKey && isNoFormatColumn(columnKey)) {
       return String(value);
     }
     if (isLiteralNumericIdentifier(value)) {
@@ -580,6 +589,9 @@
         document.getElementById('runTable').style.display = 'block';
         setReportsGridToolsVisible(false);
       } else {
+        // Update the active no-format columns set before rendering
+        const noFmtList = Array.isArray(result.noFormatColumns) ? result.noFormatColumns : (Array.isArray(report.noFormatColumns) ? report.noFormatColumns : []);
+        _activeNoFormatColumns = new Set(noFmtList.map(c => String(c).trim().toLowerCase()));
         renderResultGrid(report, result, options.restoreSearchValue);
       }
       if (options.title) document.getElementById('runReportTitle').textContent = options.title;
@@ -626,6 +638,9 @@
     lastRunResult = prev.result;
     currentRunVariables = prev.variables || {};
     currentViewMode = runViewStack.length ? 'drilldown' : 'root';
+    // Restore no-format columns for the report we're going back to
+    const noFmtList = Array.isArray(prev.result && prev.result.noFormatColumns) ? prev.result.noFormatColumns : (Array.isArray(prev.report.noFormatColumns) ? prev.report.noFormatColumns : []);
+    _activeNoFormatColumns = new Set(noFmtList.map(c => String(c).trim().toLowerCase()));
     document.getElementById('runReportTitle').textContent = prev.title || prev.report.name;
     document.getElementById('runReportSub').style.display = 'none';
     renderResultGrid(prev.report, prev.result, prev.searchValue || '');

@@ -152,6 +152,24 @@ def _default_variables_for_handler(handler: str) -> List[str]:
     return ["from_date", "to_date"]
 
 
+def _normalize_no_format_columns(raw: Any) -> List[str]:
+    """Validate and normalise the noFormatColumns list."""
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    seen: set = set()
+    for item in raw:
+        col = str(item or "").strip()
+        if not col or not _is_safe_drilldown_column_name(col):
+            continue
+        key = col.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(col)
+    return out
+
+
 def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     report_by_id = {
         str(r.get("id")): r
@@ -186,6 +204,11 @@ def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             next_report["filterColumn"] = filter_col
         else:
             next_report.pop("filterColumn", None)
+        no_fmt = _normalize_no_format_columns(report.get("noFormatColumns"))
+        if no_fmt:
+            next_report["noFormatColumns"] = no_fmt
+        else:
+            next_report.pop("noFormatColumns", None)
         normalized.append(next_report)
     return normalized
 
@@ -569,6 +592,7 @@ def create_report(
     handler: str = "",
     filter_column: str = "",
     variables: Optional[List[str]] = None,
+    no_format_columns: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     group_id = group_id.strip()
     name = name.strip()
@@ -609,6 +633,7 @@ def create_report(
         source_report_vars=report_vars,
     )
     filter_col = _normalize_filter_column(filter_column)
+    normalized_no_fmt = _normalize_no_format_columns(no_format_columns or [])
     report: Dict[str, Any] = {
         "id": str(uuid.uuid4()),
         "groupId": group_id,
@@ -624,6 +649,8 @@ def create_report(
         report["handler"] = handler_key
     if filter_col:
         report["filterColumn"] = filter_col
+    if normalized_no_fmt:
+        report["noFormatColumns"] = normalized_no_fmt
     store["reports"].append(report)
     _write_store(store)
     return report
@@ -636,6 +663,7 @@ def update_report(
     drilldowns: Optional[List[Dict[str, Any]]] = None,
     pinned: Optional[bool] = None,
     filter_column: Optional[str] = None,
+    no_format_columns: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     name = name.strip()
     query_template = query_template.strip()
@@ -700,6 +728,12 @@ def update_report(
             updated["filterColumn"] = filter_col
         else:
             updated.pop("filterColumn", None)
+    if no_format_columns is not None:
+        normalized_no_fmt = _normalize_no_format_columns(no_format_columns)
+        if normalized_no_fmt:
+            updated["noFormatColumns"] = normalized_no_fmt
+        else:
+            updated.pop("noFormatColumns", None)
     store["reports"][idx] = updated
     _write_store(store)
     return updated

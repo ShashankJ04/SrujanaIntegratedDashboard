@@ -64,6 +64,17 @@
           Configure drilldown mapping: pick hyperlink column, child report/input, and source from row column or parent input.
         </div>
       </div>
+
+      <div style="margin-top:8px;border:1px solid var(--ti-border);border-radius:10px;padding:10px">
+        <div class="ti-flex-between" style="align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px;color:var(--ti-text-bright)">Column Formatting</strong>
+          <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptAddNoFormatBtn">+ Add Column</button>
+        </div>
+        <div id="rptNoFormatColumns" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="font-size:11px;color:var(--ti-text-dim);margin-top:6px">
+          Columns listed here will display raw numbers without comma grouping (e.g. invoice numbers like <em>100234</em> instead of <em>1,00,234</em>).
+        </div>
+      </div>
     </div>
     <div class="ti-modal-footer">
       <button class="ti-btn ti-btn-outline" onclick="document.getElementById('rptReportModal').classList.remove('open')">Cancel</button>
@@ -88,6 +99,7 @@
   const RPT_MANAGE_GROUP_KEY = 'hub_reports_manage_group_id';
   let groups = [], reports = [], allReports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
   let drilldownDraft = [];
+  let noFormatDraft = []; // column names that bypass number formatting
 
   function readStoredGroupId() {
     try {
@@ -218,6 +230,8 @@
           });
         });
         renderDrilldownRules();
+        noFormatDraft = Array.isArray(r.noFormatColumns) ? [...r.noFormatColumns] : [];
+        renderNoFormatColumns();
         openModal('rptReportModal');
       });
       div.querySelector('[data-open]').addEventListener('click', () => { goToReportViewer(r.id); });
@@ -251,6 +265,46 @@
     updateVarsDisplay();
     renderDrilldownRules();
   });
+
+  // ── No-Format Columns ──────────────────────────────────────────────────
+
+  function renderNoFormatColumns() {
+    const host = document.getElementById('rptNoFormatColumns');
+    if (!noFormatDraft.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--ti-text-dim)">No columns configured — numbers in all columns will be formatted.</div>';
+      return;
+    }
+    host.innerHTML = '';
+    noFormatDraft.forEach((col, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%';
+      row.innerHTML = `
+        <input
+          type="text"
+          class="ti-input"
+          data-nf-col="${idx}"
+          placeholder="Exact column name (e.g. Invoice No)"
+          value="${String(col || '').replace(/"/g,'&quot;')}"
+          style="flex:1;min-width:0"
+        >
+        <button type="button" class="ti-btn ti-btn-danger ti-btn-xs" data-nf-del="${idx}">✕</button>
+      `;
+      host.appendChild(row);
+    });
+    host.querySelectorAll('[data-nf-col]').forEach(el => {
+      el.addEventListener('input', e => {
+        const i = Number(e.target.getAttribute('data-nf-col'));
+        noFormatDraft[i] = e.target.value;
+      });
+    });
+    host.querySelectorAll('[data-nf-del]').forEach(el => {
+      el.addEventListener('click', e => {
+        const i = Number(e.target.getAttribute('data-nf-del'));
+        noFormatDraft.splice(i, 1);
+        renderNoFormatColumns();
+      });
+    });
+  }
 
   function childReportById(reportId) {
     return allReports.find(r => r.id === reportId) || null;
@@ -398,6 +452,8 @@
     document.getElementById('rptVarsDisplay').textContent = 'None';
     drilldownDraft = [];
     renderDrilldownRules();
+    noFormatDraft = [];
+    renderNoFormatColumns();
     openModal('rptReportModal');
   });
 
@@ -411,16 +467,22 @@
     renderDrilldownRules();
   });
 
+  document.getElementById('rptAddNoFormatBtn').addEventListener('click', () => {
+    noFormatDraft.push('');
+    renderNoFormatColumns();
+  });
+
   document.getElementById('rptReportSubmit').addEventListener('click', async () => {
     const name = document.getElementById('rptReportName').value.trim();
     const query = document.getElementById('rptReportQuery').value.trim();
     const drilldowns = buildDrilldownsPayload();
+    const noFormatColumns = noFormatDraft.map(c => String(c || '').trim()).filter(Boolean);
     if (!name || !query) return;
     try {
       if (editingReportId) {
-        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, drilldowns });
+        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, drilldowns, noFormatColumns });
       } else {
-        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, drilldowns });
+        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, drilldowns, noFormatColumns });
         closeModal('rptReportModal');
         if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
         goToReportViewer(r.id);
@@ -452,6 +514,7 @@
   });
 
   renderDrilldownRules();
+  renderNoFormatColumns();
   loadGroups();
 })();
 </script>
