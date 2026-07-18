@@ -8,29 +8,27 @@
       </div>
     </header>
 
+    <div class="ti-rmc-mode-selector" role="radiogroup" aria-label="Calculation mode">
+      <button type="button" class="ti-rmc-mode-btn active" id="rmcModeStandard" data-mode="standard" role="radio"
+        aria-checked="true">
+        Standard: Qty ➔ Kg
+      </button>
+      <button type="button" class="ti-rmc-mode-btn" id="rmcModeReverse" data-mode="reverse" role="radio"
+        aria-checked="false">
+        Reverse: Kg ➔ Qty
+      </button>
+    </div>
+
     <div class="ti-rmc-input-strip" role="group" aria-label="Calculator inputs">
       <div class="ti-rmc-input-cell ti-rmc-input-cell--part">
         <label class="ti-rmc-input-label" for="rmcPartNo">Part No</label>
-        <input
-          type="text"
-          id="rmcPartNo"
-          class="ti-rmc-input"
-          list="rmc-parts-datalist"
-          placeholder="Search or type part no"
-          autocomplete="off"
-        />
+        <input type="text" id="rmcPartNo" class="ti-rmc-input" list="rmc-parts-datalist"
+          placeholder="Search or type part no" autocomplete="off" />
         <datalist id="rmc-parts-datalist"></datalist>
       </div>
       <div class="ti-rmc-input-cell ti-rmc-input-cell--qty">
-        <label class="ti-rmc-input-label" for="rmcQuantity">Quantity</label>
-        <input
-          type="number"
-          id="rmcQuantity"
-          class="ti-rmc-input ti-rmc-input--num"
-          min="0"
-          step="1"
-          value="1"
-        />
+        <label class="ti-rmc-input-label" for="rmcQuantity" id="rmcInputLabel">Quantity</label>
+        <input type="number" id="rmcQuantity" class="ti-rmc-input ti-rmc-input--num" min="0" step="any" value="1000" />
       </div>
     </div>
 
@@ -56,8 +54,8 @@
         </div>
       </div>
       <div class="ti-rmc-total">
-        <span class="ti-rmc-total-label">Total input RM (Kg)</span>
-        <span class="ti-rmc-total-value" id="rmcResInputRmKg">—</span>
+        <span class="ti-rmc-total-label" id="rmcTotalLabel">Total input RM (Kg)</span>
+        <span class="ti-rmc-total-value" id="rmcTotalValue">—</span>
       </div>
     </div>
 
@@ -73,6 +71,7 @@
     width: 100%;
     max-width: 920px;
   }
+
   .ti-rmc-panel {
     background: var(--ti-surface-1);
     border: 1px solid var(--ti-border);
@@ -80,6 +79,7 @@
     padding: 20px 24px 24px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
+
   .ti-rmc-header {
     display: flex;
     align-items: flex-start;
@@ -88,11 +88,13 @@
     padding-bottom: 16px;
     border-bottom: 1px solid var(--ti-border);
   }
+
   .ti-rmc-icon {
     font-size: 32px;
     line-height: 1;
     flex-shrink: 0;
   }
+
   .ti-rmc-title {
     margin: 0;
     font-size: 20px;
@@ -100,11 +102,51 @@
     color: var(--ti-text-bright);
     letter-spacing: -0.02em;
   }
+
   .ti-rmc-subtitle {
     margin: 6px 0 0;
     font-size: 13px;
     color: var(--ti-text-muted);
     line-height: 1.4;
+  }
+
+  .ti-rmc-mode-selector {
+    display: flex;
+    gap: 4px;
+    background: color-mix(in srgb, var(--ti-border) 20%, var(--ti-surface-1));
+    border: 1px solid var(--ti-border);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    width: fit-content;
+  }
+
+  .ti-rmc-mode-btn {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ti-text-muted);
+    cursor: pointer;
+    transition: all var(--ti-speed) var(--ti-ease);
+  }
+
+  .ti-rmc-mode-btn:hover {
+    color: var(--ti-text-bright);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  [data-theme="light"] .ti-rmc-mode-btn:hover {
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  .ti-rmc-mode-btn.active {
+    background: var(--ti-blue-soft);
+    color: var(--ti-blue);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 
   /* Unified input bar — Part No + Quantity */
@@ -116,6 +158,7 @@
     overflow: hidden;
     background: var(--ti-surface-2, color-mix(in srgb, var(--ti-border) 25%, var(--ti-surface-1)));
   }
+
   .ti-rmc-input-cell {
     display: flex;
     flex-direction: column;
@@ -123,15 +166,18 @@
     padding: 12px 16px;
     min-width: 0;
   }
+
   .ti-rmc-input-cell--part {
     flex: 1 1 auto;
     border-right: 1px solid var(--ti-border);
   }
+
   .ti-rmc-input-cell--qty {
-    flex: 0 0 152px;
-    width: 152px;
+    flex: 0 0 164px;
+    width: 164px;
     background: color-mix(in srgb, var(--ti-border) 18%, var(--ti-surface-1));
   }
+
   .ti-rmc-input-label {
     font-size: 10px;
     font-weight: 700;
@@ -140,6 +186,7 @@
     color: var(--ti-text-muted);
     line-height: 1;
   }
+
   .ti-rmc-input {
     width: 100%;
     border: none;
@@ -153,35 +200,45 @@
     line-height: 1.35;
     box-shadow: none;
   }
+
   .ti-rmc-input::placeholder {
     color: var(--ti-text-muted);
     font-weight: 500;
     opacity: 0.75;
   }
+
   .ti-rmc-input:focus {
     outline: none;
   }
+
   .ti-rmc-input-cell:focus-within {
     background: color-mix(in srgb, var(--ti-blue) 6%, var(--ti-surface-1));
     box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ti-blue) 35%, transparent);
   }
+
   .ti-rmc-input--num {
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+
   @media (max-width: 560px) {
     .ti-rmc-input-strip {
       flex-direction: column;
     }
+
     .ti-rmc-input-cell--part {
       border-right: none;
       border-bottom: 1px solid var(--ti-border);
     }
+
     .ti-rmc-input-cell--qty {
       flex: none;
       width: 100%;
     }
-    .ti-rmc-input--num { text-align: left; }
+
+    .ti-rmc-input--num {
+      text-align: left;
+    }
   }
 
   .ti-rmc-error {
@@ -193,6 +250,7 @@
     background: color-mix(in srgb, var(--ti-danger, #c62828) 10%, transparent);
     border: 1px solid color-mix(in srgb, var(--ti-danger, #c62828) 25%, transparent);
   }
+
   .ti-rmc-empty {
     margin: 18px 0 0;
     font-size: 13px;
@@ -203,9 +261,11 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--ti-border) 30%, transparent);
   }
+
   #section-rm-calculator:has(#rmcResults:not([hidden])) .ti-rmc-empty {
     display: none;
   }
+
   .ti-rmc-output {
     margin-top: 20px;
     padding-top: 20px;
@@ -214,14 +274,19 @@
     flex-direction: column;
     gap: 16px;
   }
+
   .ti-rmc-details {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
+
   @media (min-width: 720px) {
-    .ti-rmc-details { grid-template-columns: repeat(4, 1fr); }
+    .ti-rmc-details {
+      grid-template-columns: repeat(4, 1fr);
+    }
   }
+
   .ti-rmc-detail {
     padding: 12px 14px;
     border-radius: 10px;
@@ -229,6 +294,7 @@
     border: 1px solid var(--ti-border);
     min-width: 0;
   }
+
   .ti-rmc-detail-label {
     display: block;
     font-size: 10px;
@@ -238,6 +304,7 @@
     color: var(--ti-text-muted);
     margin-bottom: 6px;
   }
+
   .ti-rmc-detail-value {
     display: block;
     font-size: 14px;
@@ -246,10 +313,12 @@
     word-break: break-word;
     line-height: 1.35;
   }
+
   .ti-rmc-detail-value--num {
     font-variant-numeric: tabular-nums;
     font-size: 15px;
   }
+
   .ti-rmc-total {
     display: flex;
     flex-direction: column;
@@ -261,6 +330,7 @@
     border: 2px solid var(--ti-blue);
     background: color-mix(in srgb, var(--ti-blue) 10%, var(--ti-surface-1));
   }
+
   .ti-rmc-total-label {
     font-size: 11px;
     font-weight: 700;
@@ -269,6 +339,7 @@
     color: var(--ti-text-muted);
     margin-bottom: 8px;
   }
+
   .ti-rmc-total-value {
     font-size: 36px;
     font-weight: 800;
@@ -279,106 +350,197 @@
 </style>
 
 <script>
-(function() {
-  'use strict';
+  (function () {
+    'use strict';
 
-  let _parts = [];
-  let _debounceTimer = null;
+    let _parts = [];
+    let _debounceTimer = null;
+    let _mode = 'standard'; // 'standard' or 'reverse'
 
-  function fmtKg(v, maxFrac) {
-    if (v === null || v === undefined || v === '') return '—';
-    const n = Number(v);
-    if (!Number.isFinite(n)) return String(v);
-    return n.toLocaleString('en-IN', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: maxFrac == null ? 6 : maxFrac,
-    });
-  }
-
-  function showError(msg) {
-    const el = document.getElementById('rmcError');
-    if (!el) return;
-    if (msg) {
-      el.textContent = msg;
-      el.hidden = false;
-    } else {
-      el.textContent = '';
-      el.hidden = true;
+    function fmtKg(v, maxFrac) {
+      if (v === null || v === undefined || v === '') return '—';
+      const n = Number(v);
+      if (!Number.isFinite(n)) return String(v);
+      return n.toLocaleString('en-IN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxFrac == null ? 6 : maxFrac,
+      });
     }
-  }
 
-  function setResultsVisible(visible) {
-    const out = document.getElementById('rmcResults');
-    const empty = document.getElementById('rmcEmpty');
-    if (out) out.hidden = !visible;
-    if (empty) empty.hidden = visible;
-  }
-
-  function ensurePartDatalist() {
-    const dl = document.getElementById('rmc-parts-datalist');
-    if (!dl) return;
-    dl.innerHTML = '';
-    _parts.forEach((p) => {
-      const partNo = String(p.part_no || p.partNo || '').trim();
-      if (!partNo) return;
-      const opt = document.createElement('option');
-      opt.value = partNo;
-      dl.appendChild(opt);
-    });
-  }
-
-  function resolvePartNo(raw) {
-    const key = String(raw || '').trim();
-    if (!key) return '';
-    const keyLc = key.toLowerCase();
-    const hit = _parts.find(
-      (p) => String(p.part_no || p.partNo || '').trim().toLowerCase() === keyLc
-    );
-    return hit ? String(hit.part_no || hit.partNo || '').trim() : key;
-  }
-
-  async function loadParts() {
-    const data = await Hub.api.get('/api/rm-calculator/parts');
-    _parts = Array.isArray(data) ? data : [];
-    ensurePartDatalist();
-  }
-
-  async function calculate() {
-    showError('');
-    const partNo = resolvePartNo(document.getElementById('rmcPartNo').value);
-    const qtyRaw = document.getElementById('rmcQuantity').value.trim();
-    if (!partNo || qtyRaw === '') {
-      setResultsVisible(false);
-      return;
+    function showError(msg) {
+      const el = document.getElementById('rmcError');
+      if (!el) return;
+      if (msg) {
+        el.textContent = msg;
+        el.hidden = false;
+      } else {
+        el.textContent = '';
+        el.hidden = true;
+      }
     }
-    try {
-      const q = encodeURIComponent(partNo);
-      const n = encodeURIComponent(qtyRaw);
-      const res = await Hub.api.get('/api/rm-calculator/calculate?partNo=' + q + '&quantity=' + n);
 
-      document.getElementById('rmcResPartName').textContent = res.partName || '—';
-      document.getElementById('rmcResToolNo').textContent = res.toolNo || '—';
-      document.getElementById('rmcResRmCode').textContent = res.rmCode || '—';
-      document.getElementById('rmcResConvalKg').textContent = fmtKg(res.rmConvalKg, 6);
-      document.getElementById('rmcResInputRmKg').textContent = fmtKg(res.inputRmKg, 4);
-      setResultsVisible(true);
-    } catch (e) {
-      setResultsVisible(false);
-      showError(e.message || 'Calculation failed');
+    function setResultsVisible(visible) {
+      const out = document.getElementById('rmcResults');
+      const empty = document.getElementById('rmcEmpty');
+      if (out) out.hidden = !visible;
+      if (empty) empty.hidden = visible;
     }
-  }
 
-  function scheduleCalculate() {
-    if (_debounceTimer) clearTimeout(_debounceTimer);
-    _debounceTimer = setTimeout(calculate, 280);
-  }
+    function ensurePartDatalist() {
+      const dl = document.getElementById('rmc-parts-datalist');
+      if (!dl) return;
+      dl.innerHTML = '';
+      _parts.forEach((p) => {
+        const partNo = String(p.part_no || p.partNo || '').trim();
+        const partName = String(p.part_name || p.partName || '').trim();
+        if (!partNo) return;
 
-  document.getElementById('rmcQuantity').addEventListener('input', scheduleCalculate);
-  document.getElementById('rmcQuantity').addEventListener('change', scheduleCalculate);
-  const partInput = document.getElementById('rmcPartNo');
-  partInput.addEventListener('change', scheduleCalculate);
-  partInput.addEventListener('input', scheduleCalculate);
+        const opt = document.createElement('option');
+        opt.value = partNo;
+        if (partName && partName !== partNo) {
+          opt.textContent = partNo + ' - ' + partName;
+        } else {
+          opt.textContent = partNo;
+        }
+        dl.appendChild(opt);
+      });
+    }
 
-  loadParts().catch((e) => showError(e.message || 'Failed to load parts'));
-})();
+    function resolvePartNo(raw) {
+      const key = String(raw || '').trim();
+      if (!key) return '';
+      const keyLc = key.toLowerCase();
+
+      // 1. Direct match on partNo / part_no
+      let hit = _parts.find(
+        (p) => String(p.part_no || p.partNo || '').trim().toLowerCase() === keyLc
+      );
+      if (hit) return String(hit.part_no || hit.partNo || '').trim();
+
+      // 2. Match on combined "partNo - partName" format
+      hit = _parts.find((p) => {
+        const pNo = String(p.part_no || p.partNo || '').trim();
+        const pName = String(p.part_name || p.partName || '').trim();
+        return (pNo + ' - ' + pName).toLowerCase() === keyLc;
+      });
+      if (hit) return String(hit.part_no || hit.partNo || '').trim();
+
+      // 3. Match on partName / part_name directly
+      hit = _parts.find(
+        (p) => String(p.part_name || p.partName || '').trim().toLowerCase() === keyLc
+      );
+      if (hit) return String(hit.part_no || hit.partNo || '').trim();
+
+      return key;
+    }
+
+    async function loadParts() {
+      const data = await Hub.api.get('/api/rm-calculator/parts');
+      _parts = Array.isArray(data) ? data : [];
+      ensurePartDatalist();
+    }
+
+    async function calculate() {
+      showError('');
+      const partNo = resolvePartNo(document.getElementById('rmcPartNo').value);
+      const valRaw = document.getElementById('rmcQuantity').value.trim();
+      if (!partNo || valRaw === '') {
+        setResultsVisible(false);
+        return;
+      }
+      try {
+        const q = encodeURIComponent(partNo);
+        const val = encodeURIComponent(valRaw);
+
+        let url = '/api/rm-calculator/calculate?partNo=' + q;
+        if (_mode === 'reverse') {
+          url += '&targetRmKg=' + val;
+        } else {
+          url += '&quantity=' + val;
+        }
+
+        const res = await Hub.api.get(url);
+
+        document.getElementById('rmcResPartName').textContent = res.partName || '—';
+        document.getElementById('rmcResToolNo').textContent = res.toolNo || '—';
+        document.getElementById('rmcResRmCode').textContent = res.rmCode || '—';
+        document.getElementById('rmcResConvalKg').textContent = fmtKg(res.rmConvalKg, 6);
+
+        const totalLabelEl = document.getElementById('rmcTotalLabel');
+        const totalValueEl = document.getElementById('rmcTotalValue');
+
+        if (_mode === 'reverse') {
+          totalLabelEl.textContent = 'Estimated quantity to produce';
+          totalValueEl.innerHTML = fmtKg(res.quantity, 2) + '<span style="font-size: 16px; font-weight: 600; margin-left: 6px; color: var(--ti-text-muted)">parts</span>';
+        } else {
+          totalLabelEl.textContent = 'Total input RM (Kg)';
+          totalValueEl.textContent = fmtKg(res.inputRmKg, 4);
+        }
+
+        setResultsVisible(true);
+      } catch (e) {
+        setResultsVisible(false);
+        showError(e.message || 'Calculation failed');
+      }
+    }
+
+    function scheduleCalculate() {
+      if (_debounceTimer) clearTimeout(_debounceTimer);
+      _debounceTimer = setTimeout(calculate, 280);
+    }
+
+    function handleModeChange(mode) {
+      if (_mode === mode) return;
+      _mode = mode;
+
+      document.getElementById('rmcModeStandard').classList.toggle('active', mode === 'standard');
+      document.getElementById('rmcModeStandard').setAttribute('aria-checked', mode === 'standard' ? 'true' : 'false');
+      document.getElementById('rmcModeReverse').classList.toggle('active', mode === 'reverse');
+      document.getElementById('rmcModeReverse').setAttribute('aria-checked', mode === 'reverse' ? 'true' : 'false');
+
+      const inputLabel = document.getElementById('rmcInputLabel');
+      const inputEl = document.getElementById('rmcQuantity');
+      const subtitleEl = document.querySelector('.ti-rmc-subtitle');
+      const emptyEl = document.getElementById('rmcEmpty');
+
+      if (mode === 'reverse') {
+        inputLabel.textContent = 'RM Weight (Kg)';
+        inputEl.placeholder = 'e.g. 10';
+        if (inputEl.value === '1000' || inputEl.value === '') {
+          inputEl.value = '10';
+        }
+        if (subtitleEl) {
+          subtitleEl.textContent = 'Quantity produced = Total RM (Kg) / RM per component (Kg)';
+        }
+        if (emptyEl) {
+          emptyEl.textContent = 'Select a part and target RM weight (Kg) to calculate quantity.';
+        }
+      } else {
+        inputLabel.textContent = 'Quantity';
+        inputEl.placeholder = 'e.g. 1000';
+        if (inputEl.value === '10' || inputEl.value === '') {
+          inputEl.value = '1000';
+        }
+        if (subtitleEl) {
+          subtitleEl.textContent = 'Total input RM (Kg) = quantity × RM per component (Kg)';
+        }
+        if (emptyEl) {
+          emptyEl.textContent = 'Select a part and quantity to calculate input RM.';
+        }
+      }
+
+      calculate();
+    }
+
+    document.getElementById('rmcQuantity').addEventListener('input', scheduleCalculate);
+    document.getElementById('rmcQuantity').addEventListener('change', scheduleCalculate);
+    const partInput = document.getElementById('rmcPartNo');
+    partInput.addEventListener('change', scheduleCalculate);
+    partInput.addEventListener('input', scheduleCalculate);
+
+    document.getElementById('rmcModeStandard').addEventListener('click', () => handleModeChange('standard'));
+    document.getElementById('rmcModeReverse').addEventListener('click', () => handleModeChange('reverse'));
+
+    loadParts().catch((e) => showError(e.message || 'Failed to load parts'));
+  })();
 </script>

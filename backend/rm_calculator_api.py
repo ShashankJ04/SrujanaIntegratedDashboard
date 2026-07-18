@@ -91,24 +91,44 @@ def calculate():
     if not part_no:
         return jsonify({"error": "partNo is required"}), 400
 
-    qty_raw = request.args.get("quantity", "")
-    if qty_raw in (None, ""):
-        return jsonify({"error": "quantity is required"}), 400
-    try:
-        quantity = float(qty_raw)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid quantity"}), 400
-    if quantity < 0:
-        return jsonify({"error": "quantity cannot be negative"}), 400
-
     row = _part_conval_row(part_no)
     if not row:
         return jsonify({"error": "Part not found or missing active PPC tool data"}), 404
 
     conval = float(row.get("rmConvalGrams") or 0)
-    input_rm_grams = round(quantity * conval, 10)
-    input_rm_kg = round(input_rm_grams / 1000, 10)
     rm_conval_kg = round(conval / 1000, 10)
+
+    qty_raw = request.args.get("quantity", "")
+    target_rm_kg_raw = request.args.get("targetRmKg", "")
+
+    # Reverse calculation: Target RM in Kg is provided
+    if target_rm_kg_raw not in (None, ""):
+        try:
+            target_rm_kg = float(target_rm_kg_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid weight"}), 400
+        if target_rm_kg < 0:
+            return jsonify({"error": "weight cannot be negative"}), 400
+
+        if rm_conval_kg > 0:
+            quantity = round(target_rm_kg / rm_conval_kg, 10)
+        else:
+            quantity = 0.0
+
+        input_rm_kg = target_rm_kg
+    else:
+        # Standard flow: Quantity is provided
+        if qty_raw in (None, ""):
+            return jsonify({"error": "quantity or targetRmKg is required"}), 400
+        try:
+            quantity = float(qty_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid quantity"}), 400
+        if quantity < 0:
+            return jsonify({"error": "quantity cannot be negative"}), 400
+
+        input_rm_grams = round(quantity * conval, 10)
+        input_rm_kg = round(input_rm_grams / 1000, 10)
 
     return jsonify(
         {
@@ -121,3 +141,4 @@ def calculate():
             "inputRmKg": input_rm_kg,
         }
     )
+
