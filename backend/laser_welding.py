@@ -8094,12 +8094,20 @@ def _report_lines_base_sql() -> str:
             b.bom_no,
             b.product_name,
             COALESCE(c.CU_Name, '') AS customer_name,
-            COALESCE(m.MCM_Name, '') AS machine_name
+            COALESCE(m.MCM_Name, '') AS machine_name,
+            COALESCE(lot_sup.supplier_name, '') AS supplier_name
         FROM laser_welding_line ln
         LEFT JOIN laser_welding_lot l ON l.lot_id = ln.lot_id
         LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
         LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
+        LEFT JOIN (
+            SELECT cid.CD_LOTNO, MIN(sup.ss_Name) AS supplier_name
+            FROM comp_inwarddetails cid
+            INNER JOIN comp_inwardmaster cim ON cim.CM_ID = cid.CD_CMID
+            INNER JOIN supplier sup ON sup.ss_Id = cim.CM_SUPPLIERID
+            GROUP BY cid.CD_LOTNO
+        ) lot_sup ON lot_sup.CD_LOTNO = ln.source_lot_no
     """
 
 
@@ -8161,6 +8169,7 @@ def _report_entry_from_line(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "machineName": str(r.get("machine_name") or "").strip(),
         "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
         "otFlag": _normalize_ot_flag(r.get("ot_flag")),
+        "supplierName": str(r.get("supplier_name") or "").strip(),
     }
 
 

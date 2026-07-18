@@ -5047,7 +5047,9 @@ window.LaserWeldingPage = (() => {
     { key: 'rowClass', label: 'Type', width: 56 },
     { key: 'label', label: 'Part / BOM', width: 130 },
     { key: 'lotNo', label: 'Lot', width: 110, format: (v) => `<code>${escapeHtml(v || '—')}</code>` },
+    { key: 'supplierName', label: 'Supplier', width: 140 },
     { key: 'workflowLabel', label: 'Step', width: 120 },
+    { key: 'inspectedQty', label: 'Inspected', align: 'right', width: 80 },
     { key: 'qaQty', label: 'QA', align: 'right', width: 64 },
     { key: 'operator', label: 'Operator', width: 130 },
     { key: 'scrapRemark', label: 'Remark', width: 140 },
@@ -5073,11 +5075,13 @@ window.LaserWeldingPage = (() => {
       label: r.label || r.partNo || r.bomNo || '—',
       lotNo: r.lotNo || '—',
       workflowLabel: r.workflowLabel || '—',
+      inspectedQty: Number(r.inspectedQty) || 0,
       qaQty: Number(r.qaQty) || 0,
       scrapQty: Number(r.scrapQty) || 0,
       scrapRemark: r.scrapRemark || r.reworkRemark || '—',
       operator: historyOperatorLabel(r),
       machineName: r.machineName || '—',
+      supplierName: r.supplierName || '—',
     };
   }
 
