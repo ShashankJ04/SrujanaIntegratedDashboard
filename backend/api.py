@@ -241,6 +241,20 @@ def dashboard_rm_charts() -> Any:
     return jsonify(data)
 
 
+@api_bp.get("/dashboard/daily-production-vs-target")
+def dashboard_daily_production_vs_target() -> Any:
+    from .production_calendar import get_daily_production_vs_target
+
+    today = date.today()
+    month = _parse_int("month", today.month)
+    year = _parse_int("year", today.year)
+    if month < 1 or month > 12:
+        return jsonify({"error": "month must be 1-12"}), 400
+    if year < 2000 or year > 2100:
+        return jsonify({"error": "year out of range"}), 400
+    return jsonify(get_daily_production_vs_target(month, year))
+
+
 @api_bp.get("/hub/pulse")
 def hub_pulse() -> Any:
     """Pulse ticker disabled — UI not shown; avoid heavy ERP polling."""

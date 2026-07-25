@@ -284,6 +284,146 @@ const HubCharts = (() => {
       base({ margin:{l:10,r:10,t:10,b:10}, legend:{font:{color:'#94a3b8',size:11},orientation:'h',y:-0.05,x:0.5,xanchor:'center'}, height:280 }), CFG);
   }
 
+  // ── Cumulative production vs target (climbing) ─────────────────────
+  function fmtCr(v) {
+    const cr = (Number(v) || 0) / 1e7;
+    if (!Number.isFinite(cr)) return '0';
+    if (Math.abs(cr) >= 10) return cr.toFixed(1);
+    if (Math.abs(cr) >= 1) return cr.toFixed(2);
+    return cr.toFixed(3);
+  }
+
+  function renderDailyProdVsTarget(data) {
+    const e = el('chart-daily-prod-vs-target'); if (!e) return;
+    const days = data.days || [];
+    if (!days.length) {
+      e.innerHTML = '<div class="ti-placeholder">No daily production data for this month</div>';
+      return;
+    }
+
+    const scheduledTotal = Number(data.scheduledTotal) || 0;
+    const avgDaily = Number(data.avgDailyTarget) || 0;
+    const daysInMonth = Number(data.daysInMonth) || days.length;
+    const asOfDay = Math.max(0, Math.min(Number(data.asOfDay) || 0, days.length));
+    const CR = 1e7;
+
+    const subtitle = document.getElementById('chart-daily-prod-subtitle');
+    if (subtitle) {
+      subtitle.textContent =
+        `Schedule ${fmtQty(scheduledTotal)} (${fmtCr(scheduledTotal)} Cr) ÷ ${daysInMonth} days · target ${fmtCr(avgDaily)} Cr/day`;
+    }
+
+    const labels = days.map(d => Number(d.day));
+    const targetCum = days.map((d) =>
+      Math.min(avgDaily * Number(d.day), scheduledTotal) / CR
+    );
+
+    let cumProduced = 0;
+    const actualX = [];
+    const producedCum = [];
+    for (let i = 0; i < asOfDay; i++) {
+      cumProduced += Number(days[i].produced) || 0;
+      actualX.push(Number(days[i].day));
+      producedCum.push(cumProduced / CR);
+    }
+
+    const yMax = Math.max(
+      scheduledTotal / CR,
+      ...(producedCum.length ? producedCum : [0]),
+      0.1
+    ) * 1.08;
+
+    const traces = [
+      {
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Required',
+        x: labels,
+        y: targetCum,
+        line: { color: 'rgba(245,158,11,0.95)', width: 2.5, dash: 'dot' },
+        hovertemplate: '<b>Required</b><br>Day %{x}<br>%{customdata}<extra></extra>',
+        customdata: days.map((d) => {
+          const v = Math.min(avgDaily * Number(d.day), scheduledTotal);
+          return `${fmtQty(v)} (${fmtCr(v)} Cr)`;
+        }),
+      },
+    ];
+    if (producedCum.length) {
+      traces.push({
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Actual',
+        x: actualX,
+        y: producedCum,
+        fill: 'tozeroy',
+        fillcolor: 'rgba(59,130,246,0.12)',
+        line: { color: 'rgba(59,130,246,0.95)', width: 3, shape: 'spline' },
+        marker: {
+          size: 7,
+          color: '#fff',
+          line: { color: 'rgba(59,130,246,0.95)', width: 2 },
+        },
+        hovertemplate: '<b>Actual</b><br>Day %{x}<br>%{customdata}<extra></extra>',
+        customdata: producedCum.map((crVal) => {
+          const v = crVal * CR;
+          return `${fmtQty(v)} (${fmtCr(v)} Cr)`;
+        }),
+      });
+    }
+
+    Plotly.newPlot(e, traces, base({
+      margin: { l: 52, r: 28, t: 20, b: 56 },
+      legend: {
+        orientation: 'h',
+        y: -0.22,
+        x: 0.5,
+        xanchor: 'center',
+        font: { size: 12 },
+      },
+      xaxis: {
+        title: { text: 'Day of month', standoff: 8, font: { size: 11 } },
+        tickmode: 'array',
+        tickvals: Array.from({ length: daysInMonth }, (_, i) => i + 1)
+          .filter((d) => d === 1 || d === daysInMonth || d % 5 === 0),
+        range: [0.5, daysInMonth + 0.5],
+        showgrid: true,
+        gridcolor: 'rgba(148,163,184,0.1)',
+        zeroline: false,
+      },
+      yaxis: {
+        title: { text: 'Crores (Cr)', standoff: 10, font: { size: 11 } },
+        rangemode: 'tozero',
+        range: [0, yMax],
+        ticksuffix: ' Cr',
+        tickformat: '.1f',
+        showgrid: true,
+        gridcolor: 'rgba(148,163,184,0.12)',
+        zeroline: true,
+        zerolinecolor: 'rgba(148,163,184,0.2)',
+      },
+      height: 380,
+      hovermode: 'x unified',
+      shapes: scheduledTotal > 0 ? [{
+        type: 'line',
+        xref: 'paper', x0: 0, x1: 1,
+        yref: 'y', y0: scheduledTotal / CR, y1: scheduledTotal / CR,
+        line: { color: 'rgba(148,163,184,0.35)', width: 1, dash: 'dash' },
+      }] : [],
+      annotations: scheduledTotal > 0 ? [{
+        xref: 'paper', x: 1, xanchor: 'right',
+        y: scheduledTotal / CR,
+        yanchor: 'bottom',
+        text: `Schedule ${fmtCr(scheduledTotal)} Cr`,
+        showarrow: false,
+        font: { size: 10, color: chartTextColor() },
+        bgcolor: (typeof Hub !== 'undefined' && Hub.getTheme && Hub.getTheme() === 'light')
+          ? 'rgba(255,255,255,0.75)'
+          : 'rgba(15,23,42,0.45)',
+        borderpad: 3,
+      }] : [],
+    }), CFG);
+  }
+
   // ── Load all overview charts ───────────────────────────────────────
   async function loadOverview() {
     if (!window.Plotly) return;
@@ -298,6 +438,11 @@ const HubCharts = (() => {
       renderTopRmBalance(rmData);
       renderRmShortageActual(rmData);
     } catch (err) { console.error('RM charts error:', err); }
+
+    try {
+      const dailyVsTarget = await Hub.api.getDailyProdVsTarget();
+      renderDailyProdVsTarget(dailyVsTarget);
+    } catch (err) { console.error('Daily prod vs target chart error:', err); }
 
     try {
       const pvr = await Hub.api.getProductionVsReq(15);

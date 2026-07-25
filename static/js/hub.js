@@ -94,6 +94,7 @@ const Hub = (() => {
     getTopShortfalls(l)   { return this.get(`/api/reports/top-shortfalls?limit=${l || 20}`); },
     getPendingTreemap(l)  { return this.get(`/api/reports/pending-treemap?limit=${l || 40}`); },
     getRmChartData(l)     { return this.get(`/api/dashboard/rm-charts?limit=${l || 20}`); },
+    getDailyProdVsTarget(){ return this.get('/api/dashboard/daily-production-vs-target'); },
   };
 
   // ── Utilities ──────────────────────────────────────────────────────────

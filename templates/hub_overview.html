@@ -11,22 +11,22 @@
       <div class="ti-monitor-metric-cell" role="listitem">
         <div class="ti-monitor-metric-label">Scheduled</div>
         <div class="ti-monitor-metric-value" id="ytd-scheduled">–</div>
-        <div class="ti-monitor-metric-unit">Mn</div>
+        <div class="ti-monitor-metric-unit">Cr.</div>
       </div>
       <div class="ti-monitor-metric-cell" role="listitem">
         <div class="ti-monitor-metric-label">Planned</div>
         <div class="ti-monitor-metric-value" id="ytd-planned">–</div>
-        <div class="ti-monitor-metric-unit">Mn</div>
+        <div class="ti-monitor-metric-unit">Cr.</div>
       </div>
       <div class="ti-monitor-metric-cell" role="listitem">
         <div class="ti-monitor-metric-label">Produced</div>
         <div class="ti-monitor-metric-value success" id="ytd-produced">–</div>
-        <div class="ti-monitor-metric-unit">Mn</div>
+        <div class="ti-monitor-metric-unit">Cr.</div>
       </div>
       <div class="ti-monitor-metric-cell" role="listitem">
         <div class="ti-monitor-metric-label">Dispatched</div>
         <div class="ti-monitor-metric-value success" id="ytd-dispatched">–</div>
-        <div class="ti-monitor-metric-unit">Mn</div>
+        <div class="ti-monitor-metric-unit">Cr.</div>
       </div>
       <div class="ti-monitor-metric-cell" role="listitem">
         <div class="ti-monitor-metric-label">RM Inward</div>
@@ -224,6 +224,21 @@
   </div>
 </div>
 
+<!-- ═══ DAILY PRODUCTION VS AVG TARGET ═══ -->
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header">
+      <div>
+        <div class="ti-card-title">Cumulative Production vs Target</div>
+        <div class="ti-card-subtitle" id="chart-daily-prod-subtitle">Running total of required vs actual components produced</div>
+      </div>
+    </div>
+    <div class="ti-card-body ti-card-body--chart">
+      <div id="chart-daily-prod-vs-target"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ PM Donut (now in its own full row since RM shortage was moved up) ═══ -->
 <div class="ti-grid-2 ti-mb-24">
   <div class="ti-card">
@@ -310,14 +325,14 @@
 <script>
 (async function loadOverview() {
   // ── YTD financial year KPI ──
-  function formatMillions(qty) {
+  function formatCrores(qty) {
     const n = Number(qty) || 0;
-    const m = n / 1_000_000;
-    if (!Number.isFinite(m)) return '0';
-    if (Math.abs(m) >= 100) return m.toFixed(1);
-    if (Math.abs(m) >= 10) return m.toFixed(2);
-    if (Math.abs(m) >= 1) return m.toFixed(2);
-    return m.toFixed(3);
+    const cr = n / 10_000_000;
+    if (!Number.isFinite(cr)) return '0';
+    if (Math.abs(cr) >= 100) return cr.toFixed(1);
+    if (Math.abs(cr) >= 10) return cr.toFixed(2);
+    if (Math.abs(cr) >= 1) return cr.toFixed(2);
+    return cr.toFixed(3);
   }
 
   function formatTons(kg) {
@@ -350,10 +365,10 @@
       const ytdDistinct = ytd.distinct || {};
       const ytdReports = ytdDistinct.reports || {};
       setOverviewText('ytd-as-on-label', formatAsOnDate(ytd.periodEnd));
-      setOverviewText('ytd-scheduled', formatMillions(ytd.scheduled));
-      setOverviewText('ytd-planned', formatMillions(ytd.planned));
-      setOverviewText('ytd-produced', formatMillions(ytd.produced));
-      setOverviewText('ytd-dispatched', formatMillions(ytd.dispatched));
+      setOverviewText('ytd-scheduled', formatCrores(ytd.scheduled));
+      setOverviewText('ytd-planned', formatCrores(ytd.planned));
+      setOverviewText('ytd-produced', formatCrores(ytd.produced));
+      setOverviewText('ytd-dispatched', formatCrores(ytd.dispatched));
       setOverviewText('ytd-rm-inward', formatTons(ytd.rmInwardKg));
       setOverviewText('ytd-tool-breakdown', Hub.utils.formatIndian(ytd.toolBreakdown || 0));
       setOverviewText('ytd-distinct-comp', Hub.utils.formatIndian(ytdDistinct.components || 0));

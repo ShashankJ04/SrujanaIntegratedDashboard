@@ -719,6 +719,60 @@ def get_production_kpi(month: int, year: int) -> Dict[str, Any]:
     )
 
 
+def get_daily_production_vs_target(month: int, year: int) -> Dict[str, Any]:
+    """Daily produced qty vs average target (monthly schedule ÷ days in month)."""
+    from datetime import date as date_cls
+
+    from .dispatch_calendar import get_dispatch_kpi
+
+    kpi = get_dispatch_kpi(month, year)
+    scheduled_total = float(kpi.get("scheduled") or 0.0)
+    days_in_month = calendar.monthrange(year, month)[1]
+    avg_daily_target = (
+        scheduled_total / days_in_month if scheduled_total > 0 and days_in_month > 0 else 0.0
+    )
+
+    daily_map = _fetch_daily_production_map(month, year)
+    daily_totals = {d: 0.0 for d in range(1, days_in_month + 1)}
+    for part_days in daily_map.values():
+        for day_key, qty in (part_days or {}).items():
+            try:
+                day_num = int(day_key)
+            except (TypeError, ValueError):
+                continue
+            if day_num in daily_totals:
+                daily_totals[day_num] += float(qty or 0.0)
+
+    today = date_cls.today()
+    if year == today.year and month == today.month:
+        as_of_day = today.day
+    elif (year, month) < (today.year, today.month):
+        as_of_day = days_in_month
+    else:
+        as_of_day = 0
+
+    days: List[Dict[str, Any]] = []
+    for day_num in range(1, days_in_month + 1):
+        days.append(
+            {
+                "day": day_num,
+                "date": f"{year:04d}-{month:02d}-{day_num:02d}",
+                "produced": round(daily_totals[day_num], 2),
+                "avgTarget": round(avg_daily_target, 2),
+            }
+        )
+
+    return {
+        "year": year,
+        "month": month,
+        "daysInMonth": days_in_month,
+        "asOfDay": as_of_day,
+        "scheduledTotal": round(scheduled_total, 2),
+        "avgDailyTarget": round(avg_daily_target, 2),
+        "days": days,
+    }
+
+
 def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     """Return production calendar payload with planned/opening stock columns and day schedule."""
     payload = build_dispatch_calendar_payload(month, year)
