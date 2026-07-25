@@ -1,4 +1,4 @@
-"""End-of-month inventory report snapshots and scheduler."""
+"""Inventory report row snapshots and end-of-month JSON archive scheduler."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 import logging
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask
@@ -43,6 +43,142 @@ def ensure_inventory_snapshot_tables() -> None:
         )
         """
     )
+    execute(
+        """
+        CREATE TABLE IF NOT EXISTS inventory_report_rows (
+            report_year INT NOT NULL,
+            report_month INT NOT NULL,
+            part_id INT NOT NULL,
+            total_requirement DOUBLE NOT NULL DEFAULT 0,
+            buffer_qty DOUBLE NOT NULL DEFAULT 0,
+            total_stock DOUBLE NOT NULL DEFAULT 0,
+            production_pending DOUBLE NOT NULL DEFAULT 0,
+            produced_qty DOUBLE NOT NULL DEFAULT 0,
+            balance_production_qty DOUBLE NOT NULL DEFAULT 0,
+            PRIMARY KEY (report_year, report_month, part_id),
+            INDEX idx_irr_period (report_year, report_month)
+        )
+        """
+    )
+
+
+def _resolve_part_id_from_row(row: Dict[str, Any]) -> Optional[int]:
+    raw = row.get("part_id")
+    if raw is not None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    part_no = str(row.get("part_no") or "").strip()
+    if not part_no:
+        return None
+    db_row = fetch_one(
+        """
+        SELECT CO_ID AS part_id
+        FROM components
+        WHERE TRIM(CO_PARTNO) = %s
+          AND CO_ACTIVEYN = 'Y'
+          AND CO_ID = CO_PARENTID
+        ORDER BY CO_ID
+        LIMIT 1
+        """,
+        (part_no,),
+    )
+    if db_row and db_row.get("part_id") is not None:
+        return int(db_row["part_id"])
+    db_row = fetch_one(
+        """
+        SELECT CO_PARENTID AS part_id
+        FROM components
+        WHERE TRIM(CO_PARTNO) = %s AND CO_ACTIVEYN = 'Y'
+        ORDER BY CO_ID
+        LIMIT 1
+        """,
+        (part_no,),
+    )
+    if not db_row or db_row.get("part_id") is None:
+        return None
+    return int(db_row["part_id"])
+
+
+def _typed_report_row_from_enriched(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    part_id = _resolve_part_id_from_row(row)
+    if part_id is None:
+        return None
+    return {
+        "part_id": part_id,
+        "total_requirement": float(row.get("feb") or 0),
+        "buffer_qty": float(row.get("buffer_qty") or 0),
+        "total_stock": float(row.get("total_stock") or 0),
+        "production_pending": float(row.get("production_pending") or 0),
+        "produced_qty": float(row.get("produced_qty") or 0),
+        "balance_production_qty": float(row.get("balance_production_qty") or 0),
+    }
+
+
+def _delete_inventory_report_rows(year: int, month: int) -> None:
+    execute(
+        "DELETE FROM inventory_report_rows WHERE report_year = %s AND report_month = %s",
+        (year, month),
+    )
+
+
+def _insert_inventory_report_rows(year: int, month: int, enriched: List[Dict[str, Any]]) -> int:
+    inserted = 0
+    for row in enriched:
+        typed = _typed_report_row_from_enriched(row)
+        if not typed:
+            continue
+        execute(
+            """
+            INSERT INTO inventory_report_rows (
+                report_year, report_month, part_id,
+                total_requirement, buffer_qty, total_stock,
+                production_pending, produced_qty, balance_production_qty
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                year,
+                month,
+                typed["part_id"],
+                typed["total_requirement"],
+                typed["buffer_qty"],
+                typed["total_stock"],
+                typed["production_pending"],
+                typed["produced_qty"],
+                typed["balance_production_qty"],
+            ),
+        )
+        inserted += 1
+    return inserted
+
+
+def capture_current_month_report_rows() -> Dict[str, Any]:
+    """Replace inventory_report_rows for the open calendar month with live inventory data."""
+    from .models import build_enriched_inventory_rows_for_period
+
+    ensure_inventory_snapshot_tables()
+    today = date.today()
+    year, month = today.year, today.month
+    enriched = build_enriched_inventory_rows_for_period(month, year)
+    captured_at = datetime.now()
+
+    _delete_inventory_report_rows(year, month)
+    report_row_count = _insert_inventory_report_rows(year, month, enriched)
+
+    logger.info(
+        "Captured daily inventory_report_rows for %04d-%02d (%s rows)",
+        year,
+        month,
+        report_row_count,
+    )
+    return {
+        "year": year,
+        "month": month,
+        "rowCount": len(enriched),
+        "reportRowCount": report_row_count,
+        "capturedAt": captured_at.isoformat(),
+    }
 
 
 def snapshot_exists(year: int, month: int) -> bool:
@@ -125,6 +261,7 @@ def capture_monthly_snapshot(year: int, month: int) -> Dict[str, Any]:
         "DELETE FROM inventory_monthly_snapshots WHERE snapshot_year = %s AND snapshot_month = %s",
         (year, month),
     )
+    _delete_inventory_report_rows(year, month)
     execute(
         """
         INSERT INTO inventory_monthly_snapshots
@@ -147,16 +284,20 @@ def capture_monthly_snapshot(year: int, month: int) -> Dict[str, Any]:
             (year, month, part_no, json.dumps(row, default=str)),
         )
 
+    report_row_count = _insert_inventory_report_rows(year, month, enriched)
+
     logger.info(
-        "Captured inventory snapshot for %04d-%02d (%s rows)",
+        "Captured inventory snapshot for %04d-%02d (%s rows, %s report rows)",
         year,
         month,
         len(enriched),
+        report_row_count,
     )
     return {
         "year": year,
         "month": month,
         "rowCount": len(enriched),
+        "reportRowCount": report_row_count,
         "capturedAt": captured_at.isoformat(),
     }
 
@@ -189,7 +330,25 @@ def _month_end_run_at(year: int, month: int) -> datetime:
     return datetime(year, month, last_day, 23, 59, 0)
 
 
+def _daily_run_at(year: int, month: int, day: int) -> datetime:
+    return datetime(year, month, day, 23, 59, 0)
+
+
+def _next_daily_run(from_dt: datetime) -> datetime:
+    """Next wake time: 23:59 today or on a future calendar day."""
+    run_at = _daily_run_at(from_dt.year, from_dt.month, from_dt.day)
+    if from_dt < run_at:
+        return run_at
+    next_day = from_dt.date() + timedelta(days=1)
+    return _daily_run_at(next_day.year, next_day.month, next_day.day)
+
+
 def _next_scheduled_run(from_dt: datetime) -> datetime:
+    """Next wake time: the sooner of daily report-row capture or month-end JSON snapshot."""
+    return min(_next_daily_run(from_dt), _next_month_end_run(from_dt))
+
+
+def _next_month_end_run(from_dt: datetime) -> datetime:
     """Next wake time: 23:59 on the last day of the current or a future month."""
     run_at = _month_end_run_at(from_dt.year, from_dt.month)
     if from_dt < run_at:
@@ -199,7 +358,14 @@ def _next_scheduled_run(from_dt: datetime) -> datetime:
     return _month_end_run_at(from_dt.year, from_dt.month + 1)
 
 
-def _try_capture_if_due(now: datetime) -> None:
+def _try_capture_daily_report_rows_if_due(now: datetime) -> None:
+    """Refresh current-month inventory_report_rows once per day at 23:59."""
+    if now.hour < 23 or (now.hour == 23 and now.minute < 59):
+        return
+    capture_current_month_report_rows()
+
+
+def _try_capture_monthly_snapshot_if_due(now: datetime) -> None:
     """Capture once when the clock reaches month-end 23:59 (server local time)."""
     last_day = calendar.monthrange(now.year, now.month)[1]
     if now.day != last_day or now.hour < 23 or (now.hour == 23 and now.minute < 59):
@@ -220,7 +386,8 @@ def _scheduler_loop(app: Flask) -> None:
                     continue
 
                 now = datetime.now()
-                _try_capture_if_due(now)
+                _try_capture_daily_report_rows_if_due(now)
+                _try_capture_monthly_snapshot_if_due(now)
                 next_run = _next_scheduled_run(now)
                 sleep_seconds = max(1.0, (next_run - datetime.now()).total_seconds())
                 logger.info(
@@ -232,6 +399,17 @@ def _scheduler_loop(app: Flask) -> None:
             logger.exception("Inventory snapshot scheduler failed")
             sleep_seconds = 60.0
         time.sleep(sleep_seconds)
+
+
+def bootstrap_inventory_report_rows(app: Flask) -> None:
+    """Populate inventory_report_rows for the open month on application startup."""
+    if not app.config.get("INVENTORY_SNAPSHOT_ENABLED", True):
+        return
+    with app.app_context():
+        try:
+            capture_current_month_report_rows()
+        except Exception:
+            logger.exception("Initial inventory_report_rows capture failed")
 
 
 def start_inventory_snapshot_scheduler(app: Flask) -> None:
@@ -252,4 +430,4 @@ def start_inventory_snapshot_scheduler(app: Flask) -> None:
     )
     thread.start()
     _SCHEDULER_STARTED = True
-    logger.info("Inventory monthly snapshot scheduler started")
+    logger.info("Inventory snapshot scheduler started (daily report rows + month-end JSON archive)")

@@ -898,7 +898,13 @@
   }
 
   async function fetchPayload() {
-    const res = await fetch(DEFAULT_ENDPOINT, { credentials: 'same-origin' });
+    const params = new URLSearchParams();
+    const rowFilter = dispatchRowFilter();
+    if (rowFilter) params.set('rowFilter', rowFilter);
+    const qs = params.toString();
+    const res = await fetch(qs ? `${DEFAULT_ENDPOINT}?${qs}` : DEFAULT_ENDPOINT, {
+      credentials: 'same-origin',
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.message || data.error || 'Failed to load Dispatch Calendar');
@@ -906,11 +912,26 @@
     return data;
   }
 
+  function dispatchRowFilter() {
+    const v = new URLSearchParams(window.location.search).get('rowFilter');
+    return v && String(v).trim() ? String(v).trim() : undefined;
+  }
+
+  function updateBalanceHint() {
+    const el = document.getElementById('dispatch-balance-hint');
+    if (!el) return;
+    const on = dispatchRowFilter() === 'balance';
+    el.hidden = !on;
+    el.style.display = on ? '' : 'none';
+  }
+
   function exportCalendarExcel(payload) {
     if (!payload) return;
     const params = new URLSearchParams();
     if (payload.month) params.set('month', String(payload.month));
     if (payload.year) params.set('year', String(payload.year));
+    const rowFilter = dispatchRowFilter();
+    if (rowFilter) params.set('rowFilter', rowFilter);
     apiDownloadGet(`/api/dispatch-calendar/export?${params.toString()}`, 'dispatch_calendar.xlsx');
   }
 
@@ -980,6 +1001,7 @@
       const load = async () => {
         setLoading(root, true);
         try {
+          updateBalanceHint();
           const [payload] = await Promise.all([fetchPayload(), loadDispatchMtdKpi()]);
           _lastPayload = payload;
           syncLegendFilterUi();

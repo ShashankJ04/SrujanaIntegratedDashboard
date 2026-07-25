@@ -2,10 +2,10 @@
 <!-- DPR_POLL_INTERVAL_MS: set once in hub.html (before dpr.js); no per-section script needed. -->
 <script>window.DPR_EDIT_ALLOWED = {{ dpr_edit_allowed|default(false)|tojson }};</script>
 
-<section class="ti-section ti-hub-section-fill" data-section="dpr" id="section-dpr">
+<section class="ti-section ti-hub-section-fill ti-dpr-section" data-section="dpr" id="section-dpr">
 
   <!-- ── Header Row (date, actions, line count — single band) ── -->
-  <div class="ti-dpr-toolbar" style="flex-shrink:0">
+  <div class="ti-dpr-toolbar">
     <div class="ti-dpr-toolbar-left">
       <label class="ti-dpr-date-label" for="dpr-date">Date</label>
       <input id="dpr-date" class="ti-dpr-date-input" type="date" />
@@ -21,70 +21,75 @@
     </div>
   </div>
 
-  <!-- ── KPI Strip (match Original: Planned / Produced / Produced %) ── -->
-  <div class="ti-dpr-kpi-grid" style="flex-shrink:0">
-    <article class="ti-card ti-dpr-kpi-card">
-      <h3 class="ti-dpr-kpi-title">Daily Production Status</h3>
-      <div class="ti-dpr-kpi-row">
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-planned">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced %</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced-pct">—</span></div>
-      </div>
-    </article>
-    <article class="ti-card ti-dpr-kpi-card">
-      <h3 class="ti-dpr-kpi-title">Monthly Production Status</h3>
-      <div class="ti-dpr-kpi-row">
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-planned">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-produced">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced %</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-produced-pct">—</span></div>
-      </div>
-    </article>
-    <article class="ti-card ti-dpr-kpi-card">
-      <h3 class="ti-dpr-kpi-title">Previous Day Summary</h3>
-      <div class="ti-dpr-kpi-row">
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-board-last-planned">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-board-last-produced">—</span></div>
-        <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Achievement %</span><span class="ti-dpr-kpi-value" id="dpr-board-last-achievement">—</span></div>
-      </div>
-    </article>
-  </div>
+  <!-- ── Compact summary: KPIs + resources/bottlenecks (table-first density) ── -->
+  <div class="ti-dpr-summary">
+    <div class="ti-dpr-kpi-grid">
+      <article class="ti-card ti-dpr-kpi-card">
+        <h3 class="ti-dpr-kpi-title">Daily Production Status</h3>
+        <div class="ti-dpr-kpi-row">
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-planned">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced %</span><span class="ti-dpr-kpi-value" id="dpr-kpi-daily-produced-pct">—</span></div>
+        </div>
+      </article>
+      <article class="ti-card ti-dpr-kpi-card ti-dpr-kpi-card--monthly">
+        <div class="ti-dpr-kpi-card-head">
+          <h3 class="ti-dpr-kpi-title">Monthly Production Status</h3>
+          <span class="ti-dpr-kpi-pct" id="dpr-kpi-monthly-produced-pct" title="Produced %">—</span>
+        </div>
+        <div class="ti-dpr-kpi-row ti-dpr-kpi-row--monthly">
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-planned">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-produced">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Actual Produced</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-actual-produced">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Excess Production</span><span class="ti-dpr-kpi-value" id="dpr-kpi-monthly-excess">—</span></div>
+        </div>
+      </article>
+      <article class="ti-card ti-dpr-kpi-card">
+        <h3 class="ti-dpr-kpi-title">Previous Day Summary</h3>
+        <div class="ti-dpr-kpi-row">
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Planned</span><span class="ti-dpr-kpi-value" id="dpr-board-last-planned">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Produced</span><span class="ti-dpr-kpi-value" id="dpr-board-last-produced">—</span></div>
+          <div class="ti-dpr-kpi-stat"><span class="ti-dpr-kpi-label">Achievement %</span><span class="ti-dpr-kpi-value" id="dpr-board-last-achievement">—</span></div>
+        </div>
+      </article>
+    </div>
 
-  <!-- ── Board row: Production resources + Bottlenecks (Original Dashboard) ── -->
-  <div class="ti-dpr-board-row" style="flex-shrink:0">
-    <article class="ti-card ti-dpr-board-card ti-dpr-board-card--compact">
-      <h3 class="ti-dpr-kpi-title">Production Resources</h3>
-      <div class="ti-dpr-board-lines">
-        <div class="ti-dpr-board-line">
-          <span class="ti-dpr-board-label">Operators (Planned / Actual):</span>
-          <span id="dpr-operators-read" class="ti-dpr-board-value">—</span>
-          <div id="dpr-operators-edit" class="ti-dpr-inline-edit" style="display:none">
-            <input id="dpr-op-planned-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
-            <span>/</span>
-            <input id="dpr-op-actual-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
+    <div class="ti-dpr-board-row">
+      <article class="ti-card ti-dpr-board-card ti-dpr-board-card--compact">
+        <h3 class="ti-dpr-kpi-title" title="Production Resources">Resources</h3>
+        <div class="ti-dpr-board-lines">
+          <div class="ti-dpr-board-line" title="Operators (Planned / Actual)">
+            <span class="ti-dpr-board-label">Operators</span>
+            <span id="dpr-operators-read" class="ti-dpr-board-value">—</span>
+            <div id="dpr-operators-edit" class="ti-dpr-inline-edit" style="display:none">
+              <input id="dpr-op-planned-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
+              <span>/</span>
+              <input id="dpr-op-actual-input" class="ti-input ti-dpr-mini-input" type="number" step="1" />
+            </div>
+          </div>
+          <div class="ti-dpr-board-line" title="Machines (Planned / Total)">
+            <span class="ti-dpr-board-label">Machines</span>
+            <span id="dpr-machines-read" class="ti-dpr-board-value">—</span>
+          </div>
+          <div class="ti-dpr-board-line" title="Tools Breakdown">
+            <span class="ti-dpr-board-label">Tools BD</span>
+            <span id="dpr-tools-breakdown-read" class="ti-dpr-board-value">—</span>
           </div>
         </div>
-        <div class="ti-dpr-board-line">
-          <span class="ti-dpr-board-label">Machines (Planned / Total):</span>
-          <span id="dpr-machines-read" class="ti-dpr-board-value">—</span>
+      </article>
+      <article class="ti-card ti-dpr-board-card ti-dpr-board-card--wide">
+        <h3 class="ti-dpr-kpi-title" title="Key Bottlenecks & Pending Issues">Bottlenecks</h3>
+        <div id="dpr-board-bottleneck-read-wrap" class="ti-dpr-bottleneck-read-wrap">
+          <div id="dpr-bottleneck-grid" class="ti-dpr-bottleneck-grid" aria-label="Bottleneck list"></div>
         </div>
-        <div class="ti-dpr-board-line">
-          <span class="ti-dpr-board-label">Tools Breakdown:</span>
-          <span id="dpr-tools-breakdown-read" class="ti-dpr-board-value">—</span>
-        </div>
-      </div>
-    </article>
-    <article class="ti-card ti-dpr-board-card ti-dpr-board-card--wide">
-      <h3 class="ti-dpr-kpi-title">Key Bottlenecks &amp; Pending Issues</h3>
-      <div id="dpr-board-bottleneck-read-wrap" class="ti-dpr-bottleneck-read-wrap">
-        <div id="dpr-bottleneck-grid" class="ti-dpr-bottleneck-grid" aria-label="Bottleneck list"></div>
-      </div>
-      <textarea id="dpr-board-bottleneck-input" class="ti-input ti-dpr-bottleneck-input" style="display:none" rows="6" placeholder="One issue per line"></textarea>
-    </article>
+        <textarea id="dpr-board-bottleneck-input" class="ti-input ti-dpr-bottleneck-input" style="display:none" rows="3" placeholder="One issue per line"></textarea>
+      </article>
+    </div>
   </div>
 
-  <!-- ── DPR Table — same column keys as Original Dashboard (drag / pin / sort in JS) ── -->
-  <div class="ti-card" style="padding:0; overflow:hidden; flex:1; min-height:0; display:flex; flex-direction:column;">
-    <div id="dpr-table-container" class="ti-dpr-scroll ti-dpr-table-wrap" style="flex:1; min-height:0;">
+  <!-- ── DPR Table — primary focus; fills remaining viewport ── -->
+  <div class="ti-card ti-dpr-table-card">
+    <div id="dpr-table-container" class="ti-dpr-scroll ti-dpr-table-wrap">
       <table class="ti-dpr-table data-table dpr-data-table ti-excel-table ti-excel-table--original" id="dpr-table">
         <thead>
           <tr>

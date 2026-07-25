@@ -269,8 +269,9 @@ def create_app() -> Flask:
             return "Not found", 404
         return send_from_directory(base, safe, mimetype="image/png")
 
-    from .inventory_snapshot import start_inventory_snapshot_scheduler
+    from .inventory_snapshot import bootstrap_inventory_report_rows, start_inventory_snapshot_scheduler
 
+    bootstrap_inventory_report_rows(app)
     start_inventory_snapshot_scheduler(app)
 
     return app

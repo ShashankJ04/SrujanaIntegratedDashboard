@@ -99,6 +99,7 @@ window.LaserWeldingPage = (() => {
   let _historyStep = '';
   let _historySearch = '';
   let _historyLoading = false;
+  let _historyLoadSeq = 0;
   let _historyExpanded = {};
   let _historyGrid = null;
   let _stockGrid = null;
@@ -4916,6 +4917,19 @@ window.LaserWeldingPage = (() => {
     if (host) host.innerHTML = '';
   }
 
+  function reportGridLoadingHtml(message = 'Loading report…') {
+    return `<div class="lw-track-empty lw-track-history-loading" role="status" aria-live="polite">
+      <span class="ti-spinner lw-report-loading-spinner" aria-hidden="true"></span>
+      <span class="lw-report-loading-text">${escapeHtml(message)}</span>
+    </div>`;
+  }
+
+  function showReportGridLoading(hostSel, message) {
+    const host = typeof hostSel === 'string' ? $(hostSel) : hostSel;
+    if (!host) return;
+    host.innerHTML = reportGridLoadingHtml(message);
+  }
+
   function ensureHistoryDateDefaults() {
     const fromEl = $('#lw-history-from');
     const toEl = $('#lw-history-to');
@@ -4946,17 +4960,20 @@ window.LaserWeldingPage = (() => {
     if (_tab !== 'reports' || _trackReportView !== 'history') return;
     ensureHistoryDateDefaults();
     if (_historyLoading && !opts.force) return;
+    const seq = ++_historyLoadSeq;
     _historyLoading = true;
     setTrackError('');
     const host = $('#lw-track-history-grid');
-    if (host && opts.skeleton !== false && !_historyGrid) {
-      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
-    }
+    destroyHistoryGrid();
+    showReportGridLoading(host, 'Loading activity report…');
     try {
       const data = await apiFetch('/api/laser-welding/reports/action-history?' + historyQueryParams());
+      if (seq !== _historyLoadSeq) return;
+      if (_tab !== 'reports' || _trackReportView !== 'history') return;
       _actionHistoryRows = data.rows || [];
       renderTrackActionHistoryTable();
     } catch (err) {
+      if (seq !== _historyLoadSeq) return;
       console.error(err);
       setTrackError(err.message || 'Failed to load action history');
       destroyHistoryGrid();
@@ -4964,7 +4981,7 @@ window.LaserWeldingPage = (() => {
         host.innerHTML = '<div class="lw-track-empty">Failed to load history</div>';
       }
     } finally {
-      _historyLoading = false;
+      if (seq === _historyLoadSeq) _historyLoading = false;
     }
   }
 
@@ -4993,28 +5010,25 @@ window.LaserWeldingPage = (() => {
 
     const mapped = (_actionHistoryRows || []).map(mapHistoryRowForGrid);
 
-    if (!_historyGrid) {
-      host.innerHTML = '';
-      _historyGrid = SuperGrid.create(host, {
-        columns: HISTORY_GRID_COLUMNS,
-        rows: mapped,
-        options: {
-          omitToolbar: true,
-          countElement: countEl,
-          countLabel: 'lines',
-          emptyText: 'No activity for this range',
-          layoutKey: 'lw-action-history',
-          resizable: true,
-          reorderable: true,
-          pinnable: true,
-          detailRowExpanded: (row) => !!(row.hasDetail && _historyExpanded[row._rowKey]),
-          detailRowHtml: (row) => buildHistoryDetailContent(row),
-        },
-      });
-      return;
-    }
-
-    _historyGrid.setRows(mapped);
+    // Recreate each time so the grid measures correctly after the panel was display:none
+    if (_historyGrid) destroyHistoryGrid();
+    host.innerHTML = '';
+    _historyGrid = SuperGrid.create(host, {
+      columns: HISTORY_GRID_COLUMNS,
+      rows: mapped,
+      options: {
+        omitToolbar: true,
+        countElement: countEl,
+        countLabel: 'lines',
+        emptyText: 'No activity for this range',
+        layoutKey: 'lw-action-history',
+        resizable: true,
+        reorderable: true,
+        pinnable: true,
+        detailRowExpanded: (row) => !!(row.hasDetail && _historyExpanded[row._rowKey]),
+        detailRowHtml: (row) => buildHistoryDetailContent(row),
+      },
+    });
   }
 
   function destroyLwReportGrid(gridRef, hostSel) {
@@ -5060,7 +5074,9 @@ window.LaserWeldingPage = (() => {
     { key: 'rowClass', label: 'Type', width: 56 },
     { key: 'label', label: 'Part / BOM', width: 130 },
     { key: 'lotNo', label: 'Lot', width: 110, format: (v) => `<code>${escapeHtml(v || '—')}</code>` },
+    { key: 'supplierName', label: 'Supplier', width: 140 },
     { key: 'workflowLabel', label: 'Step', width: 120 },
+    { key: 'inspectedQty', label: 'Inspected', align: 'right', width: 80 },
     { key: 'scrapQty', label: 'Scrap', align: 'right', width: 64 },
     { key: 'scrapRemark', label: 'Remark', width: 160 },
     { key: 'operator', label: 'Operator', width: 130 },
@@ -5119,10 +5135,8 @@ window.LaserWeldingPage = (() => {
     if (_stockLoading && !opts.force) return;
     _stockLoading = true;
     setTrackError('');
-    const host = $('#lw-track-stock-grid');
-    if (host && opts.skeleton !== false && !_stockGrid) {
-      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
-    }
+    _stockGrid = destroyLwReportGrid(_stockGrid, '#lw-track-stock-grid');
+    showReportGridLoading('#lw-track-stock-grid', 'Loading stock report…');
     try {
       const params = new URLSearchParams();
       if (_historySearch.trim()) params.set('q', _historySearch.trim());
@@ -5134,7 +5148,8 @@ window.LaserWeldingPage = (() => {
       console.error(err);
       setTrackError(err.message || 'Failed to load stock report');
       _stockGrid = destroyLwReportGrid(_stockGrid, '#lw-track-stock-grid');
-      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load stock</div>';
+      const stockHost = $('#lw-track-stock-grid');
+      if (stockHost) stockHost.innerHTML = '<div class="lw-track-empty">Failed to load stock</div>';
     } finally {
       _stockLoading = false;
     }
@@ -5160,10 +5175,8 @@ window.LaserWeldingPage = (() => {
     if (_qaLoading && !opts.force) return;
     _qaLoading = true;
     setTrackError('');
-    const host = $('#lw-track-qa-grid');
-    if (host && opts.skeleton !== false && !_qaGrid) {
-      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
-    }
+    _qaGrid = destroyLwReportGrid(_qaGrid, '#lw-track-qa-grid');
+    showReportGridLoading('#lw-track-qa-grid', 'Loading QA report…');
     try {
       const data = await apiFetch('/api/laser-welding/reports/qa-history?' + historyQueryParams());
       _qaRows = (data.rows || []).map(mapDatedReportRowForGrid);
@@ -5172,7 +5185,8 @@ window.LaserWeldingPage = (() => {
       console.error(err);
       setTrackError(err.message || 'Failed to load QA history');
       _qaGrid = destroyLwReportGrid(_qaGrid, '#lw-track-qa-grid');
-      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load QA history</div>';
+      const qaHost = $('#lw-track-qa-grid');
+      if (qaHost) qaHost.innerHTML = '<div class="lw-track-empty">Failed to load QA history</div>';
     } finally {
       _qaLoading = false;
     }
@@ -5198,10 +5212,8 @@ window.LaserWeldingPage = (() => {
     if (_scrapLoading && !opts.force) return;
     _scrapLoading = true;
     setTrackError('');
-    const host = $('#lw-track-scrap-grid');
-    if (host && opts.skeleton !== false && !_scrapGrid) {
-      host.innerHTML = '<div class="lw-track-empty lw-track-history-loading">Loading…</div>';
-    }
+    _scrapGrid = destroyLwReportGrid(_scrapGrid, '#lw-track-scrap-grid');
+    showReportGridLoading('#lw-track-scrap-grid', 'Loading scrap report…');
     try {
       const data = await apiFetch('/api/laser-welding/reports/scrap-history?' + historyQueryParams());
       _scrapRows = (data.rows || []).map(mapDatedReportRowForGrid);
@@ -5210,7 +5222,8 @@ window.LaserWeldingPage = (() => {
       console.error(err);
       setTrackError(err.message || 'Failed to load scrap history');
       _scrapGrid = destroyLwReportGrid(_scrapGrid, '#lw-track-scrap-grid');
-      if (host) host.innerHTML = '<div class="lw-track-empty">Failed to load scrap history</div>';
+      const scrapHost = $('#lw-track-scrap-grid');
+      if (scrapHost) scrapHost.innerHTML = '<div class="lw-track-empty">Failed to load scrap history</div>';
     } finally {
       _scrapLoading = false;
     }
@@ -6204,7 +6217,7 @@ window.LaserWeldingPage = (() => {
       renderTrackActionsTable();
     }
     if (_trackReportView === 'history') {
-      loadActionHistory({ skeleton: false });
+      loadActionHistory({ skeleton: false, force: true });
     } else if (_trackReportView === 'stock') {
       loadStockReport({ skeleton: false });
     } else if (_trackReportView === 'qa') {

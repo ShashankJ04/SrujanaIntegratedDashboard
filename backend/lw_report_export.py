@@ -90,19 +90,17 @@ def _operator_label(row: Dict[str, Any]) -> str:
     return name or ecno or ""
 
 
-def _format_time_taken(minutes: Any) -> str:
+def _time_taken_hours(minutes: Any) -> Optional[float]:
+    """Convert minutes to decimal hours for Excel (e.g. 90 -> 1.5)."""
     if minutes is None:
-        return ""
+        return None
     try:
         m = int(minutes)
     except (TypeError, ValueError):
-        return ""
+        return None
     if m <= 0:
-        return ""
-    hours, rem = divmod(m, 60)
-    if hours:
-        return f"{hours}h {rem}m"
-    return f"{rem}m"
+        return None
+    return round(m / 60.0, 2)
 
 
 def _normalize_variables(
@@ -157,7 +155,7 @@ def _activity_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[D
                 "QA": int(r.get("qaQty") or 0),
                 "Scrap": int(r.get("scrapQty") or 0),
                 "Rework": int(r.get("reworkQty") or 0),
-                "Time": _format_time_taken(r.get("timeTakenMinutes")),
+                "Time": _time_taken_hours(r.get("timeTakenMinutes")),
                 "OT": "OT" if ot == "Y" else "",
             }
         )
@@ -202,7 +200,9 @@ def _qa_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict[st
         "Type",
         "Part / BOM",
         "Lot",
+        "Supplier",
         "Step",
+        "Inspected",
         "QA",
         "Operator",
         "Remark",
@@ -215,7 +215,9 @@ def _qa_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict[st
                 "Type": r.get("rowClass") or r.get("rowType") or "",
                 "Part / BOM": r.get("label") or r.get("partNo") or r.get("bomNo") or "",
                 "Lot": r.get("lotNo") or "",
+                "Supplier": r.get("supplierName") or "",
                 "Step": r.get("workflowLabel") or "",
+                "Inspected": int(r.get("inspectedQty") or 0),
                 "QA": int(r.get("qaQty") or 0),
                 "Operator": _operator_label(r),
                 "Remark": r.get("scrapRemark") or r.get("reworkRemark") or "",
@@ -230,7 +232,9 @@ def _scrap_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict
         "Type",
         "Part / BOM",
         "Lot",
+        "Supplier",
         "Step",
+        "Inspected",
         "Scrap",
         "Remark",
         "Operator",
@@ -244,7 +248,9 @@ def _scrap_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict
                 "Type": r.get("rowClass") or r.get("rowType") or "",
                 "Part / BOM": r.get("label") or r.get("partNo") or r.get("bomNo") or "",
                 "Lot": r.get("lotNo") or "",
+                "Supplier": r.get("supplierName") or "",
                 "Step": r.get("workflowLabel") or "",
+                "Inspected": int(r.get("inspectedQty") or 0),
                 "Scrap": int(r.get("scrapQty") or 0),
                 "Remark": r.get("scrapRemark") or r.get("reworkRemark") or "",
                 "Operator": _operator_label(r),
@@ -422,9 +428,10 @@ def _build_workbook(
                     num = float(val)
                     if num == int(num):
                         cell.value = int(num)
+                        cell.number_format = _EXCEL_NUMERIC_FORMAT
                     else:
                         cell.value = num
-                    cell.number_format = _EXCEL_NUMERIC_FORMAT
+                        cell.number_format = "#,##0.####"
                 except (TypeError, ValueError):
                     cell.value = val
             else:

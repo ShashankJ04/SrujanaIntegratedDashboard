@@ -470,7 +470,12 @@ const Hub = (() => {
       if (!skipHistory) {
         let url = '/app?section=reports';
         if (reportId) url += '&report=' + encodeURIComponent(reportId);
-        history.pushState({ section: 'reports', reportId: reportId || undefined }, '', url);
+        if (opts.rowFilter) url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
+        history.pushState({
+          section: 'reports',
+          reportId: reportId || undefined,
+          rowFilter: opts.rowFilter || undefined,
+        }, '', url);
       }
       if (window.__hubReportsOpenReport) {
         await window.__hubReportsOpenReport(reportId || null);
@@ -491,10 +496,17 @@ const Hub = (() => {
       if (section === 'reports' && reportId) {
         url += '&report=' + encodeURIComponent(reportId);
       }
-      if (section === 'inventory' && opts.rowFilter) {
+      if ((section === 'inventory' || section === 'dispatch-calendar' || section === 'reports') && opts.rowFilter) {
         url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
       }
-      const st = { section, reportId: section === 'reports' ? (reportId || undefined) : undefined, rowFilter: section === 'inventory' ? (opts.rowFilter || undefined) : undefined };
+      const st = {
+        section,
+        reportId: section === 'reports' ? (reportId || undefined) : undefined,
+        rowFilter:
+          section === 'inventory' || section === 'dispatch-calendar' || section === 'reports'
+            ? (opts.rowFilter || undefined)
+            : undefined,
+      };
       const cur = window.location.pathname + window.location.search;
       if (cur === url) {
         history.replaceState(st, '', url);
@@ -716,7 +728,8 @@ const Hub = (() => {
             const section = url.searchParams.get('section') || 'overview';
             const reportId = url.searchParams.get('report');
             if (section === 'reports' && reportId) {
-              navigate('reports', { reportId, forceReload: true });
+              const rowFilter = url.searchParams.get('rowFilter');
+              navigate('reports', { reportId, rowFilter: rowFilter || undefined, forceReload: true });
             } else {
               const rowFilter = url.searchParams.get('rowFilter');
               navigate(section, { rowFilter: rowFilter || undefined });
@@ -776,7 +789,13 @@ const Hub = (() => {
     window.addEventListener('popstate', () => {
       const params = new URLSearchParams(window.location.search);
       const rowFilter = params.get('rowFilter');
-      navigate(getInitialSection(), { skipHistory: true, rowFilter: rowFilter || undefined });
+      const section = getInitialSection();
+      const opts = { skipHistory: true, rowFilter: rowFilter || undefined };
+      if (section === 'reports') {
+        const reportId = params.get('report');
+        if (reportId) opts.reportId = reportId;
+      }
+      navigate(section, opts);
     });
 
     // Initial section

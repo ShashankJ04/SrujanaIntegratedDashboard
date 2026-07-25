@@ -8182,7 +8182,7 @@ def _report_entry_matches_search(item: Dict[str, Any], search_q: str) -> bool:
             "workflowLabel", "rowClass", "label", "partNo", "bomNo",
             "partName", "productName", "customerName", "lotNo",
             "operatorName", "operatorEcno", "machineName", "lineType",
-            "scrapRemark", "reworkRemark",
+            "scrapRemark", "reworkRemark", "supplierName",
         )
     ).lower()
     return search_q in hay

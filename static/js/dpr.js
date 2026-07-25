@@ -439,11 +439,12 @@ window.DprPage = (() => {
     return `${pct.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 0 })}%`;
   }
 
-  function formatPercentValue(value) {
+  function formatPercentValue(value, { round = false } = {}) {
     if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-    return `${Number(value).toLocaleString("en-IN", {
+    const n = round ? Math.round(Number(value)) : Number(value);
+    return `${n.toLocaleString("en-IN", {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: round ? 0 : 2,
     })}%`;
   }
 
@@ -477,6 +478,8 @@ window.DprPage = (() => {
       const tx = document.createElement("span");
       tx.className = "ti-dpr-bottleneck-text";
       tx.textContent = line;
+      tx.title = line;
+      cell.title = line;
       cell.appendChild(num);
       cell.appendChild(tx);
       grid.appendChild(cell);
@@ -536,10 +539,10 @@ window.DprPage = (() => {
     }
   }
 
-  function setKpiProducedPctEl(id, value) {
+  function setKpiProducedPctEl(id, value, { round = false } = {}) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.textContent = formatPercentValue(value);
+    el.textContent = formatPercentValue(value, { round });
     el.classList.remove("dpr-kpi-value--pct-low", "dpr-kpi-value--pct-good", "ti-dpr-kpi--neg", "ti-dpr-kpi--pos");
     if (value === null || value === undefined || Number.isNaN(Number(value))) return;
     const v = Number(value);
@@ -569,7 +572,9 @@ window.DprPage = (() => {
     if (monthlyKpi && typeof monthlyKpi === "object") {
       setText("dpr-kpi-monthly-planned", formatKpiQty(monthlyKpi.monthlyPlanned));
       setText("dpr-kpi-monthly-produced", formatKpiQty(monthlyKpi.monthlyProduced));
-      setKpiProducedPctEl("dpr-kpi-monthly-produced-pct", monthlyKpi.monthlyProducedPct);
+      setText("dpr-kpi-monthly-actual-produced", formatKpiQty(monthlyKpi.monthlyActualProduced));
+      setText("dpr-kpi-monthly-excess", formatKpiQty(monthlyKpi.monthlyExcessProduction));
+      setKpiProducedPctEl("dpr-kpi-monthly-produced-pct", monthlyKpi.monthlyProducedPct, { round: true });
       const opPlannedText = formatCellNumber(monthlyKpi.operatorPlanned);
       const opActualText = formatCellNumber(monthlyKpi.operatorActual);
       setSnapshotValue("dpr-operators-read", `${opPlannedText} / ${opActualText}`);
@@ -607,6 +612,8 @@ window.DprPage = (() => {
     } else {
       setText("dpr-kpi-monthly-planned", "—");
       setText("dpr-kpi-monthly-produced", "—");
+      setText("dpr-kpi-monthly-actual-produced", "—");
+      setText("dpr-kpi-monthly-excess", "—");
       setKpiProducedPctEl("dpr-kpi-monthly-produced-pct", null);
       setSnapshotValue("dpr-operators-read", "—");
       setSnapshotValue("dpr-machines-read", "—");

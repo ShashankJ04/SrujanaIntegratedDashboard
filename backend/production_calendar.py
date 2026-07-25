@@ -226,7 +226,7 @@ def _fetch_daily_production_map(month: int, year: int) -> Dict[str, Dict[str, fl
         INNER JOIN scheduled_production sp ON pd.PD_PSID = sp.PS_ID
         INNER JOIN components c ON sp.PS_PARENTCOMPID = c.CO_ID
         WHERE MONTH(pd.PD_DATE) = %s
-          AND YEAR(pd.PD_DATE) = %s
+          AND YEAR(pd.PD_DATE) = %s AND pd.PD_ECSID != 6
         GROUP BY TRIM(c.CO_PARTNO), DAY(pd.PD_DATE)
         """,
         (month, year),

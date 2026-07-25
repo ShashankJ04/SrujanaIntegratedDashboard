@@ -129,7 +129,7 @@ class Config:
         os.environ.get("LW_WHITELIST_CT_SOURCE_REDUCE", "1")
     )
     LW_WHITELIST_REDUCE_OP_STAGE = int(
-        os.environ.get("LW_WHITELIST_REDUCE_OP_STAGE", "1")
+        os.environ.get("LW_WHITELIST_REDUCE_OP_STAGE", "19")
     )
     LW_WHITELIST_QA_OUTWARD_STAGE_ID = int(
         os.environ.get("LW_WHITELIST_QA_OUTWARD_STAGE_ID", "6")

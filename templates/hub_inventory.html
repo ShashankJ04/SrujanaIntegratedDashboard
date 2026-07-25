@@ -5,6 +5,7 @@
       <span style="font-size:24px">📦</span>
       <h2 style="font-size:18px;font-weight:800;color:var(--ti-text-bright);margin:0">Inventory Report</h2>
       <span id="inventory-pending-hint" class="ti-inventory-pending-hint" hidden>Pending parts only (balance production qty &gt; 0)</span>
+      <span id="inventory-excess-hint" class="ti-inventory-pending-hint" hidden>Excess production parts only (balance production qty &lt; 0 and produced qty &gt; 0)</span>
       <button id="hard-refresh-btn" type="button" class="ti-btn-icon" title="Hard refresh data" style="font-size:18px">⟳</button>
     </div>
     <div class="ti-flex ti-gap-12 ti-hub-inventory__actions" style="align-items:center">
@@ -224,11 +225,19 @@
   }
 
   function updatePendingHint() {
-    const el = document.getElementById('inventory-pending-hint');
-    if (!el) return;
-    const on = inventoryRowFilter() === 'pending';
-    el.hidden = !on;
-    el.style.display = on ? '' : 'none';
+    const pendingEl = document.getElementById('inventory-pending-hint');
+    const excessEl = document.getElementById('inventory-excess-hint');
+    const filter = inventoryRowFilter();
+    if (pendingEl) {
+      const on = filter === 'pending';
+      pendingEl.hidden = !on;
+      pendingEl.style.display = on ? '' : 'none';
+    }
+    if (excessEl) {
+      const on = filter === 'excess';
+      excessEl.hidden = !on;
+      excessEl.style.display = on ? '' : 'none';
+    }
   }
 
   function init() {

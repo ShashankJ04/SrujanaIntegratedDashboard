@@ -54,6 +54,48 @@
   let _prevSidebarState = null; // remember sidebar state before auto-collapse
   let _activeNoFormatColumns = new Set(); // columns that should not receive number grouping
 
+  function reportsRowFilter() {
+    const v = new URLSearchParams(window.location.search).get('rowFilter');
+    return v ? String(v).trim().toLowerCase() : '';
+  }
+
+  function rowValueCaseInsensitive(row, candidates) {
+    if (!row) return undefined;
+    const keys = Object.keys(row);
+    for (let i = 0; i < candidates.length; i++) {
+      const target = String(candidates[i]).trim().toLowerCase();
+      for (let j = 0; j < keys.length; j++) {
+        if (String(keys[j]).trim().toLowerCase() === target) return row[keys[j]];
+      }
+    }
+    return undefined;
+  }
+
+  function applyReportsRowFilter(rows) {
+    const key = reportsRowFilter();
+    if (!key || !Array.isArray(rows)) return rows;
+    if (key === 'balance') {
+      return rows.filter(function(r) {
+        const scheduled = Number(rowValueCaseInsensitive(r, ['Schedule Qty', 'schedule qty']) || 0);
+        const dispatched = Number(rowValueCaseInsensitive(r, ['Dispatched Qty', 'dispatch qty', 'dispatched qty']) || 0);
+        return scheduled !== dispatched;
+      });
+    }
+    return rows;
+  }
+
+  function updateReportsRowFilterHint() {
+    const sub = document.getElementById('runReportSub');
+    if (!sub) return;
+    const key = reportsRowFilter();
+    if (key === 'balance') {
+      sub.textContent = 'Showing balance lines only (dispatched qty ≠ schedule qty)';
+      sub.style.display = '';
+      return;
+    }
+    if (currentRunReport) sub.style.display = 'none';
+  }
+
   /* ── Auto-collapse sidebar for max grid width ── */
   function autoCollapseSidebar() {
     const sidebar = document.querySelector('.ti-sidebar');
@@ -460,13 +502,24 @@
     const runTableEl = document.getElementById('runTable');
     if (runGrid && runGrid.destroy) runGrid.destroy();
     const cols = result.columns || (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
-    const dgCols = withDrilldownFormatters(report, result.rows || [], cols);
+    const filteredRows = applyReportsRowFilter(result.rows || []);
+    updateReportsRowFilterHint();
+    if (!filteredRows.length) {
+      const msg = (result.rows || []).length && reportsRowFilter() === 'balance'
+        ? 'No balance lines (all rows have dispatched qty = schedule qty)'
+        : 'No rows returned';
+      runTableEl.innerHTML = '<div class="rr-no-data">' + msg + '</div>';
+      runTableEl.style.display = 'block';
+      setReportsGridToolsVisible(false);
+      return;
+    }
+    const dgCols = withDrilldownFormatters(report, filteredRows, cols);
     runTableEl.innerHTML = '';
     runTableEl.style.display = 'flex';
     setReportsGridToolsVisible(true);
     runGrid = SuperGrid.create(runTableEl, {
       columns: dgCols,
-      rows: result.rows || [],
+      rows: filteredRows,
       options: {
         search: true,
         omitToolbar: true,
@@ -540,6 +593,7 @@
     runViewStack.length = 0;
     document.getElementById('runReportTitle').textContent = report.name;
     document.getElementById('runReportSub').style.display = 'none';
+    updateReportsRowFilterHint();
     document.getElementById('runExecuteBtn').disabled = false;
     document.getElementById('runExportBtn').disabled = true;
     document.getElementById('runTable').style.display = 'none';
@@ -588,6 +642,7 @@
         document.getElementById('runTable').innerHTML = '<div class="rr-no-data">No rows returned</div>';
         document.getElementById('runTable').style.display = 'block';
         setReportsGridToolsVisible(false);
+        updateReportsRowFilterHint();
       } else {
         // Update the active no-format columns set before rendering
         const noFmtList = Array.isArray(result.noFormatColumns) ? result.noFormatColumns : (Array.isArray(report.noFormatColumns) ? report.noFormatColumns : []);

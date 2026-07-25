@@ -589,8 +589,9 @@ def api_dispatch_calendar() -> Any:
         month = t.month
     if year < 1900 or year > 2100:
         year = t.year
+    row_filter = request.args.get("rowFilter") or None
     try:
-        payload = build_dispatch_calendar_payload(month, year)
+        payload = build_dispatch_calendar_payload(month, year, row_filter=row_filter)
     except ValueError as e:
         return jsonify({"message": str(e)}), 400
     return jsonify(payload)
@@ -630,7 +631,9 @@ def api_dispatch_calendar_export() -> Any:
     if year < 1900 or year > 2100:
         year = t.year
 
-    payload = build_dispatch_calendar_payload(month, year)
+    row_filter = request.args.get("rowFilter") or None
+
+    payload = build_dispatch_calendar_payload(month, year, row_filter=row_filter)
     columns = payload.get("columns") or []
     rows = payload.get("rows") or []
 

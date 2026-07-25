@@ -1,50 +1,127 @@
 <!-- Hub Overview Section — Monitor + RM Shortage First + Charts + Urgent -->
 
-<!-- ═══ QUANTITY + PARTS PROGRESS MONITORS ═══ -->
-<div class="ti-monitor-row">
-  <!-- Quantity Progress -->
-  <div class="ti-monitor">
+<!-- ═══ YTD FINANCIAL YEAR KPI + DISTINCT (single row) ═══ -->
+<div class="ti-monitor-row ti-monitor-row--ytd">
+  <div class="ti-monitor ti-monitor--ytd-strip">
+    <div class="ti-monitor-top">
+      <span class="ti-monitor-title">Year To Date</span>
+      <span class="ti-monitor-pct" id="ytd-as-on-label">–</span>
+    </div>
+    <div class="ti-ytd-strip" role="list">
+      <div class="ti-monitor-metric-cell" role="listitem">
+        <div class="ti-monitor-metric-label">Scheduled</div>
+        <div class="ti-monitor-metric-value" id="ytd-scheduled">–</div>
+        <div class="ti-monitor-metric-unit">Mn</div>
+      </div>
+      <div class="ti-monitor-metric-cell" role="listitem">
+        <div class="ti-monitor-metric-label">Planned</div>
+        <div class="ti-monitor-metric-value" id="ytd-planned">–</div>
+        <div class="ti-monitor-metric-unit">Mn</div>
+      </div>
+      <div class="ti-monitor-metric-cell" role="listitem">
+        <div class="ti-monitor-metric-label">Produced</div>
+        <div class="ti-monitor-metric-value success" id="ytd-produced">–</div>
+        <div class="ti-monitor-metric-unit">Mn</div>
+      </div>
+      <div class="ti-monitor-metric-cell" role="listitem">
+        <div class="ti-monitor-metric-label">Dispatched</div>
+        <div class="ti-monitor-metric-value success" id="ytd-dispatched">–</div>
+        <div class="ti-monitor-metric-unit">Mn</div>
+      </div>
+      <div class="ti-monitor-metric-cell" role="listitem">
+        <div class="ti-monitor-metric-label">RM Inward</div>
+        <div class="ti-monitor-metric-value" id="ytd-rm-inward">–</div>
+        <div class="ti-monitor-metric-unit">Tons</div>
+      </div>
+      <a href="/app?section=reports&report=88a9ed8d-8131-44cb-8fef-fc2782449986" class="ti-monitor-metric-cell ti-monitor-metric-stack-link" id="ytd-tool-breakdown-link" title="Tool BreakDowns report" role="listitem">
+        <div class="ti-monitor-metric-label">Tool BreakDown</div>
+        <div class="ti-monitor-metric-value alert" id="ytd-tool-breakdown">–</div>
+      </a>
+
+      <div class="ti-ytd-strip-divider" aria-hidden="true">
+        <span class="ti-ytd-strip-divider-label">Distinct</span>
+      </div>
+
+      <a href="/app?section=reports&report=5749a7ed-e4be-4b41-a73b-78bd416f46b2" class="ti-monitor-metric-cell ti-monitor-metric-stack-link" id="ytd-distinct-comp-link" title="Distinct Component Details — With Tools" role="listitem">
+        <div class="ti-monitor-metric-label">Comp</div>
+        <div class="ti-monitor-metric-value" id="ytd-distinct-comp">–</div>
+      </a>
+      <a href="/app?section=reports&report=ed95ec7b-1c11-4e58-8adb-524421ea224c" class="ti-monitor-metric-cell ti-monitor-metric-stack-link" id="ytd-distinct-tool-link" title="Distinct Tools with PartNos" role="listitem">
+        <div class="ti-monitor-metric-label">Tool</div>
+        <div class="ti-monitor-metric-value" id="ytd-distinct-tool">–</div>
+      </a>
+      <a href="/app?section=reports&report=3b289936-891a-4770-b669-b8b724672431" class="ti-monitor-metric-cell ti-monitor-metric-stack-link" id="ytd-distinct-cust-link" title="Distinct Customers" role="listitem">
+        <div class="ti-monitor-metric-label">Cust</div>
+        <div class="ti-monitor-metric-value" id="ytd-distinct-cust">–</div>
+      </a>
+      <a href="/app?section=reports&report=51a29798-a36d-4933-bbfe-05e4097ba83d" class="ti-monitor-metric-cell ti-monitor-metric-stack-link" id="ytd-distinct-rm-link" title="Distinct Raw Materials" role="listitem">
+        <div class="ti-monitor-metric-label">RM</div>
+        <div class="ti-monitor-metric-value" id="ytd-distinct-rm">–</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ QUANTITY PROGRESS (full width) ═══ -->
+<div class="ti-monitor-row ti-monitor-row--qty">
+  <div class="ti-monitor ti-monitor--qty">
     <div class="ti-monitor-top">
       <span class="ti-monitor-title">Quantity Progress</span>
       <span class="ti-monitor-pct" id="mon-qty-pct">–%</span>
     </div>
-    <div class="ti-monitor-metrics">
-      <div>
+    <div class="ti-monitor-metrics ti-monitor-metrics--qty">
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Planned</div>
         <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
       </div>
-      <div>
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Produced</div>
         <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
       </div>
-      <div>
-        <div class="ti-monitor-metric-label">Balance Production Qty</div>
-        <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+      <div class="ti-monitor-metric-cell">
+        <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-qty-pending-link" title="Inventory — pending parts only">
+          <div class="ti-monitor-metric-label" title="Balance Production Qty">Balance Qty</div>
+          <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+        </a>
+      </div>
+      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+        <div class="ti-monitor-metric-label">Actual Produced</div>
+        <div class="ti-monitor-metric-value" id="mon-actual-produced-qty">–</div>
+      </div>
+      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+        <a href="/app?section=inventory&rowFilter=excess" class="ti-monitor-metric-stack-link" id="mon-excess-produced-link" title="Inventory — excess production (balance qty &lt; 0 and produced qty &gt; 0)">
+          <div class="ti-monitor-metric-label">Excess Production</div>
+          <div class="ti-monitor-metric-value alert" id="mon-excess-produced-qty">–</div>
+        </a>
       </div>
     </div>
     <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-qty-bar" style="width:0%"></div>
     </div>
   </div>
+</div>
 
-  <!-- Dispatch (MTD) -->
+<!-- ═══ DISPATCH + PARTS ═══ -->
+<div class="ti-monitor-row ti-monitor-row--secondary">
   <div class="ti-monitor">
     <div class="ti-monitor-top">
       <span class="ti-monitor-title">Dispatch (MTD)</span>
       <span class="ti-monitor-pct" id="mon-dispatch-pct">–%</span>
     </div>
     <div class="ti-monitor-metrics">
-      <div>
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Total Scheduled</div>
         <div class="ti-monitor-metric-value" id="mon-dispatch-scheduled">–</div>
       </div>
-      <div>
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Dispatched Qty</div>
         <div class="ti-monitor-metric-value success" id="mon-dispatch-qty">–</div>
       </div>
-      <div>
-        <div class="ti-monitor-metric-label">Balance Dispatch Qty</div>
-        <div class="ti-monitor-metric-value alert" id="mon-dispatch-balance">–</div>
+      <div class="ti-monitor-metric-cell">
+        <a href="/app?section=dispatch-calendar&rowFilter=balance" class="ti-monitor-metric-stack-link" id="mon-dispatch-balance-link" title="Dispatch Calendar — balance dispatch parts only">
+          <div class="ti-monitor-metric-label" title="Balance Dispatch Qty">Balance Qty</div>
+          <div class="ti-monitor-metric-value alert" id="mon-dispatch-balance">–</div>
+        </a>
       </div>
     </div>
     <div class="ti-monitor-progress">
@@ -53,22 +130,21 @@
     <div class="ti-monitor-footnote" id="mon-dispatch-footnote">Month-to-date dispatch vs total scheduled quantity</div>
   </div>
 
-  <!-- Parts Progress -->
   <div class="ti-monitor">
     <div class="ti-monitor-top">
       <span class="ti-monitor-title">Parts Progress</span>
       <span class="ti-monitor-pct" id="mon-parts-pct">–%</span>
     </div>
     <div class="ti-monitor-metrics">
-      <div>
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Total Parts</div>
         <div class="ti-monitor-metric-value" id="mon-parts-total">–</div>
       </div>
-      <div>
+      <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Parts Completed</div>
         <div class="ti-monitor-metric-value success" id="mon-parts-completed">–</div>
       </div>
-      <div>
+      <div class="ti-monitor-metric-cell">
         <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-parts-pending-link" title="Inventory — pending parts only">
           <div class="ti-monitor-metric-label">Parts Pending</div>
           <div class="ti-monitor-metric-value alert" id="mon-parts-pending">–</div>
@@ -78,6 +154,35 @@
     <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-parts-bar" style="width:0%"></div>
     </div>
+  </div>
+
+  <div class="ti-monitor">
+    <div class="ti-monitor-top">
+      <span class="ti-monitor-title">BOM Delivery Status</span>
+      <span class="ti-monitor-pct" id="mon-bom-pct">–%</span>
+    </div>
+    <div class="ti-monitor-metrics">
+      <div class="ti-monitor-metric-cell">
+        <a href="/app?section=reports&report=97e39414-c6d7-4392-aa6f-1972c41cfc1e" class="ti-monitor-metric-stack-link" id="mon-bom-scheduled-link" title="BOM Dispatch Pivot — customer-wise schedule summary">
+          <div class="ti-monitor-metric-label">Total Scheduled</div>
+          <div class="ti-monitor-metric-value" id="mon-bom-scheduled">–</div>
+        </a>
+      </div>
+      <div class="ti-monitor-metric-cell">
+        <div class="ti-monitor-metric-label">Delivered</div>
+        <div class="ti-monitor-metric-value success" id="mon-bom-delivered">–</div>
+      </div>
+      <div class="ti-monitor-metric-cell">
+        <a href="/app?section=reports&report=44f78950-7e3e-46f2-a278-ba88e0c7d8c9&rowFilter=balance" class="ti-monitor-metric-stack-link" id="mon-bom-balance-link" title="BOM Dispatch Details — balance delivery lines only">
+          <div class="ti-monitor-metric-label" title="Balance Delivery Qty">Balance</div>
+          <div class="ti-monitor-metric-value alert" id="mon-bom-balance">–</div>
+        </a>
+      </div>
+    </div>
+    <div class="ti-monitor-progress">
+      <div class="ti-monitor-bar" id="mon-bom-bar" style="width:0%"></div>
+    </div>
+    <div class="ti-monitor-footnote" id="mon-bom-footnote">Current month BOM schedule vs delivered quantity</div>
   </div>
 </div>
 
@@ -204,12 +309,84 @@
 
 <script>
 (async function loadOverview() {
+  // ── YTD financial year KPI ──
+  function formatMillions(qty) {
+    const n = Number(qty) || 0;
+    const m = n / 1_000_000;
+    if (!Number.isFinite(m)) return '0';
+    if (Math.abs(m) >= 100) return m.toFixed(1);
+    if (Math.abs(m) >= 10) return m.toFixed(2);
+    if (Math.abs(m) >= 1) return m.toFixed(2);
+    return m.toFixed(3);
+  }
+
+  function formatTons(kg) {
+    const t = (Number(kg) || 0) / 1000;
+    if (!Number.isFinite(t)) return '0';
+    if (Math.abs(t) >= 100) return t.toFixed(1);
+    if (Math.abs(t) >= 10) return t.toFixed(2);
+    return t.toFixed(2);
+  }
+
+  function formatAsOnDate(isoDate) {
+    const d = isoDate ? new Date(isoDate + 'T12:00:00') : new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `As on ${dd}-${mm}-${yy}`;
+  }
+
+  function setOverviewText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
   // ── Monitor cards (Quantity + Parts Progress) ──
   try {
     const summary = await Hub.api.getReportSummary();
 
+    try {
+      const ytd = summary.ytd_kpi || {};
+      const ytdDistinct = ytd.distinct || {};
+      const ytdReports = ytdDistinct.reports || {};
+      setOverviewText('ytd-as-on-label', formatAsOnDate(ytd.periodEnd));
+      setOverviewText('ytd-scheduled', formatMillions(ytd.scheduled));
+      setOverviewText('ytd-planned', formatMillions(ytd.planned));
+      setOverviewText('ytd-produced', formatMillions(ytd.produced));
+      setOverviewText('ytd-dispatched', formatMillions(ytd.dispatched));
+      setOverviewText('ytd-rm-inward', formatTons(ytd.rmInwardKg));
+      setOverviewText('ytd-tool-breakdown', Hub.utils.formatIndian(ytd.toolBreakdown || 0));
+      setOverviewText('ytd-distinct-comp', Hub.utils.formatIndian(ytdDistinct.components || 0));
+      setOverviewText('ytd-distinct-tool', Hub.utils.formatIndian(ytdDistinct.tools || 0));
+      setOverviewText('ytd-distinct-cust', Hub.utils.formatIndian(ytdDistinct.customers || 0));
+      setOverviewText('ytd-distinct-rm', Hub.utils.formatIndian(ytdDistinct.rawMaterials || 0));
+
+      [
+        ['ytd-tool-breakdown-link', ytd.toolBreakdownReportId || '88a9ed8d-8131-44cb-8fef-fc2782449986'],
+        ['ytd-distinct-comp-link', ytdReports.components || '5749a7ed-e4be-4b41-a73b-78bd416f46b2'],
+        ['ytd-distinct-tool-link', ytdReports.tools || 'ed95ec7b-1c11-4e58-8adb-524421ea224c'],
+        ['ytd-distinct-cust-link', ytdReports.customers || '3b289936-891a-4770-b669-b8b724672431'],
+        ['ytd-distinct-rm-link', ytdReports.rawMaterials || '51a29798-a36d-4933-bbfe-05e4097ba83d'],
+      ].forEach(([id, reportId]) => {
+        const el = document.getElementById(id);
+        if (el && typeof Hub.navigate === 'function') {
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            Hub.navigate('reports', { reportId });
+          });
+        }
+      });
+    } catch (ytdErr) {
+      console.error('YTD KPI load error:', ytdErr);
+    }
+
     const dispatchKpi = summary.dispatch_kpi || {};
     const dispatchScheduled = Number(dispatchKpi.scheduled) || 0;
+    const bomDeliveryKpi = summary.bom_delivery_kpi || {};
+    const bomScheduled = Number(bomDeliveryKpi.scheduled) || 0;
+    const bomDelivered = Number(bomDeliveryKpi.delivered) || 0;
+    const bomReportId = bomDeliveryKpi.reportId || '44f78950-7e3e-46f2-a278-ba88e0c7d8c9';
+    const bomPivotReportId = bomDeliveryKpi.pivotReportId || '97e39414-c6d7-4392-aa6f-1972c41cfc1e';
     const productionKpi = summary.production_kpi || {};
     const pcPlanned = Number(productionKpi.planned) || 0;
     const pcProduced = Number(productionKpi.produced) || 0;
@@ -224,9 +401,13 @@
     document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(pcPlanned);
     document.getElementById('mon-produced-qty').textContent = Hub.utils.formatIndian(pcProduced);
     document.getElementById('mon-pending-qty').textContent = Hub.utils.formatIndian(totalPendingQty);
+
+    const actualProduced = pcPlanned - totalPendingQty;
+    const excessProduction = pcProduced - actualProduced;
+    document.getElementById('mon-actual-produced-qty').textContent = Hub.utils.formatIndian(actualProduced);
+    document.getElementById('mon-excess-produced-qty').textContent = Hub.utils.formatIndian(excessProduction);
     
-    const qtyDenominator = pcProduced + totalPendingQty;
-    const qtyPctRaw = qtyDenominator > 0 ? (pcProduced / qtyDenominator) * 100 : 0;
+    const qtyPctRaw = pcPlanned > 0 ? ((pcPlanned - totalPendingQty) / pcPlanned) * 100 : 0;
     const qtyPct = Math.round(Number.isFinite(qtyPctRaw) ? qtyPctRaw : 0);
     document.getElementById('mon-qty-pct').textContent = qtyPct + '%';
     const qtyBar = document.getElementById('mon-qty-bar');
@@ -243,6 +424,41 @@
       partsPendingLink.addEventListener('click', (e) => {
         e.preventDefault();
         Hub.navigate('inventory', { rowFilter: 'pending' });
+      });
+    }
+    const qtyPendingLink = document.getElementById('mon-qty-pending-link');
+    if (qtyPendingLink && typeof Hub.navigate === 'function') {
+      qtyPendingLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('inventory', { rowFilter: 'pending' });
+      });
+    }
+    const excessProducedLink = document.getElementById('mon-excess-produced-link');
+    if (excessProducedLink && typeof Hub.navigate === 'function') {
+      excessProducedLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('inventory', { rowFilter: 'excess' });
+      });
+    }
+    const dispatchBalanceLink = document.getElementById('mon-dispatch-balance-link');
+    if (dispatchBalanceLink && typeof Hub.navigate === 'function') {
+      dispatchBalanceLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('dispatch-calendar', { rowFilter: 'balance' });
+      });
+    }
+    const bomBalanceLink = document.getElementById('mon-bom-balance-link');
+    if (bomBalanceLink && typeof Hub.navigate === 'function') {
+      bomBalanceLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('reports', { reportId: bomReportId, rowFilter: 'balance' });
+      });
+    }
+    const bomScheduledLink = document.getElementById('mon-bom-scheduled-link');
+    if (bomScheduledLink && typeof Hub.navigate === 'function') {
+      bomScheduledLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        Hub.navigate('reports', { reportId: bomPivotReportId });
       });
     }
     const partsPct = partsTotal > 0 ? Math.round((partsCompleted / partsTotal) * 100) : 0;
@@ -267,6 +483,17 @@
         ? `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
         : 'Month-to-date dispatch vs total scheduled quantity';
     }
+
+    // BOM delivery monitor — aligned with BOM Dispatch Details report
+    const bomBalance = Math.max(bomScheduled - bomDelivered, 0);
+    document.getElementById('mon-bom-scheduled').textContent = Hub.utils.formatIndian(bomScheduled);
+    document.getElementById('mon-bom-delivered').textContent = Hub.utils.formatIndian(bomDelivered);
+    document.getElementById('mon-bom-balance').textContent = Hub.utils.formatIndian(bomBalance);
+    const bomPct = bomScheduled > 0 ? Math.round((bomDelivered / bomScheduled) * 100) : 0;
+    document.getElementById('mon-bom-pct').textContent = bomPct + '%';
+    const bomBar = document.getElementById('mon-bom-bar');
+    bomBar.style.width = Math.min(100, Math.max(0, bomPct)) + '%';
+    bomBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, bomPct) / 100) * 120));
   } catch (e) { console.error('Monitor load error:', e); }
 
   // ── Tool health ──

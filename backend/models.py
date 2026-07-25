@@ -24,6 +24,21 @@ class ColumnMeta:
     is_sortable: bool
 
 
+_EXCESS_FILTER_COLUMN_NAMES = frozenset({
+    "part_no",
+    "part_name",
+    "production_pending",
+    "produced_qty",
+    "balance_production_qty",
+})
+
+_PENDING_FILTER_COLUMN_NAMES = frozenset({
+    "part_no",
+    "part_name",
+    "balance_production_qty",
+})
+
+
 _DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None}
 _PULSE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
@@ -257,6 +272,7 @@ def _normalize_inventory_part_key(part_no: Any) -> str:
 def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, Any]:
     return {
         "part_no": part_no,
+        "part_id": None,
         "part_name": part_name or part_no,
         "feb": 0.0,
         "wip": 0.0,
@@ -279,6 +295,10 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
     sql = f"""
         SELECT
             TRIM(c.CO_PARTNO) AS part_no,
+            CASE
+                WHEN c.CO_ID = c.CO_PARENTID THEN c.CO_ID
+                ELSE c.CO_PARENTID
+            END AS part_id,
             TRIM(c.CO_PARTNAME) AS part_name,
             IFNULL(y_wip.csQty, 0) AS wip,
             IFNULL(y_fg.csQty, 0) AS fg,
@@ -326,7 +346,7 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
             WHERE PD_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
                               AND last_day(current_date)
               AND SM_Status = 'S'
-              AND PS_plantId = 2
+              AND pd_ecsid != 6
             GROUP BY TRIM(CO_partNo)
         ) z ON TRIM(c.CO_PARTNO) = z.PART_NO
         LEFT JOIN (
@@ -741,11 +761,19 @@ def get_dashboard_rows_with_buffer(
     else:
         enriched_rows = list(enriched_all)
 
-    if (row_filter or "").strip().lower() == "pending":
+    row_filter_key = (row_filter or "").strip().lower()
+    if row_filter_key == "pending":
         enriched_rows = [
             r
             for r in enriched_rows
             if float(r.get("balance_production_qty") or 0) > 0
+        ]
+    elif row_filter_key == "excess":
+        enriched_rows = [
+            r
+            for r in enriched_rows
+            if float(r.get("balance_production_qty") or 0) < 0
+            and float(r.get("produced_qty") or 0) > 0
         ]
 
     # Apply sorting on enriched rows
@@ -777,6 +805,11 @@ def get_dashboard_rows_with_buffer(
         offset = (page - 1) * page_size
         page_rows = enriched_rows[offset : offset + page_size]
         effective_page_size = page_size
+
+    if row_filter_key == "pending":
+        columns = [c for c in columns if c.name in _PENDING_FILTER_COLUMN_NAMES]
+    elif row_filter_key == "excess":
+        columns = [c for c in columns if c.name in _EXCESS_FILTER_COLUMN_NAMES]
 
     return {
         "columns": [c.__dict__ for c in columns],
@@ -872,6 +905,47 @@ def get_inventory_balance_total() -> float:
     return sum(
         max(0.0, float(row.get("balance_production_qty") or 0)) for row in rows
     )
+
+
+BOM_DISPATCH_REPORT_ID = "44f78950-7e3e-46f2-a278-ba88e0c7d8c9"
+BOM_DISPATCH_PIVOT_REPORT_ID = "97e39414-c6d7-4392-aa6f-1972c41cfc1e"
+
+
+def get_bom_delivery_kpi(month: int, year: int) -> Dict[str, Any]:
+    """Month-to-date BOM delivery totals (BOM Dispatch Details report query)."""
+    scheduled = 0.0
+    delivered = 0.0
+    try:
+        row = fetch_one(
+            """
+            SELECT
+                COALESCE(SUM(so.QTY), 0) AS total_scheduled,
+                COALESCE(SUM(so.INV_QTY), 0) AS total_delivered
+            FROM erp.sales_order so
+            INNER JOIN customer c ON c.cu_id = so.CUST_ID
+            WHERE so.CATEGORY_ID = 2
+              AND so.BOM_NO IS NOT NULL
+              AND MONTH(so.SO_DATE) = %s
+              AND YEAR(so.SO_DATE) = %s
+            """,
+            (month, year),
+        )
+        if row:
+            scheduled = float(row.get("total_scheduled") or 0.0)
+            delivered = float(row.get("total_delivered") or 0.0)
+    except Exception:
+        pass
+
+    balance = max(scheduled - delivered, 0.0)
+    pct = round((delivered / scheduled) * 100) if scheduled > 0 else None
+    return {
+        "scheduled": scheduled,
+        "delivered": delivered,
+        "balance": balance,
+        "pct": pct,
+        "reportId": BOM_DISPATCH_REPORT_ID,
+        "pivotReportId": BOM_DISPATCH_PIVOT_REPORT_ID,
+    }
 
 
 def get_report_summary() -> Dict[str, Any]:
@@ -981,6 +1055,28 @@ def get_report_summary() -> Dict[str, Any]:
     except Exception:
         pass
 
+    bom_delivery_kpi: Dict[str, Any] = {
+        "scheduled": 0.0,
+        "delivered": 0.0,
+        "balance": 0.0,
+        "pct": None,
+        "reportId": BOM_DISPATCH_REPORT_ID,
+        "pivotReportId": BOM_DISPATCH_PIVOT_REPORT_ID,
+    }
+    try:
+        today = date.today()
+        bom_delivery_kpi = get_bom_delivery_kpi(today.month, today.year)
+    except Exception:
+        pass
+
+    ytd_kpi: Dict[str, Any] = {}
+    try:
+        from .ytd_kpi import get_ytd_kpi
+
+        ytd_kpi = get_ytd_kpi(date.today())
+    except Exception:
+        pass
+
     summary = {
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
@@ -996,6 +1092,8 @@ def get_report_summary() -> Dict[str, Any]:
         "dispatch_invoice_count_mtd": dispatch_invoice_count_mtd,
         "production_kpi": production_kpi,
         "dispatch_kpi": dispatch_kpi,
+        "bom_delivery_kpi": bom_delivery_kpi,
+        "ytd_kpi": ytd_kpi,
     }
     if cache_seconds > 0:
         with _REPORT_SUMMARY_CACHE_LOCK:
@@ -2373,7 +2471,10 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
 
     monthly_planned = 0.0
     monthly_produced = 0.0
+    monthly_balance = 0.0
     monthly_pct: Optional[float] = None
+    monthly_actual_produced = 0.0
+    monthly_excess_production = 0.0
     production_kpi: Dict[str, Any] = {
         "planned": 0.0,
         "openingStock": 0.0,
@@ -2387,8 +2488,13 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         production_kpi = get_production_kpi(m, y)
         monthly_planned = float(production_kpi.get("planned") or 0)
         monthly_produced = float(production_kpi.get("produced") or 0)
+        # Same formula as Overview Quantity Progress (mon-qty-pct):
+        # (planned - balance_production_qty) / planned * 100
+        monthly_balance = float(production_kpi.get("balance") or 0)
+        monthly_actual_produced = round(monthly_planned - monthly_balance, 4)
+        monthly_excess_production = round(monthly_produced - monthly_actual_produced, 4)
         monthly_pct = (
-            round((100.0 * monthly_produced / monthly_planned), 2)
+            round((100.0 * monthly_actual_produced / monthly_planned), 2)
             if monthly_planned > 0
             else None
         )
@@ -2399,6 +2505,8 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         "planned": monthly_planned,
         "produced": monthly_produced,
         "variance": round(monthly_produced - monthly_planned, 4),
+        "actualProduced": monthly_actual_produced,
+        "excessProduction": monthly_excess_production,
     }
 
     daily_pct = round((100.0 * daily["produced"] / daily["planned"]), 2) if daily["planned"] > 0 else None
@@ -2445,6 +2553,8 @@ def get_dpr_summary(review_date: str) -> Dict[str, Any]:
         "monthlyPlanned": monthly["planned"],
         "monthlyProduced": monthly["produced"],
         "monthlyVariance": monthly["variance"],
+        "monthlyActualProduced": monthly["actualProduced"],
+        "monthlyExcessProduction": monthly["excessProduction"],
         "dailyProducedPct": daily_pct,
         "monthlyProducedPct": monthly_pct,
         "totalMachines": total_machines,

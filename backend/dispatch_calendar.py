@@ -626,7 +626,46 @@ def _fetch_dispatch_between_dates(month: int, year: int, days_in_month: int) -> 
         return []
 
 
-def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
+def _is_incomplete_dispatch_row(row: Dict[str, Any], eps: float = 1e-9) -> bool:
+    """True when the part has schedule and Dispatched % is not 100."""
+    total_qty = _to_float(row.get(TOTAL_QTY_COL))
+    if total_qty <= eps:
+        return False
+    pct_raw = row.get(DISPATCHED_PCT_COL)
+    if pct_raw is None:
+        return True
+    try:
+        return abs(float(pct_raw) - 100.0) > eps
+    except (TypeError, ValueError):
+        return True
+
+
+def _filter_dispatch_balance_rows(payload: Dict[str, Any]) -> None:
+    """Keep only parts where Dispatched % != 100 (balance dispatch remaining)."""
+    rows = payload.get("rows") or []
+    row_meta = list(payload.get("rowMeta") or [])
+
+    kept_rows: List[Dict[str, Any]] = []
+    kept_meta: List[Any] = []
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) else {}
+        if isinstance(meta, dict) and meta.get("isGrandTotal"):
+            continue
+        if _is_incomplete_dispatch_row(row):
+            kept_rows.append(row)
+            kept_meta.append(meta)
+
+    payload["rows"] = kept_rows
+    payload["rowMeta"] = kept_meta
+
+
+def build_dispatch_calendar_payload(
+    month: int,
+    year: int,
+    row_filter: Optional[str] = None,
+) -> Dict[str, Any]:
     if month < 1 or month > 12:
         raise ValueError("month must be 1–12")
     if year < 1900 or year > 2100:
@@ -802,7 +841,7 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
             }
         )
 
-    return {
+    result = {
         "month": month,
         "year": year,
         "daysInMonth": days_in_month,
@@ -823,6 +862,13 @@ def build_dispatch_calendar_payload(month: int, year: int) -> Dict[str, Any]:
         },
         "partDayDispatch": part_day_dispatch,
     }
+
+    row_filter_key = (row_filter or "").strip().lower()
+    if row_filter_key == "balance":
+        _filter_dispatch_balance_rows(result)
+        result["rowFilter"] = "balance"
+
+    return result
 
 
 def get_dispatch_schedule_by_part(month: int, year: int) -> Dict[str, Dict[str, Any]]:
