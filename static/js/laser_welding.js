@@ -61,6 +61,7 @@ window.LaserWeldingPage = (() => {
   let _prodModalMode = 'production';
   let _prodModalDraftLineId = null;
   let _prodModalBomId = null;
+  let _prodModalOpenSeq = 0;
   let _cleaningLotsCache = {};
   let _qaLotsCache = {};
   let _packingLotsCache = {};
@@ -284,8 +285,44 @@ window.LaserWeldingPage = (() => {
       reworkQty: 0,
       packQty: 0,
       scrapRemark: '',
+      qaRemark: '',
       reworkRemark: '',
+      plantId: null,
     };
+  }
+
+  function lotLineKey(ln) {
+    const lotNo = String(ln?.sourceLotNo || '').trim();
+    if (!lotNo) return '';
+    const plantId = ln?.plantId;
+    if (plantId != null && plantId !== '') return `${plantId}::${lotNo}`;
+    return lotNo;
+  }
+
+  function lotOptionValue(lot) {
+    const lotNo = String(lot?.lotNo || '').trim();
+    if (!lotNo) return '';
+    const plantId = lot?.plantId;
+    if (plantId != null && plantId !== '') return `${plantId}::${lotNo}`;
+    return lotNo;
+  }
+
+  function parseLotOptionValue(raw) {
+    const text = String(raw || '').trim();
+    const sep = text.indexOf('::');
+    if (sep > 0) {
+      return { plantId: Number(text.slice(0, sep)), lotNo: text.slice(sep + 2) };
+    }
+    return { plantId: null, lotNo: text };
+  }
+
+  function lotMatchesLine(lot, ln) {
+    const lotNo = String(lot?.lotNo || '').trim();
+    if (lotNo !== String(ln?.sourceLotNo || '').trim()) return false;
+    if (ln?.plantId != null && lot?.plantId != null) {
+      return Number(lot.plantId) === Number(ln.plantId);
+    }
+    return true;
   }
 
   function sumLinesQaScrap(lines) {
@@ -545,20 +582,21 @@ window.LaserWeldingPage = (() => {
 
   function detailRemarkColumnsForTab(tab) {
     const t = tab || _tab;
-    if (t === 'qa') return { scrap: true, rework: true };
-    if (ASM_TABS.has(t) || SA_TABS.has(t)) return { scrap: true, rework: false };
-    return { scrap: true, rework: false };
+    if (t === 'qa') return { scrap: true, qa: true, rework: true };
+    if (ASM_TABS.has(t) || SA_TABS.has(t)) return { scrap: true, qa: true, rework: false };
+    return { scrap: true, qa: true, rework: false };
   }
 
   function detailRemarkColCount(tab) {
     const cols = detailRemarkColumnsForTab(tab);
-    return (cols.scrap ? 1 : 0) + (cols.rework ? 1 : 0);
+    return (cols.scrap ? 1 : 0) + (cols.qa ? 1 : 0) + (cols.rework ? 1 : 0);
   }
 
   function detailRemarkHeaderHtml(tab) {
     const cols = detailRemarkColumnsForTab(tab);
     let html = '';
-    if (cols.scrap) html += '<th class="lw-detail-col-remark">Remark</th>';
+    if (cols.qa) html += '<th class="lw-detail-col-remark">QA Remarks</th>';
+    if (cols.scrap) html += '<th class="lw-detail-col-remark">Scrap Remarks</th>';
     if (cols.rework) html += '<th class="lw-detail-col-remark">Rework remark</th>';
     return html;
   }
@@ -566,6 +604,11 @@ window.LaserWeldingPage = (() => {
   function detailRemarkCellsHtml(ln, tab) {
     const cols = detailRemarkColumnsForTab(tab);
     let html = '';
+    if (cols.qa) {
+      const qa = Number(ln.qaQty) || 0;
+      const remark = String(ln.qaRemark || '').trim();
+      html += `<td class="lw-detail-col-remark">${qa > 0 && remark ? escapeHtml(remark) : '—'}</td>`;
+    }
     if (cols.scrap) {
       const scrap = Number(ln.scrapQty) || 0;
       const remark = String(ln.scrapRemark || '').trim();
@@ -1824,7 +1867,7 @@ window.LaserWeldingPage = (() => {
     }
   }
 
-  function prodLotOptionsHtml(partNo, selectedLot, usedLots, selectedTargetId, usedTargetIds) {
+  function prodLotOptionsHtml(partNo, selectedLot, usedLots, selectedTargetId, usedTargetIds, selectedPlantId) {
     if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning') {
       const lots = _cleaningLotsCache[cleaningLotsCacheKey()] || [];
       let html = '<option value="">Select lot…</option>';
@@ -1875,9 +1918,12 @@ window.LaserWeldingPage = (() => {
     lots.forEach(l => {
       const lotNo = l.lotNo;
       if (!lotNo) return;
-      if (usedLots.has(lotNo) && lotNo !== selectedLot) return;
-      const sel = lotNo === selectedLot ? ' selected' : '';
-      html += `<option value="${escapeAttr(lotNo)}"${sel}>${escapeHtml(lotNo)}</option>`;
+      const optVal = lotOptionValue(l);
+      const selected = lotMatchesLine(l, { sourceLotNo: selectedLot, plantId: selectedPlantId });
+      if (usedLots.has(optVal) && !selected) return;
+      const sel = selected ? ' selected' : '';
+      const unitLabel = l.plantId ? ` · Unit ${l.plantId}` : '';
+      html += `<option value="${escapeAttr(optVal)}"${sel}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)}</option>`;
     });
     return html;
   }
@@ -1906,8 +1952,27 @@ window.LaserWeldingPage = (() => {
 
   function syncProdScrapRemarkVisibility(idx) {
     const scrap = parseInt($(`.lw-prod-line-scrap[data-idx="${idx}"]`)?.value, 10) || 0;
-    const wrap = $(`.lw-prod-scrap-remark-wrap[data-idx="${idx}"]`);
-    if (wrap) wrap.style.display = scrap > 0 ? '' : 'none';
+    const scrapInp = $(`.lw-prod-line-scrap-remark[data-idx="${idx}"]`);
+    if (scrapInp) {
+      scrapInp.disabled = scrap <= 0;
+      if (scrap <= 0) scrapInp.value = '';
+    }
+    const rework = parseInt($(`.lw-prod-line-rework[data-idx="${idx}"]`)?.value, 10) || 0;
+    const reworkInp = $(`.lw-prod-line-rework-remark[data-idx="${idx}"]`);
+    if (reworkInp) {
+      reworkInp.disabled = rework <= 0;
+      if (rework <= 0) reworkInp.value = '';
+    }
+    syncProdQaRemarkVisibility(idx);
+  }
+
+  function syncProdQaRemarkVisibility(idx) {
+    const qa = parseInt($(`.lw-prod-line-qa[data-idx="${idx}"]`)?.value, 10) || 0;
+    const qaInp = $(`.lw-prod-line-qa-remark[data-idx="${idx}"]`);
+    if (qaInp) {
+      qaInp.disabled = qa <= 0;
+      if (qa <= 0) qaInp.value = '';
+    }
   }
 
   function syncProdLineQtyCaps(idx, changedField) {
@@ -2001,6 +2066,7 @@ window.LaserWeldingPage = (() => {
     qaInp.max = String(Math.max(0, insp - scrap));
     scrapInp.max = String(Math.max(0, insp - qa));
     syncProdScrapRemarkVisibility(idx);
+    syncProdQaRemarkVisibility(idx);
 
     if (_prodModalLines[idx]) {
       _prodModalLines[idx].inspectedQty = insp;
@@ -2034,10 +2100,7 @@ window.LaserWeldingPage = (() => {
     scrapInp.value = String(scrap);
     reworkInp.value = String(rework);
 
-    const scrapWrap = $(`.lw-prod-scrap-remark-wrap[data-idx="${idx}"]`);
-    const reworkWrap = $(`.lw-prod-rework-remark-wrap[data-idx="${idx}"]`);
-    if (scrapWrap) scrapWrap.style.display = scrap > 0 ? '' : 'none';
-    if (reworkWrap) reworkWrap.style.display = rework > 0 ? '' : 'none';
+    syncProdScrapRemarkVisibility(idx);
 
     if (_prodModalLines[idx]) {
       _prodModalLines[idx].qaPassed = passed;
@@ -2075,8 +2138,7 @@ window.LaserWeldingPage = (() => {
     if (qaInp) qaInp.value = String(qa);
     if (scrapInp) scrapInp.value = String(scrap);
 
-    const scrapWrap = $(`.lw-prod-scrap-remark-wrap[data-idx="${idx}"]`);
-    if (scrapWrap) scrapWrap.style.display = scrap > 0 ? '' : 'none';
+    syncProdScrapRemarkVisibility(idx);
 
     if (_prodModalLines[idx]) {
       _prodModalLines[idx].packQty = consumed;
@@ -2086,36 +2148,91 @@ window.LaserWeldingPage = (() => {
     }
   }
 
-  function renderProductionModalLines() {
+  function syncProdModalLinesFromDom() {
+    const body = $('#lw-prod-modal-lines');
+    if (!body || !body.children.length) return;
+    _prodModalLines.forEach((ln, idx) => {
+      const inspInp = body.querySelector(`.lw-prod-line-insp[data-idx="${idx}"]`);
+      const qaInp = body.querySelector(`.lw-prod-line-qa[data-idx="${idx}"]`);
+      const scrapInp = body.querySelector(`.lw-prod-line-scrap[data-idx="${idx}"]`);
+      const passedInp = body.querySelector(`.lw-prod-line-passed[data-idx="${idx}"]`);
+      const packInp = body.querySelector(`.lw-prod-line-pack[data-idx="${idx}"]`);
+      const reworkInp = body.querySelector(`.lw-prod-line-rework[data-idx="${idx}"]`);
+      if (inspInp) ln.inspectedQty = parseInt(inspInp.value, 10) || 0;
+      if (qaInp) ln.qaQty = parseInt(qaInp.value, 10) || 0;
+      if (scrapInp) ln.scrapQty = parseInt(scrapInp.value, 10) || 0;
+      if (passedInp) ln.qaPassed = parseInt(passedInp.value, 10) || 0;
+      if (packInp) ln.packQty = parseInt(packInp.value, 10) || 0;
+      if (reworkInp) ln.reworkQty = parseInt(reworkInp.value, 10) || 0;
+      const scrapRemarkInp = body.querySelector(`.lw-prod-line-scrap-remark[data-idx="${idx}"]`);
+      const qaRemarkInp = body.querySelector(`.lw-prod-line-qa-remark[data-idx="${idx}"]`);
+      const reworkRemarkInp = body.querySelector(`.lw-prod-line-rework-remark[data-idx="${idx}"]`);
+      if (scrapRemarkInp) ln.scrapRemark = scrapRemarkInp.value || '';
+      if (qaRemarkInp) ln.qaRemark = qaRemarkInp.value || '';
+      if (reworkRemarkInp) ln.reworkRemark = reworkRemarkInp.value || '';
+    });
+  }
+
+  function syncWeldModalLinesFromDom() {
+    const body = $('#lw-weld-modal-children');
+    if (!body || !body.querySelector('.lw-weld-child-lot')) return;
+    _weldModalChildren.forEach((ch, partIdx) => {
+      (ch.lines || []).forEach((ln, lineIdx) => {
+        const consumedInp = body.querySelector(`.lw-weld-consumed[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+        const qaInp = body.querySelector(`.lw-weld-qa[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+        const scrapInp = body.querySelector(`.lw-weld-scrap[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+        const scrapRemarkInp = body.querySelector(`.lw-weld-scrap-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+        const qaRemarkInp = body.querySelector(`.lw-weld-qa-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+        if (consumedInp) ln.consumedQty = parseInt(consumedInp.value, 10) || 0;
+        if (qaInp) ln.qaQty = parseInt(qaInp.value, 10) || 0;
+        if (scrapInp) ln.scrapQty = parseInt(scrapInp.value, 10) || 0;
+        if (scrapRemarkInp) ln.scrapRemark = scrapRemarkInp.value || '';
+        if (qaRemarkInp) ln.qaRemark = qaRemarkInp.value || '';
+      });
+    });
+  }
+
+  function clearWeldModalDom() {
+    const body = $('#lw-weld-modal-children');
+    if (body) body.innerHTML = '';
+  }
+
+  function clearProdModalDom() {
+    const body = $('#lw-prod-modal-lines');
+    if (body) body.innerHTML = '';
+  }
+
+  function renderProductionModalLines(opts) {
     const body = $('#lw-prod-modal-lines');
     if (!body) return;
+    if (!opts?.skipSync) syncProdModalLinesFromDom();
 
     if (!(_prodModalIsBo && _prodModalMode === 'production')) {
       ensureProdModalTrailingLine();
     }
 
     const partNo = $('#lw-prod-modal-part')?.dataset.partNumber || '';
-    const usedLots = new Set(_prodModalLines.map(l => l.sourceLotNo).filter(Boolean));
+    const usedLots = new Set(_prodModalLines.map(lotLineKey).filter(Boolean));
     const usedTargetIds = new Set(_prodModalLines.map(l => Number(l.targetLotId)).filter(Boolean));
     const isBo = _prodModalIsBo && _prodModalMode === 'production';
 
     let html = '<table class="ti-table lw-prod-modal-table"><thead><tr>';
 
     if (_prodModalMode === 'qa') {
-      html += '<th>Lot</th><th>QA QTY</th>';
-      html += '<th>Passed</th><th>Scrap</th><th>Rework</th>';
-      html += '<th class="lw-prod-col-remark">Remark</th><th class="lw-prod-col-remark">Rework remark</th><th class="lw-prod-col-action"></th>';
+      html += '<th class="lw-prod-col-lot">Lot</th><th class="lw-prod-col-avail">QA QTY</th>';
+      html += '<th class="lw-prod-col-num">Passed</th><th class="lw-prod-col-num">Scrap</th><th class="lw-prod-col-num">Rework</th>';
+      html += '<th class="lw-prod-col-remark">Scrap Remarks</th><th class="lw-prod-col-remark">Rework remark</th><th class="lw-prod-col-action"></th>';
     } else if (_prodModalMode === 'packing') {
-      html += '<th>Lot</th><th>Available</th><th>Consumed</th>';
-      html += '<th>QA</th><th>Scrap</th>';
-      html += '<th class="lw-prod-col-remark">Remark</th><th></th>';
+      html += '<th class="lw-prod-col-lot">Lot</th><th class="lw-prod-col-avail">Available</th>';
+      html += '<th class="lw-prod-col-num">Consumed</th><th class="lw-prod-col-num">QA</th><th class="lw-prod-col-num">Scrap</th>';
+      html += '<th class="lw-prod-col-remark">QA Remarks</th><th class="lw-prod-col-remark">Scrap Remarks</th><th class="lw-prod-col-action"></th>';
     } else if (isBo) {
-      html += '<th>Available</th>';
-      html += '<th>Inspected</th><th>Scrap</th><th class="lw-prod-col-remark">Remark</th>';
+      html += '<th class="lw-prod-col-avail">Available</th>';
+      html += '<th class="lw-prod-col-num">Inspected</th><th class="lw-prod-col-num">Scrap</th><th class="lw-prod-col-remark">Scrap Remarks</th>';
     } else {
-      html += '<th>Lot No</th><th>Available</th>';
-      html += '<th>Inspected</th><th>QA</th><th>Scrap</th>';
-      html += '<th class="lw-prod-col-remark">Remark</th><th class="lw-prod-col-action"></th>';
+      html += '<th class="lw-prod-col-lot">Lot No</th><th class="lw-prod-col-avail">Available</th>';
+      html += '<th class="lw-prod-col-num">Inspected</th><th class="lw-prod-col-num">QA</th><th class="lw-prod-col-num">Scrap</th>';
+      html += '<th class="lw-prod-col-remark">QA Remarks</th><th class="lw-prod-col-remark">Scrap Remarks</th><th class="lw-prod-col-action"></th>';
     }
     html += '</tr></thead><tbody>';
 
@@ -2127,10 +2244,10 @@ window.LaserWeldingPage = (() => {
       const scrap = Number(ln.scrapQty) || 0;
       const remark = escapeAttr(ln.scrapRemark || '');
       html += '<tr>';
-      html += `<td class="lw-prod-line-comp" data-idx="0">${max || '—'}</td>`;
-      html += `<td><input type="number" class="ti-input lw-prod-line-insp" data-idx="0" min="0" max="${max}" value="${insp}" /></td>`;
-      html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="0" min="0" max="${insp}" value="${scrap}" /></td>`;
-      html += `<td><div class="lw-prod-scrap-remark-wrap" data-idx="0" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="0" value="${remark}" placeholder="Remark" /></div></td>`;
+      html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="0">${max || '—'}</td>`;
+      html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-insp" data-idx="0" min="0" max="${max}" value="${insp}" /></td>`;
+      html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="0" min="0" max="${insp}" value="${scrap}" /></td>`;
+      html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="0" value="${remark}" placeholder="Scrap remarks"${scrap > 0 ? '' : ' disabled'} /></td>`;
       html += '</tr>';
     } else {
       _prodModalLines.forEach((ln, idx) => {
@@ -2142,15 +2259,15 @@ window.LaserWeldingPage = (() => {
           const scrap = Number(ln.scrapQty) || 0;
           const rework = Number(ln.reworkQty) || 0;
           html += '<tr>';
-          html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
-          html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
+          html += `<td class="lw-prod-col-lot"><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
+          html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds, ln.plantId);
           html += '</select></td>';
-          html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-passed" data-idx="${idx}" min="0" max="${max}" value="${passed}" /></td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" value="${scrap}" /></td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-rework" data-idx="${idx}" min="0" value="${rework}" /></td>`;
-          html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Remark" /></div></td>`;
-          html += `<td class="lw-prod-col-remark"><div class="lw-prod-rework-remark-wrap" data-idx="${idx}" style="display:${rework > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-rework-remark" data-idx="${idx}" value="${escapeAttr(ln.reworkRemark || '')}" placeholder="Rework remark" /></div></td>`;
+          html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-passed" data-idx="${idx}" min="0" max="${max}" value="${passed}" /></td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" value="${scrap}" /></td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-rework" data-idx="${idx}" min="0" value="${rework}" /></td>`;
+          html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remarks"${scrap > 0 ? '' : ' disabled'} /></td>`;
+          html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-rework-remark" data-idx="${idx}" value="${escapeAttr(ln.reworkRemark || '')}" placeholder="Rework remark"${rework > 0 ? '' : ' disabled'} /></td>`;
           html += !isTrailingEmpty
             ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
             : '<td class="lw-prod-col-action"></td>';
@@ -2165,17 +2282,18 @@ window.LaserWeldingPage = (() => {
           const scrap = Number(ln.scrapQty) || 0;
           const scrapMax = Math.max(0, consumed - qa);
           html += '<tr>';
-          html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
-          html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
+          html += `<td class="lw-prod-col-lot"><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
+          html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds, ln.plantId);
           html += '</select></td>';
-          html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-pack" data-idx="${idx}" min="0" max="${max}" value="${consumed}" /></td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${consumed}" value="${qa}" /></td>`;
-          html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
-          html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Remark" /></div></td>`;
+          html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-pack" data-idx="${idx}" min="0" max="${max}" value="${consumed}" /></td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${consumed}" value="${qa}" /></td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
+          html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-qa-remark" data-idx="${idx}" value="${escapeAttr(ln.qaRemark || '')}" placeholder="QA remarks"${qa > 0 ? '' : ' disabled'} /></td>`;
+          html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remarks"${scrap > 0 ? '' : ' disabled'} /></td>`;
           html += !isTrailingEmpty
-            ? `<td><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
-            : '<td></td>';
+            ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
+            : '<td class="lw-prod-col-action"></td>';
           html += '</tr>';
           return;
         }
@@ -2186,14 +2304,15 @@ window.LaserWeldingPage = (() => {
         const scrap = Number(ln.scrapQty) || 0;
         const scrapMax = Math.max(0, insp - qa);
         html += '<tr>';
-        html += `<td><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
-        html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds);
+        html += `<td class="lw-prod-col-lot"><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
+        html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds, ln.plantId);
         html += '</select></td>';
-        html += `<td class="lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
-        html += `<td><input type="number" class="ti-input lw-prod-line-insp" data-idx="${idx}" min="0" max="${max}" value="${insp}" /></td>`;
-        html += `<td><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${insp}" value="${qa}" /></td>`;
-        html += `<td><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
-        html += `<td class="lw-prod-col-remark"><div class="lw-prod-scrap-remark-wrap" data-idx="${idx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Remark" /></div></td>`;
+        html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+        html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-insp" data-idx="${idx}" min="0" max="${max}" value="${insp}" /></td>`;
+        html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-qa" data-idx="${idx}" min="0" max="${insp}" value="${qa}" /></td>`;
+        html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
+        html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-qa-remark" data-idx="${idx}" value="${escapeAttr(ln.qaRemark || '')}" placeholder="QA remarks"${qa > 0 ? '' : ' disabled'} /></td>`;
+        html += `<td class="lw-prod-col-remark"><input type="text" class="ti-input lw-prod-line-scrap-remark" data-idx="${idx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remarks"${scrap > 0 ? '' : ' disabled'} /></td>`;
         html += !isTrailingEmpty
           ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
           : '<td class="lw-prod-col-action"></td>';
@@ -2239,6 +2358,10 @@ window.LaserWeldingPage = (() => {
   async function openProductionModal(row) {
     const overlay = $('#lw-production-modal-overlay');
     if (!overlay) return;
+
+    const openSeq = ++_prodModalOpenSeq;
+    clearProdModalDom();
+    _prodModalLines = [];
 
     const mode = prodModalModeForTab();
     _prodModalMode = mode;
@@ -2288,19 +2411,24 @@ window.LaserWeldingPage = (() => {
       const cartonRow = cartonItem?.closest('.lw-pack-material-row');
       if (cartonRow) cartonRow.style.display = '';
       await loadPackMaterials(partNo);
+      if (openSeq !== _prodModalOpenSeq) return;
       await fetchPackingSourceLots(partNo);
+      if (openSeq !== _prodModalOpenSeq) return;
       _prodModalIsBo = false;
       _prodModalLines = [emptyLine()];
     } else if (mode === 'qa') {
       await fetchQaSourceLots(partNo);
+      if (openSeq !== _prodModalOpenSeq) return;
       _prodModalIsBo = false;
       _prodModalLines = [emptyLine()];
     } else if (isCleaningTab() && _prodModalBomId) {
       await fetchCleaningSourceLots(_prodModalBomId, _prodModalSubAssemblyPartNo);
+      if (openSeq !== _prodModalOpenSeq) return;
       _prodModalIsBo = false;
       _prodModalLines = [emptyLine()];
     } else {
       const lotInfo = await fetchSourceLots(partNo);
+      if (openSeq !== _prodModalOpenSeq) return;
       _prodModalIsBo = partIsBo(partNo);
       if (_prodModalIsBo) {
         _prodModalLines = [{
@@ -2313,7 +2441,8 @@ window.LaserWeldingPage = (() => {
       }
     }
 
-    renderProductionModalLines();
+    if (openSeq !== _prodModalOpenSeq) return;
+    renderProductionModalLines({ skipSync: true });
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
   }
@@ -2321,6 +2450,7 @@ window.LaserWeldingPage = (() => {
   function closeProductionModal() {
     const overlay = $('#lw-production-modal-overlay');
     if (!overlay) return;
+    _prodModalOpenSeq += 1;
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
     _prodModalLines = [];
@@ -2329,8 +2459,13 @@ window.LaserWeldingPage = (() => {
     _prodModalBomId = null;
     _prodModalIsBo = false;
     _prodModalSubAssemblyPartNo = null;
+    clearProdModalDom();
     const otInp = $('#lw-prod-modal-ot');
     if (otInp) otInp.checked = false;
+    const hoursInp = $('#lw-prod-modal-hours');
+    const minsInp = $('#lw-prod-modal-mins');
+    if (hoursInp) hoursInp.value = '0';
+    if (minsInp) minsInp.value = '0';
     const packMatEl = $('#lw-prod-modal-pack-materials');
     if (packMatEl) packMatEl.style.display = 'none';
   }
@@ -2383,6 +2518,7 @@ window.LaserWeldingPage = (() => {
         const qa = parseInt($(`.lw-prod-line-qa[data-idx="${idx}"]`)?.value, 10) || 0;
         const scrap = parseInt($(`.lw-prod-line-scrap[data-idx="${idx}"]`)?.value, 10) || 0;
         const scrapRemark = ($(`.lw-prod-line-scrap-remark[data-idx="${idx}"]`)?.value || '').trim();
+        const qaRemark = ($(`.lw-prod-line-qa-remark[data-idx="${idx}"]`)?.value || '').trim();
         const match = packLots.find(l => Number(l.lotId) === targetLotId);
         const lotNo = match?.newLotNo || '';
         const max = Number(match?.totalOkayed || match?.noOfComp) || 0;
@@ -2392,12 +2528,19 @@ window.LaserWeldingPage = (() => {
         if (qa + scrap > consumed) {
           throw new Error(`QA + Scrap cannot exceed Consumed for lot ${lotNo || targetLotId}`);
         }
+        if (qa > 0 && !qaRemark) {
+          throw new Error(`QA remarks are required when QA > 0 for lot ${lotNo || '(line)'}`);
+        }
+        if (scrap > 0 && !scrapRemark) {
+          throw new Error(`Scrap remarks are required when Scrap > 0 for lot ${lotNo || '(line)'}`);
+        }
         if (targetLotId && consumed > 0) {
           lines.push({
             targetLotId,
             inspectedQty: consumed,
             qaQty: qa,
             scrapQty: scrap,
+            qaRemark: qa > 0 ? qaRemark : undefined,
             scrapRemark: scrap > 0 ? scrapRemark : undefined,
           });
         }
@@ -2463,13 +2606,15 @@ window.LaserWeldingPage = (() => {
             qaQty: qa,
             scrapQty: scrap,
             scrapRemark: scrap > 0 ? scrapRemark : undefined,
+            qaRemark: qa > 0 ? ($(`.lw-prod-line-qa-remark[data-idx="${idx}"]`)?.value || '').trim() : undefined,
           });
         }
         return;
       }
 
-      const lotNo = sel.value || '';
-      const match = erpLots.find(l => l.lotNo === lotNo);
+      const parsed = parseLotOptionValue(sel.value || '');
+      const lotNo = parsed.lotNo;
+      const match = erpLots.find(l => lotMatchesLine(l, { sourceLotNo: lotNo, plantId: parsed.plantId }));
       const max = lotAvailableQty(match);
       if (qa + scrap > insp) {
         throw new Error(`QA + Scrap cannot exceed Inspected QTY for lot ${lotNo}`);
@@ -2487,6 +2632,8 @@ window.LaserWeldingPage = (() => {
           inspectedQty: insp,
           qaQty: qa,
           scrapQty: scrap,
+          plantId: match?.plantId ?? parsed.plantId ?? undefined,
+          qaRemark: qa > 0 ? ($(`.lw-prod-line-qa-remark[data-idx="${idx}"]`)?.value || '').trim() : undefined,
           scrapRemark: scrap > 0 ? scrapRemark : undefined,
         });
       }
@@ -2589,12 +2736,35 @@ window.LaserWeldingPage = (() => {
     }
   }
 
+  function resetProdLineQtys(ln) {
+    if (!ln) return;
+    ln.inspectedQty = 0;
+    ln.qaQty = 0;
+    ln.scrapQty = 0;
+    ln.qaPassed = 0;
+    ln.reworkQty = 0;
+    ln.packQty = 0;
+    ln.scrapRemark = '';
+    ln.qaRemark = '';
+    ln.reworkRemark = '';
+  }
+
+  function prodLineLotIdentity(ln, mode) {
+    if (!ln) return '';
+    if (mode === 'production') return lotLineKey(ln);
+    return ln.targetLotId ? String(ln.targetLotId) : '';
+  }
+
   function onProductionModalLotChange(sel) {
     const idx = Number(sel.getAttribute('data-idx'));
     const partNo = $('#lw-prod-modal-part')?.dataset.partNumber || '';
     const isCleaning = _prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning';
 
+    // Preserve in-progress edits on other rows before we rewrite the table.
+    syncProdModalLinesFromDom();
+
     if (!_prodModalLines[idx]) _prodModalLines[idx] = emptyLine();
+    const prevLotKey = prodLineLotIdentity(_prodModalLines[idx], _prodModalMode);
 
     if (_prodModalMode === 'qa') {
       const targetLotId = parseInt(sel.value, 10) || null;
@@ -2621,35 +2791,31 @@ window.LaserWeldingPage = (() => {
       _prodModalLines[idx].noOfComp = avail;
       _prodModalLines[idx].availableQty = avail;
     } else {
-      const lotNo = sel.value;
-      const match = sourceLotsInfo(partNo).lots.find(l => l.lotNo === lotNo);
+      const parsed = parseLotOptionValue(sel.value);
+      const lotNo = parsed.lotNo;
+      const match = sourceLotsInfo(partNo).lots.find(l => lotMatchesLine(l, { sourceLotNo: lotNo, plantId: parsed.plantId }));
       _prodModalLines[idx].sourceLotNo = lotNo;
+      _prodModalLines[idx].plantId = match?.plantId ?? parsed.plantId ?? null;
       if (match) {
         const avail = lotAvailableQty(match);
         _prodModalLines[idx].productionDate = match.productionDate || '';
         _prodModalLines[idx].noOfComp = avail;
         _prodModalLines[idx].availableQty = avail;
+      } else {
+        _prodModalLines[idx].productionDate = '';
+        _prodModalLines[idx].noOfComp = 0;
+        _prodModalLines[idx].availableQty = 0;
       }
     }
 
-    const compEl = $(`.lw-prod-line-comp[data-idx="${idx}"]`);
-    const inspInp = $(`.lw-prod-line-insp[data-idx="${idx}"]`);
-    const passedInp = $(`.lw-prod-line-passed[data-idx="${idx}"]`);
-    const packInp = $(`.lw-prod-line-pack[data-idx="${idx}"]`);
-    const qaInp = $(`.lw-prod-line-qa[data-idx="${idx}"]`);
-    if (compEl) compEl.textContent = String(_prodModalLines[idx].noOfComp || '—');
-    if (inspInp) inspInp.max = String(_prodModalLines[idx].noOfComp || 0);
-    if (passedInp) passedInp.max = String(_prodModalLines[idx].noOfComp || 0);
-    if (packInp) packInp.max = String(_prodModalLines[idx].noOfComp || 0);
-    if (qaInp && _prodModalMode === 'packing') qaInp.max = String(packInp?.value || _prodModalLines[idx].noOfComp || 0);
-    syncProdLineQtyCaps(idx, 'insp');
-
-    const hasLot = (_prodModalMode === 'production')
-      ? _prodModalLines[idx].sourceLotNo
-      : _prodModalLines[idx].targetLotId;
-    if (hasLot && idx === _prodModalLines.length - 1) {
-      renderProductionModalLines();
+    const nextLotKey = prodLineLotIdentity(_prodModalLines[idx], _prodModalMode);
+    if (prevLotKey !== nextLotKey) {
+      // Lot identity changed — never carry consume/QA/scrap/remarks onto another lot.
+      resetProdLineQtys(_prodModalLines[idx]);
     }
+
+    // Skip DOM sync on re-render so wiped qty/remarks are not pulled back from old inputs.
+    renderProductionModalLines({ skipSync: true });
   }
 
   async function loadGridRows(preserveFilter) {
@@ -3659,10 +3825,48 @@ window.LaserWeldingPage = (() => {
   function syncWeldParentScrapRemarkVisibility() {
     const qa = parseInt($('#lw-weld-modal-parent-qa')?.value, 10) || 0;
     const scrap = parseInt($('#lw-weld-modal-parent-scrap')?.value, 10) || 0;
-    const remarkWrap = $('#lw-weld-modal-parent-scrap-remark-wrap');
-    if (remarkWrap) remarkWrap.style.display = scrap > 0 ? '' : 'none';
+    const qaInp = $('#lw-weld-modal-parent-qa-remark');
+    const scrapInp = $('#lw-weld-modal-parent-scrap-remark');
+    const qaReq = $('#lw-weld-modal-parent-qa-remark-wrap')?.querySelector('.lw-weld-remark-req');
+    const scrapReq = $('#lw-weld-modal-parent-scrap-remark-wrap')?.querySelector('.lw-weld-remark-req');
+    if (qaInp) {
+      qaInp.disabled = qa <= 0;
+      if (qa <= 0) qaInp.value = '';
+    }
+    if (scrapInp) {
+      scrapInp.disabled = scrap <= 0;
+      if (scrap <= 0) scrapInp.value = '';
+    }
+    if (qaReq) qaReq.hidden = qa <= 0;
+    if (scrapReq) scrapReq.hidden = scrap <= 0;
+    const needInsp = qa > 0 || scrap > 0;
+    const hours = $('#lw-weld-modal-parent-hours');
+    const mins = $('#lw-weld-modal-parent-mins');
+    if (hours) {
+      hours.disabled = !needInsp;
+      if (!needInsp) hours.value = '0';
+    }
+    if (mins) {
+      mins.disabled = !needInsp;
+      if (!needInsp) mins.value = '0';
+    }
     const timeWrap = $('#lw-weld-modal-parent-time-wrap');
-    if (timeWrap) timeWrap.style.display = (qa > 0 || scrap > 0) ? '' : 'none';
+    if (timeWrap) timeWrap.classList.toggle('is-inactive', !needInsp);
+  }
+
+  function syncWeldScrapRemarkVisibility(partIdx, lineIdx) {
+    const qa = parseInt($(`.lw-weld-qa[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`)?.value, 10) || 0;
+    const scrap = parseInt($(`.lw-weld-scrap[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`)?.value, 10) || 0;
+    const qaInp = $(`.lw-weld-qa-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+    const scrapInp = $(`.lw-weld-scrap-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
+    if (qaInp) {
+      qaInp.disabled = qa <= 0;
+      if (qa <= 0) qaInp.value = '';
+    }
+    if (scrapInp) {
+      scrapInp.disabled = scrap <= 0;
+      if (scrap <= 0) scrapInp.value = '';
+    }
   }
 
   function populateWeldTargetLotSelect(lots, selectedLotId) {
@@ -3710,7 +3914,7 @@ window.LaserWeldingPage = (() => {
   }
 
   function emptyWeldLine() {
-    return { childLotId: null, consumedQty: 0, qaQty: 0, scrapQty: 0, scrapRemark: '' };
+    return { childLotId: null, consumedQty: 0, qaQty: 0, scrapQty: 0, scrapRemark: '', qaRemark: '' };
   }
 
   function weldRequiredForPart(ch, weldQty) {
@@ -3754,12 +3958,6 @@ window.LaserWeldingPage = (() => {
 
   function getWeldLine(partIdx, lineIdx) {
     return _weldModalChildren[partIdx]?.lines?.[lineIdx] || null;
-  }
-
-  function syncWeldScrapRemarkVisibility(partIdx, lineIdx) {
-    const scrap = parseInt($(`.lw-weld-scrap[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`)?.value, 10) || 0;
-    const wrap = $(`.lw-weld-scrap-remark-wrap[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`);
-    if (wrap) wrap.style.display = scrap > 0 ? '' : 'none';
   }
 
   function syncWeldLineQtyCaps(partIdx, lineIdx, changedField) {
@@ -3882,9 +4080,10 @@ window.LaserWeldingPage = (() => {
     return Number(match?.reworkPending) || 0;
   }
 
-  function renderWeldModalChildren() {
+  function renderWeldModalChildren(opts) {
     const body = $('#lw-weld-modal-children');
     if (!body) return;
+    if (!opts?.skipSync) syncWeldModalLinesFromDom();
     const weldQty = parseInt($('#lw-weld-modal-qty')?.value, 10) || 0;
     const isRw = isWeldReworkMode();
     const isSa = isSubAssemblyWeldContext();
@@ -3920,12 +4119,13 @@ window.LaserWeldingPage = (() => {
       }
       html += '</div>';
 
-      html += '<table class="ti-table lw-weld-part-table"><thead><tr>';
+      html += '<div class="lw-weld-part-table-wrap"><table class="ti-table lw-weld-part-table"><thead><tr>';
       html += '<th class="lw-weld-col-lot">Child Lot</th>';
-      html += '<th class="lw-weld-col-num">Consumed</th>';
+      html += '<th class="lw-weld-col-num">Cons.</th>';
       html += '<th class="lw-weld-col-num">QA</th>';
       html += '<th class="lw-weld-col-num">Scrap</th>';
-      html += '<th class="lw-weld-col-remark">Remark</th>';
+      html += '<th class="lw-weld-col-remark">QA Remarks</th>';
+      html += '<th class="lw-weld-col-remark">Scrap Remarks</th>';
       html += '<th class="lw-weld-col-action"></th></tr></thead><tbody>';
 
       ch.lines.forEach((ln, lineIdx) => {
@@ -3953,14 +4153,19 @@ window.LaserWeldingPage = (() => {
           html += `<td class="lw-weld-col-num"><input type="number" class="ti-input lw-weld-qa" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${consumed}" value="${qa}" /></td>`;
         }
         html += `<td class="lw-weld-col-num"><input type="number" class="ti-input lw-weld-scrap" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" min="0" max="${scrapMax}" value="${scrap}" /></td>`;
-        html += `<td class="lw-weld-col-remark"><div class="lw-weld-scrap-remark-wrap" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" style="display:${scrap > 0 ? '' : 'none'}"><input type="text" class="ti-input lw-weld-scrap-remark" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Remark" /></div></td>`;
+        if (ch.isBoPart) {
+          html += '<td class="lw-weld-col-remark lw-weld-qa-placeholder">—</td>';
+        } else {
+          html += `<td class="lw-weld-col-remark"><input type="text" class="ti-input lw-weld-qa-remark" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" value="${escapeAttr(ln.qaRemark || '')}" placeholder="QA remarks"${qa > 0 ? '' : ' disabled'} /></td>`;
+        }
+        html += `<td class="lw-weld-col-remark"><input type="text" class="ti-input lw-weld-scrap-remark" data-part-idx="${partIdx}" data-line-idx="${lineIdx}" value="${escapeAttr(ln.scrapRemark || '')}" placeholder="Scrap remarks"${scrap > 0 ? '' : ' disabled'} /></td>`;
         html += !isTrailing
           ? `<td class="lw-weld-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-weld-line-remove" data-part-idx="${partIdx}" data-line-idx="${lineIdx}">✕</button></td>`
           : '<td class="lw-weld-col-action"></td>';
         html += '</tr>';
       });
 
-      html += '</tbody></table></div>';
+      html += '</tbody></table></div></div>';
     });
     body.innerHTML = html;
   }
@@ -3968,6 +4173,8 @@ window.LaserWeldingPage = (() => {
   async function openWeldModal(row) {
     const overlay = $('#lw-weld-modal-overlay');
     if (!overlay || !row) return;
+    clearWeldModalDom();
+    _weldModalChildren = [];
     _weldModalContext = SA_TABS.has(_tab) ? 'sub_assembly' : 'assembly';
     _weldModalDraftLineId = row.draftLineId || row.lineId || null;
     _weldModalBomId = row.bomId;
@@ -3993,9 +4200,11 @@ window.LaserWeldingPage = (() => {
     const parentQa = $('#lw-weld-modal-parent-qa');
     const parentScrap = $('#lw-weld-modal-parent-scrap');
     const parentScrapRemark = $('#lw-weld-modal-parent-scrap-remark');
+    const parentQaRemark = $('#lw-weld-modal-parent-qa-remark');
     if (parentQa) parentQa.value = '0';
     if (parentScrap) parentScrap.value = '0';
     if (parentScrapRemark) parentScrapRemark.value = '';
+    if (parentQaRemark) parentQaRemark.value = '';
     const parentHours = $('#lw-weld-modal-parent-hours');
     const parentMins = $('#lw-weld-modal-parent-mins');
     if (parentHours) parentHours.value = '0';
@@ -4047,18 +4256,22 @@ window.LaserWeldingPage = (() => {
     _weldModalChildren = [];
     _weldModalSubAssemblyPartNo = null;
     _weldModalContext = 'assembly';
+    clearWeldModalDom();
     const otInp = $('#lw-weld-modal-ot');
     if (otInp) otInp.checked = false;
     const parentQa = $('#lw-weld-modal-parent-qa');
     const parentScrap = $('#lw-weld-modal-parent-scrap');
     const parentScrapRemark = $('#lw-weld-modal-parent-scrap-remark');
+    const parentQaRemark = $('#lw-weld-modal-parent-qa-remark');
     if (parentQa) parentQa.value = '0';
     if (parentScrap) parentScrap.value = '0';
     if (parentScrapRemark) parentScrapRemark.value = '';
+    if (parentQaRemark) parentQaRemark.value = '';
     const parentHours = $('#lw-weld-modal-parent-hours');
     const parentMins = $('#lw-weld-modal-parent-mins');
     if (parentHours) parentHours.value = '0';
     if (parentMins) parentMins.value = '0';
+    syncWeldParentScrapRemarkVisibility();
   }
 
   async function saveWeldModal() {
@@ -4107,6 +4320,7 @@ window.LaserWeldingPage = (() => {
     const parentQa = parseInt($('#lw-weld-modal-parent-qa')?.value, 10) || 0;
     const parentScrap = parseInt($('#lw-weld-modal-parent-scrap')?.value, 10) || 0;
     const parentScrapRemark = ($('#lw-weld-modal-parent-scrap-remark')?.value || '').trim();
+    const parentQaRemark = ($('#lw-weld-modal-parent-qa-remark')?.value || '').trim();
     if (parentQa < 0 || parentScrap < 0) {
       showSnackbar('QA and Scrap QTY cannot be negative', 'error');
       return;
@@ -4116,7 +4330,11 @@ window.LaserWeldingPage = (() => {
       return;
     }
     if (parentScrap > 0 && !parentScrapRemark) {
-      showSnackbar('Remark is required when scrap QTY > 0', 'error');
+      showSnackbar('Scrap remarks are required when scrap QTY > 0', 'error');
+      return;
+    }
+    if (parentQa > 0 && !parentQaRemark) {
+      showSnackbar('QA remarks are required when QA QTY > 0', 'error');
       return;
     }
     let parentInspection = null;
@@ -4132,6 +4350,7 @@ window.LaserWeldingPage = (() => {
         qaQty: parentQa,
         scrapQty: parentScrap,
         scrapRemark: parentScrap > 0 ? parentScrapRemark : undefined,
+        qaRemark: parentQa > 0 ? parentQaRemark : undefined,
         inspectionTimeTakenMinutes,
       };
     }
@@ -4148,6 +4367,7 @@ window.LaserWeldingPage = (() => {
         let qa = Number(ln.qaQty) || 0;
         const scrap = Number(ln.scrapQty) || 0;
         const scrapRemark = ($(`.lw-weld-scrap-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`)?.value || '').trim();
+        const qaRemark = ($(`.lw-weld-qa-remark[data-part-idx="${partIdx}"][data-line-idx="${lineIdx}"]`)?.value || '').trim();
         if (!ln.childLotId && consumed <= 0 && qa <= 0 && scrap <= 0) continue;
         if (!ln.childLotId) {
           showSnackbar(`Select child lot for ${ch.partNo}`, 'error');
@@ -4167,6 +4387,14 @@ window.LaserWeldingPage = (() => {
           showSnackbar(`QA + Scrap cannot exceed Consumed for ${ch.partNo}`, 'error');
           return;
         }
+        if (scrap > 0 && !scrapRemark) {
+          showSnackbar(`Scrap remarks are required for ${ch.partNo}`, 'error');
+          return;
+        }
+        if (!ch.isBoPart && qa > 0 && !qaRemark) {
+          showSnackbar(`QA remarks are required for ${ch.partNo}`, 'error');
+          return;
+        }
         const lotKey = Number(ln.childLotId);
         if (seenLots.has(lotKey)) {
           showSnackbar(`Duplicate child lot for ${ch.partNo}`, 'error');
@@ -4182,6 +4410,7 @@ window.LaserWeldingPage = (() => {
           qaQty: qa,
           scrapQty: scrap,
           scrapRemark: scrap > 0 ? scrapRemark : undefined,
+          qaRemark: !ch.isBoPart && qa > 0 ? qaRemark : undefined,
         });
       }
       if (isRw) {
@@ -4263,11 +4492,20 @@ window.LaserWeldingPage = (() => {
     const lineIdx = Number(lotSel.getAttribute('data-line-idx'));
     const ln = getWeldLine(partIdx, lineIdx);
     if (!ln) return;
-    ln.childLotId = parseInt(lotSel.value, 10) || null;
-    const ch = _weldModalChildren[partIdx];
-    if (ln.childLotId && ch && lineIdx === ch.lines.length - 1) {
-      renderWeldModalChildren();
+    syncWeldModalLinesFromDom();
+    const prevLotId = Number(ln.childLotId) || null;
+    const nextLotId = parseInt(lotSel.value, 10) || null;
+    ln.childLotId = nextLotId;
+    if (prevLotId !== nextLotId) {
+      ln.consumedQty = 0;
+      ln.qaQty = 0;
+      ln.scrapQty = 0;
+      ln.scrapRemark = '';
+      ln.qaRemark = '';
     }
+    const ch = _weldModalChildren[partIdx];
+    if (ln.childLotId && ch) ensureWeldTrailingLine(ch);
+    renderWeldModalChildren({ skipSync: true });
   }
 
   function onWeldModalInput(e) {
@@ -4296,6 +4534,20 @@ window.LaserWeldingPage = (() => {
         Number(scrapInp.getAttribute('data-line-idx')),
         'scrap',
       );
+      return;
+    }
+    const remarkInp = e.target.closest('.lw-weld-scrap-remark, .lw-weld-qa-remark');
+    if (remarkInp) {
+      const partIdx = Number(remarkInp.getAttribute('data-part-idx'));
+      const lineIdx = Number(remarkInp.getAttribute('data-line-idx'));
+      const ln = getWeldLine(partIdx, lineIdx);
+      if (ln) {
+        if (remarkInp.classList.contains('lw-weld-scrap-remark')) {
+          ln.scrapRemark = remarkInp.value || '';
+        } else {
+          ln.qaRemark = remarkInp.value || '';
+        }
+      }
     }
   }
 
@@ -4492,6 +4744,21 @@ window.LaserWeldingPage = (() => {
     const pack = e.target.closest('.lw-prod-line-pack');
     if (pack) {
       syncProdLineQtyCaps(Number(pack.getAttribute('data-idx')), 'pack');
+      return;
+    }
+    const remarkInp = e.target.closest('.lw-prod-line-scrap-remark, .lw-prod-line-qa-remark, .lw-prod-line-rework-remark');
+    if (remarkInp) {
+      const idx = Number(remarkInp.getAttribute('data-idx'));
+      const ln = _prodModalLines[idx];
+      if (ln) {
+        if (remarkInp.classList.contains('lw-prod-line-scrap-remark')) {
+          ln.scrapRemark = remarkInp.value || '';
+        } else if (remarkInp.classList.contains('lw-prod-line-qa-remark')) {
+          ln.qaRemark = remarkInp.value || '';
+        } else {
+          ln.reworkRemark = remarkInp.value || '';
+        }
+      }
     }
   }
 
@@ -5066,7 +5333,7 @@ window.LaserWeldingPage = (() => {
     { key: 'inspectedQty', label: 'Inspected', align: 'right', width: 80 },
     { key: 'qaQty', label: 'QA', align: 'right', width: 64 },
     { key: 'operator', label: 'Operator', width: 130 },
-    { key: 'scrapRemark', label: 'Remark', width: 140 },
+    { key: 'qaRemark', label: 'QA Remarks', width: 140 },
   ];
 
   const SCRAP_GRID_COLUMNS = [
@@ -5078,7 +5345,7 @@ window.LaserWeldingPage = (() => {
     { key: 'workflowLabel', label: 'Step', width: 120 },
     { key: 'inspectedQty', label: 'Inspected', align: 'right', width: 80 },
     { key: 'scrapQty', label: 'Scrap', align: 'right', width: 64 },
-    { key: 'scrapRemark', label: 'Remark', width: 160 },
+    { key: 'scrapRemark', label: 'Scrap Remarks', width: 160 },
     { key: 'operator', label: 'Operator', width: 130 },
     { key: 'machineName', label: 'Machine', width: 110 },
   ];
@@ -5094,7 +5361,8 @@ window.LaserWeldingPage = (() => {
       inspectedQty: Number(r.inspectedQty) || 0,
       qaQty: Number(r.qaQty) || 0,
       scrapQty: Number(r.scrapQty) || 0,
-      scrapRemark: r.scrapRemark || r.reworkRemark || '—',
+      qaRemark: r.qaRemark || '—',
+      scrapRemark: r.scrapRemark || '—',
       operator: historyOperatorLabel(r),
       machineName: r.machineName || '—',
       supplierName: r.supplierName || '—',

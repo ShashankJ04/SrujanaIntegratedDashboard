@@ -205,7 +205,7 @@ def _qa_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict[st
         "Inspected",
         "QA",
         "Operator",
-        "Remark",
+        "QA Remarks",
     ]
     out: List[Dict[str, Any]] = []
     for r in rows:
@@ -220,7 +220,7 @@ def _qa_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict[st
                 "Inspected": int(r.get("inspectedQty") or 0),
                 "QA": int(r.get("qaQty") or 0),
                 "Operator": _operator_label(r),
-                "Remark": r.get("scrapRemark") or r.get("reworkRemark") or "",
+                "QA Remarks": r.get("qaRemark") or "",
             }
         )
     return columns, out
@@ -236,7 +236,7 @@ def _scrap_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict
         "Step",
         "Inspected",
         "Scrap",
-        "Remark",
+        "Scrap Remarks",
         "Operator",
         "Machine",
     ]
@@ -252,7 +252,7 @@ def _scrap_export_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict
                 "Step": r.get("workflowLabel") or "",
                 "Inspected": int(r.get("inspectedQty") or 0),
                 "Scrap": int(r.get("scrapQty") or 0),
-                "Remark": r.get("scrapRemark") or r.get("reworkRemark") or "",
+                "Scrap Remarks": r.get("scrapRemark") or "",
                 "Operator": _operator_label(r),
                 "Machine": r.get("machineName") or "",
             }

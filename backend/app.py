@@ -32,6 +32,17 @@ def create_app() -> Flask:
 
     seed_reports_store_from_bundle_if_needed()
 
+    from .overview_report_bootstrap import ensure_overview_reports
+
+    try:
+        ensure_overview_reports()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Overview report bootstrap failed: %s", exc
+        )
+
     from .api import api_bp
 
     app.register_blueprint(api_bp, url_prefix="/api")

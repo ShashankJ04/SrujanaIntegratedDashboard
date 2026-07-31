@@ -30,12 +30,11 @@ def _store_path() -> str:
 
 
 def seed_reports_store_from_bundle_if_needed() -> None:
-    """PyInstaller: sync ``data/reports.json`` next to the exe with bundled definitions.
+    """Optional one-time seed from a PyInstaller bundle (if data was ever packed).
 
-    Behavior for packaged runs:
-    - Missing file -> copy full bundle once.
-    - Invalid/corrupt file -> replace with bundle.
-    - Existing valid file -> leave untouched (no merge rewrite).
+    Operational data normally lives outside the exe (APP_DATA_DIR / REPORTS_STORE_FILE
+    next to Operations.exe). If no bundle copy exists, this is a no-op — runtime
+    files under APP_DATA_DIR are used as-is.
     """
     if not getattr(sys, "frozen", False):
         return
@@ -44,9 +43,7 @@ def seed_reports_store_from_bundle_if_needed() -> None:
         return
     bundled_path = Path(meipass) / "data" / "reports.json"
     if not bundled_path.is_file():
-        logger.warning(
-            "PyInstaller bundle has no data/reports.json — add ('data','data') to run.spec datas."
-        )
+        # Expected: data is not packaged; app reads APP_DATA_DIR at runtime.
         return
     dest_path = Path(Config.REPORTS_STORE_FILE)
     try:
@@ -746,3 +743,154 @@ def delete_report(report_id: str) -> None:
     if len(store["reports"]) == initial:
         raise ValueError("Report not found")
     _write_store(store)
+
+
+def bundled_catalog_path() -> str:
+    """Path to the shipped reports catalog (repo data/reports.json or PyInstaller bundle)."""
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            bundled = Path(meipass) / "data" / "reports.json"
+            if bundled.is_file():
+                return str(bundled)
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "data", "reports.json")
+
+
+def overview_reports_seed_path() -> str:
+    """Immutable seed for overview-linked reports (separate from runtime reports.json)."""
+    candidates: List[Path] = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "data" / "overview_reports_seed.json")
+    repo_base = Path(__file__).resolve().parent.parent / "data" / "overview_reports_seed.json"
+    candidates.append(repo_base)
+    try:
+        app_data = Path(getattr(Config, "APP_DATA_DIR", "") or "")
+        if str(app_data).strip():
+            candidates.append(app_data / "overview_reports_seed.json")
+    except Exception:
+        pass
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return str(candidates[0])
+
+
+def load_overview_reports_seed() -> Dict[str, Any]:
+    path = overview_reports_seed_path()
+    if not os.path.isfile(path):
+        logger.warning("Overview reports seed file not found at %s", path)
+        return {"groups": [], "reports": []}
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+        if not content:
+            return {"groups": [], "reports": []}
+        parsed = json.loads(content)
+    return {
+        "groups": parsed.get("groups") or [],
+        "reports": _normalize_reports(parsed.get("reports") or []),
+    }
+
+
+def load_reports_catalog() -> Dict[str, Any]:
+    path = bundled_catalog_path()
+    if not os.path.isfile(path):
+        return {"groups": [], "reports": []}
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+        if not content:
+            return {"groups": [], "reports": []}
+        parsed = json.loads(content)
+    return {
+        "groups": parsed.get("groups") or [],
+        "reports": _normalize_reports(parsed.get("reports") or []),
+    }
+
+
+def ensure_group_by_id(group_id: str, name: str) -> bool:
+    """Create a report group with a fixed id when missing. Returns True if created."""
+    gid = str(group_id or "").strip()
+    label = str(name or "").strip()
+    if not gid or not label:
+        return False
+    store = _read_store()
+    if any(g.get("id") == gid for g in store["groups"]):
+        return False
+    now = _iso_now()
+    store["groups"].append({
+        "id": gid,
+        "name": label,
+        "createdAt": now,
+        "updatedAt": now,
+    })
+    _write_store(store)
+    return True
+
+
+def _catalog_report_entry(
+    report: Dict[str, Any],
+    report_by_id: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    handler_key = str(report.get("handler") or "").strip()
+    query_template = str(report.get("queryTemplate") or "").strip()
+    if handler_key:
+        if handler_key not in BUILTIN_REPORT_HANDLERS:
+            handler_key = ""
+    if not handler_key and not query_template:
+        raise ValueError(f"Catalog report {report.get('id')} has no query or handler")
+
+    if handler_key:
+        report_vars = list(report.get("variables") or _default_variables_for_handler(handler_key))
+    else:
+        report_vars = list(report.get("variables") or _extract_variables(query_template))
+
+    normalized_drilldowns = _normalize_drilldowns(
+        report,
+        report_by_id,
+        source_report_vars=report_vars,
+    )
+    now = _iso_now()
+    entry: Dict[str, Any] = {
+        "id": str(report["id"]),
+        "groupId": str(report.get("groupId") or "").strip(),
+        "name": str(report.get("name") or "").strip(),
+        "queryTemplate": query_template,
+        "variables": report_vars,
+        "pinned": bool(report.get("pinned", False)),
+        "createdAt": str(report.get("createdAt") or now),
+        "updatedAt": now,
+    }
+    if handler_key:
+        entry["handler"] = handler_key
+    filter_col = _normalize_filter_column(report.get("filterColumn"))
+    if filter_col:
+        entry["filterColumn"] = filter_col
+    no_fmt = _normalize_no_format_columns(report.get("noFormatColumns"))
+    if no_fmt:
+        entry["noFormatColumns"] = no_fmt
+    if normalized_drilldowns:
+        entry["drilldowns"] = normalized_drilldowns
+    return entry
+
+
+def upsert_catalog_report(
+    report: Dict[str, Any],
+    report_by_id: Dict[str, Dict[str, Any]],
+) -> bool:
+    """Insert a catalog report by id when missing. Returns True if created."""
+    rid = str(report.get("id") or "").strip()
+    if not rid or get_report_by_id(rid):
+        return False
+
+    group_id = str(report.get("groupId") or "").strip()
+    if not group_id:
+        raise ValueError(f"Catalog report {rid} is missing groupId")
+
+    entry = _catalog_report_entry(report, report_by_id)
+    store = _read_store()
+    store["reports"].append(entry)
+    _write_store(store)
+    report_by_id[rid] = entry
+    return True

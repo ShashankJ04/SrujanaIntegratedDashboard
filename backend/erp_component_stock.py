@@ -21,6 +21,7 @@ LW_FG_NEXT_STAGES = (
     LW_FG_STAGE_ID + 300,
 )
 LW_WHITELIST_ERP_PLANT_ID = int(getattr(Config, "LW_WHITELIST_ERP_PLANT_ID", 2))
+LW_WHITELIST_ERP_PLANT_IDS = (1, 2)
 LW_WHITELIST_PART_INSPECTION_STAGE_ID = int(
     getattr(Config, "LW_WHITELIST_PART_INSPECTION_STAGE_ID", 19)
 )
@@ -124,6 +125,55 @@ def fetch_lot_inventory(
     ]
 
 
+def fetch_lot_inventory_plants(
+    comp_id: int,
+    plant_ids: Sequence[int],
+    cursor: Any = None,
+    *,
+    next_stages: Optional[Sequence[int]] = None,
+) -> List[Dict[str, Any]]:
+    """Lot inventory grouped by lot number and plant (whitelist units 1+2)."""
+    plants = tuple(int(p) for p in plant_ids if p is not None)
+    if not plants:
+        return []
+    stages = tuple(next_stages or LW_FG_NEXT_STAGES)
+    plant_placeholders = ", ".join(["%s"] * len(plants))
+    stage_placeholders = ", ".join(["%s"] * len(stages))
+    sql = f"""
+        SELECT
+            CT_LOT_DC AS lot_no,
+            CT_PLANTID AS plant_id,
+            COALESCE(SUM(
+                CASE
+                    WHEN CT_MOVEMENT = 'I' THEN CT_QTY
+                    WHEN CT_MOVEMENT = 'O' THEN -CT_QTY
+                END
+            ), 0) AS qty
+        FROM comp_transaction
+        WHERE CT_COMPID = %s
+          AND CT_PLANTID IN ({plant_placeholders})
+          AND CT_NEXTSTAGE IN ({stage_placeholders})
+        GROUP BY CT_LOT_DC, CT_PLANTID
+        HAVING qty > 0
+        ORDER BY CT_LOT_DC, CT_PLANTID
+    """
+    params: Tuple[Any, ...] = (comp_id, *plants, *stages)
+    if cursor is not None:
+        cursor.execute(sql, params)
+        rows = cursor.fetchall() or []
+    else:
+        rows = fetch_all(sql, params)
+    return [
+        {
+            "lotNo": str(r.get("lot_no") or "").strip(),
+            "availableQty": int(float(r.get("qty") or 0)),
+            "plantId": int(r.get("plant_id") or 0),
+        }
+        for r in rows
+        if str(r.get("lot_no") or "").strip() and int(r.get("plant_id") or 0) > 0
+    ]
+
+
 def lot_inventory_map(
     comp_id: int,
     plant_id: int = LW_ERP_PLANT_ID,
@@ -148,13 +198,12 @@ def validate_lot_lines(
     next_stages: Optional[Sequence[int]] = None,
 ) -> None:
     comp_id = resolve_comp_id(part_number, cursor)
-    inv = lot_inventory_map(
-        comp_id, plant_id, cursor, next_stages=next_stages
-    )
     for line in lines:
         lot_no = str(
             line.get("sourceLotNo")
             or line.get("source_lot_no")
+            or line.get("lotNo")
+            or line.get("lot_no")
             or ""
         ).strip()
         if not lot_no:
@@ -163,9 +212,17 @@ def validate_lot_lines(
         qa = int(line.get("qaQty") or line.get("qa_qty") or 0)
         if insp <= 0 and qa <= 0:
             continue
+        line_plant = line.get("plantId") or line.get("plant_id")
+        line_plant_id = int(line_plant) if line_plant is not None else plant_id
+        inv = lot_inventory_map(
+            comp_id, line_plant_id, cursor, next_stages=next_stages
+        )
         available = inv.get(lot_no)
         if available is None:
-            raise ValueError(f"Lot {lot_no} has no available stock for part {part_number}")
+            raise ValueError(
+                f"Lot {lot_no} has no available stock for part {part_number} "
+                f"in plant {line_plant_id}"
+            )
         if insp > available:
             raise ValueError(
                 f"Inspected QTY ({insp}) exceeds available stock ({available}) "
@@ -624,7 +681,7 @@ def whitelist_pack_inward(
         raise ValueError("Lot number and quantity are required for whitelist pack inward")
     op_stage = LW_WHITELIST_PACK_INWARD_OP_STAGE
     next_stage = LW_WHITELIST_PACK_INWARD_NEXT_STAGE
-    stock_plant = LW_WHITELIST_ERP_PLANT_ID
+    stock_plant = int(plant_id)
     _insert_inward_transaction(
         cursor,
         comp_id=comp_id,

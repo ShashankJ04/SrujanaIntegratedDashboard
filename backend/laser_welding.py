@@ -44,6 +44,18 @@ def _line_ot_flag(line: Dict[str, Any], session_ot: str) -> str:
     return _normalize_ot_flag(session_ot)
 
 
+def _require_line_remarks(
+    qa: int,
+    scrap: int,
+    extras: Dict[str, Any],
+    context: str,
+) -> None:
+    if scrap > 0 and not extras.get("scrap_remark"):
+        raise ValueError(f"Scrap remarks are required when scrap > 0 ({context})")
+    if qa > 0 and not extras.get("qa_remark"):
+        raise ValueError(f"QA remarks are required when QA > 0 ({context})")
+
+
 def _remark_or_none(value: Any) -> Optional[str]:
     text = str(value or "").strip()
     return text if text else None
@@ -52,10 +64,14 @@ def _remark_or_none(value: Any) -> Optional[str]:
 def _line_extras_from_item(item: Dict[str, Any]) -> Dict[str, Any]:
     scrap = int(item.get("scrapQty") or item.get("scrap_qty") or 0)
     rework = int(item.get("reworkQty") or item.get("rework_qty") or 0)
+    qa = int(item.get("qaQty") or item.get("qa_qty") or 0)
     return {
         "scrap_remark": _remark_or_none(
             item.get("scrapRemark") or item.get("scrap_remark")
         ) if scrap > 0 else None,
+        "qa_remark": _remark_or_none(
+            item.get("qaRemark") or item.get("qa_remark")
+        ) if qa > 0 else None,
         "rework_remark": _remark_or_none(
             item.get("reworkRemark") or item.get("rework_remark")
         ) if rework > 0 else None,
@@ -255,6 +271,52 @@ def _erp_plant_for_part(part_number: str) -> int:
     return erp_stock.LW_ERP_PLANT_ID
 
 
+def _whitelist_erp_plant_ids() -> Tuple[int, ...]:
+    return erp_stock.LW_WHITELIST_ERP_PLANT_IDS
+
+
+def _resolve_whitelist_plant_id(
+    line: Optional[Dict[str, Any]] = None,
+    lot_row: Optional[Dict[str, Any]] = None,
+) -> int:
+    if line:
+        raw = line.get("plantId") or line.get("plant_id")
+        if raw is not None:
+            return int(raw)
+    if lot_row and lot_row.get("plant_id") is not None:
+        return int(lot_row["plant_id"])
+    return erp_stock.LW_WHITELIST_ERP_PLANT_ID
+
+
+def _resolve_whitelist_plant_for_lot_stock(
+    cursor: Any,
+    comp_id: int,
+    lot_no: str,
+    required_qty: int,
+    next_stages: Tuple[int, ...],
+) -> int:
+    """Resolve ERP plant for a whitelist lot when plant_id was not stored (legacy drafts)."""
+    lot_no = str(lot_no or "").strip()
+    rows = [
+        r
+        for r in erp_stock.fetch_lot_inventory_plants(
+            comp_id,
+            _whitelist_erp_plant_ids(),
+            cursor,
+            next_stages=next_stages,
+        )
+        if str(r.get("lotNo") or "").strip() == lot_no
+    ]
+    if not rows:
+        raise ValueError(f"Lot {lot_no} has no available whitelist stock")
+    sufficient = [
+        r for r in rows if int(r.get("availableQty") or 0) >= int(required_qty or 0)
+    ]
+    pick_from = sufficient if sufficient else rows
+    pick_from.sort(key=lambda r: int(r.get("availableQty") or 0), reverse=True)
+    return int(pick_from[0]["plantId"])
+
+
 def _parse_date(value: Any) -> Optional[str]:
     """Parse dd-mm-yyyy or yyyy-mm-dd to yyyy-mm-dd."""
     raw = str(value or "").strip()
@@ -381,6 +443,7 @@ def _insert_line_row(
     scrap_qty: int = 0,
     rework_qty: int = 0,
     scrap_remark: Optional[str] = None,
+    qa_remark: Optional[str] = None,
     rework_remark: Optional[str] = None,
     operator_ids: Optional[str] = None,
     machine_id: Optional[int] = None,
@@ -394,9 +457,9 @@ def _insert_line_row(
         INSERT INTO laser_welding_line (
             part_number, lot_id, child_lot_id, bom_id, line_type, source_lot_no,
             production_date, inspected_qty, qa_qty, scrap_qty, rework_qty,
-            scrap_remark, rework_remark, operator_ids, machine_id,
+            scrap_remark, qa_remark, rework_remark, operator_ids, machine_id,
             time_taken_minutes, ot_flag, cd_line_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             part_number,
@@ -411,6 +474,7 @@ def _insert_line_row(
             int(scrap_qty or 0),
             int(rework_qty or 0),
             scrap_remark,
+            qa_remark,
             rework_remark,
             operator_ids or "",
             machine_id,
@@ -694,6 +758,7 @@ def _line_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "scrapQty": int(row.get("scrap_qty") or 0),
         "reworkQty": int(row.get("rework_qty") or 0),
         "scrapRemark": str(row.get("scrap_remark") or "").strip(),
+        "qaRemark": str(row.get("qa_remark") or "").strip(),
         "reworkRemark": str(row.get("rework_remark") or "").strip(),
         "operatorId": op_fields["operatorId"],
         "operatorIds": op_fields["operatorIds"],
@@ -735,6 +800,7 @@ def _lot_to_dict(row: Dict[str, Any], lines: Optional[List[Dict[str, Any]]] = No
         "operatorName": first_op.get("operatorName") if first_op else "",
         "operatorNames": first_op.get("operatorNames") if first_op else "",
         "newLotNo": row.get("new_lot_no"),
+        "plantId": int(row["plant_id"]) if row.get("plant_id") is not None else None,
         "workDate": work_date_str,
         "totalInwarded": int(row.get("total_inwarded") or 0),
         "totalQa": int(row.get("total_qa") or 0),
@@ -794,12 +860,13 @@ def _get_or_add_part_inspection_lot(
     qa: int,
     scrap: int,
     processed_by: Optional[int],
+    plant_id: Optional[int] = None,
 ) -> int:
     """Create or extend laser_welding_lot using the FG source lot number as new_lot_no."""
     okayed = inspected - qa - scrap
     inwarded = okayed + scrap
     cursor.execute(
-        "SELECT lot_id, part_number FROM laser_welding_lot WHERE new_lot_no = %s FOR UPDATE",
+        "SELECT lot_id, part_number, plant_id FROM laser_welding_lot WHERE new_lot_no = %s FOR UPDATE",
         (source_lot_no,),
     )
     existing = cursor.fetchone()
@@ -809,6 +876,19 @@ def _get_or_add_part_inspection_lot(
             raise ValueError(
                 f"Lot {source_lot_no} is already tracked for a different part in Laser Welding"
             )
+        existing_plant = existing.get("plant_id")
+        if plant_id is not None:
+            incoming_plant = int(plant_id)
+            if existing_plant is not None and int(existing_plant) != incoming_plant:
+                raise ValueError(
+                    f"Lot {source_lot_no} is already tracked from Unit {int(existing_plant)}; "
+                    f"cannot merge stock from Unit {incoming_plant}"
+                )
+            if existing_plant is None:
+                cursor.execute(
+                    "UPDATE laser_welding_lot SET plant_id = %s WHERE lot_id = %s",
+                    (incoming_plant, lot_id),
+                )
         cursor.execute(
             """
             UPDATE laser_welding_lot SET
@@ -828,8 +908,8 @@ def _get_or_add_part_inspection_lot(
         INSERT INTO laser_welding_lot (
             part_number, new_lot_no, work_date,
             total_inwarded, total_qa, total_okayed, scrap,
-            processed_at, processed_by, qa_approved_at, qa_approved_by, created_by
-        ) VALUES (%s, %s, %s, %s, 0, %s, %s, NOW(), %s, NOW(), %s, %s)
+            plant_id, processed_at, processed_by, qa_approved_at, qa_approved_by, created_by
+        ) VALUES (%s, %s, %s, %s, 0, %s, %s, %s, NOW(), %s, NOW(), %s, %s)
         """,
         (
             part,
@@ -838,6 +918,7 @@ def _get_or_add_part_inspection_lot(
             inwarded,
             okayed,
             scrap,
+            int(plant_id) if plant_id is not None else None,
             processed_by,
             processed_by,
             processed_by,
@@ -983,6 +1064,7 @@ def _insert_part_inspection_line(
     operator_id: int,
     time_taken_minutes: int,
     scrap_remark: Optional[str] = None,
+    qa_remark: Optional[str] = None,
     rework_remark: Optional[str] = None,
     rework_qty: int = 0,
     ot_flag: str = "N",
@@ -1001,6 +1083,7 @@ def _insert_part_inspection_line(
         scrap_qty=scrap,
         rework_qty=rework_qty,
         scrap_remark=scrap_remark,
+        qa_remark=qa_remark,
         rework_remark=rework_remark,
         operator_ids=str(operator_id),
         time_taken_minutes=time_taken_minutes,
@@ -1023,6 +1106,10 @@ def _validate_line(item: Dict[str, Any], *, require_lot: bool = True) -> Dict[st
         raise ValueError(f"Inspected QTY cannot exceed No of Comp for lot {lot_no}")
     prod_date = _parse_date(item.get("productionDate"))
     extras = _line_extras_from_item(item)
+    if scrap > 0 and not extras["scrap_remark"]:
+        raise ValueError(f"Scrap remarks are required when scrap > 0 for lot {lot_no or '(line)'}")
+    if qa > 0 and not extras["qa_remark"]:
+        raise ValueError(f"QA remarks are required when QA > 0 for lot {lot_no or '(line)'}")
     out = {
         "sourceLotNo": lot_no,
         "productionDate": prod_date,
@@ -1031,9 +1118,13 @@ def _validate_line(item: Dict[str, Any], *, require_lot: bool = True) -> Dict[st
         "scrapQty": scrap,
         "targetLotId": int(item["targetLotId"]) if item.get("targetLotId") else None,
         "scrapRemark": extras["scrap_remark"],
+        "qaRemark": extras["qa_remark"],
         "reworkRemark": extras["rework_remark"],
         "reworkQty": extras["rework_qty"],
     }
+    plant_raw = item.get("plantId") or item.get("plant_id")
+    if plant_raw is not None:
+        out["plantId"] = int(plant_raw)
     if extras["ot_flag"] is not None:
         out["otFlag"] = extras["ot_flag"]
     pack_qty = int(item.get("packQty") or item.get("pack_qty") or 0)
@@ -1219,7 +1310,7 @@ def get_parts(mode: Optional[str] = None) -> List[Dict[str, str]]:
             )
         return result
 
-    whitelist_plant_id = erp_stock.LW_WHITELIST_ERP_PLANT_ID
+    whitelist_plant_ids = _whitelist_erp_plant_ids()
     plant_id = erp_stock.LW_ERP_PLANT_ID
     result_by_part: Dict[str, Dict[str, str]] = {}
 
@@ -1267,6 +1358,7 @@ def get_parts(mode: Optional[str] = None) -> List[Dict[str, str]]:
 
     if parent_ids:
         stage_placeholders = _part_inspection_stage_placeholders()
+        wl_plant_ph = ", ".join(["%s"] * len(whitelist_plant_ids))
         sql_pi = f"""
             SELECT TRIM(c.CO_PARTNO) AS part_no, TRIM(c.CO_PARTNAME) AS part_name
             FROM components c
@@ -1276,7 +1368,7 @@ def get_parts(mode: Optional[str] = None) -> List[Dict[str, str]]:
                 SELECT 1
                 FROM comp_transaction ct
                 WHERE ct.CT_COMPID = c.CO_ID
-                  AND ct.CT_PLANTID = %s
+                  AND ct.CT_PLANTID IN ({wl_plant_ph})
                   AND ct.CT_NEXTSTAGE IN ({stage_placeholders})
                 GROUP BY ct.CT_LOT_DC
                 HAVING SUM(
@@ -1291,7 +1383,7 @@ def get_parts(mode: Optional[str] = None) -> List[Dict[str, str]]:
         rows_pi = fetch_all(
             sql_pi,
             parent_ids
-            + (whitelist_plant_id,)
+            + whitelist_plant_ids
             + erp_stock.LW_WHITELIST_PART_INSPECTION_NEXT_STAGES,
         )
         for r in rows_pi:
@@ -1330,23 +1422,29 @@ def get_source_lots(part_number: str) -> Dict[str, Any]:
         return {"boMode": True, "availableQty": qty, "lots": []}
     _, next_stages = _erp_stages_for_part(part)
     comp_id = erp_stock.resolve_comp_id(part)
-    plant_id = _erp_plant_for_part(part)
-    rows = erp_stock.fetch_lot_inventory(
-        comp_id, plant_id, next_stages=next_stages
-    )
+    if _is_part_inspection_part(part):
+        rows = erp_stock.fetch_lot_inventory_plants(
+            comp_id, _whitelist_erp_plant_ids(), next_stages=next_stages
+        )
+    else:
+        plant_id = _erp_plant_for_part(part)
+        rows = erp_stock.fetch_lot_inventory(
+            comp_id, plant_id, next_stages=next_stages
+        )
     lots = []
     for r in rows:
         avail = r["availableQty"]
         if avail <= 0:
             continue
-        lots.append(
-            {
-                "lotNo": r["lotNo"],
-                "availableQty": avail,
-                "noOfComp": avail,
-                "productionDate": "",
-            }
-        )
+        lot_entry = {
+            "lotNo": r["lotNo"],
+            "availableQty": avail,
+            "noOfComp": avail,
+            "productionDate": "",
+        }
+        if r.get("plantId") is not None:
+            lot_entry["plantId"] = int(r["plantId"])
+        lots.append(lot_entry)
     return {"boMode": False, "availableQty": 0, "lots": lots}
 
 
@@ -2157,41 +2255,57 @@ def inspect_production(
         stage_id, next_stages = _erp_stages_for_part(part)
         plant_id = _erp_plant_for_part(part)
         comp_id = erp_stock.resolve_comp_id(part, cursor)
-        erp_stock.validate_lot_lines(
-            part,
-            non_zero,
-            plant_id=plant_id,
-            cursor=cursor,
-            next_stages=next_stages,
-        )
-
         if _is_part_inspection_part(part):
-            wl_lot_lines = [
-                {"lotNo": v["sourceLotNo"], "qty": v["inspectedQty"]}
-                for v in non_zero
-            ]
-            erp_stock.whitelist_reduce_stock(
-                cursor,
-                comp_id,
-                plant_id,
-                wl_lot_lines,
-                processed_by,
-            )
             for v in non_zero:
-                qa_qty = int(v["qaQty"])
-                if qa_qty <= 0:
-                    continue
-                erp_stock.fg_segregate(
+                if v.get("plantId") is None:
+                    raise ValueError(
+                        f"Unit (plant) is required for whitelist lot {v['sourceLotNo']}"
+                    )
+            erp_stock.validate_lot_lines(
+                part,
+                non_zero,
+                plant_id=plant_id,
+                cursor=cursor,
+                next_stages=next_stages,
+            )
+            by_plant: Dict[int, List[Dict[str, Any]]] = {}
+            for v in non_zero:
+                pid = _resolve_whitelist_plant_id(v)
+                by_plant.setdefault(pid, []).append(v)
+            for wl_plant_id, plant_lines in by_plant.items():
+                wl_lot_lines = [
+                    {"lotNo": v["sourceLotNo"], "qty": v["inspectedQty"]}
+                    for v in plant_lines
+                ]
+                erp_stock.whitelist_reduce_stock(
                     cursor,
                     comp_id,
-                    plant_id,
-                    v["sourceLotNo"],
-                    qa_qty,
+                    wl_plant_id,
+                    wl_lot_lines,
                     processed_by,
-                    stage_id=erp_stock.LW_WHITELIST_QA_OUTWARD_STAGE_ID,
-                    update_lot_fg=False,
                 )
+                for v in plant_lines:
+                    qa_qty = int(v["qaQty"])
+                    if qa_qty <= 0:
+                        continue
+                    erp_stock.fg_segregate(
+                        cursor,
+                        comp_id,
+                        wl_plant_id,
+                        v["sourceLotNo"],
+                        qa_qty,
+                        processed_by,
+                        stage_id=erp_stock.LW_WHITELIST_QA_OUTWARD_STAGE_ID,
+                        update_lot_fg=False,
+                    )
         else:
+            erp_stock.validate_lot_lines(
+                part,
+                non_zero,
+                plant_id=plant_id,
+                cursor=cursor,
+                next_stages=next_stages,
+            )
             lot_lines = [
                 {
                     "lotNo": v["sourceLotNo"],
@@ -2230,6 +2344,7 @@ def inspect_production(
             qa = int(v["qaQty"])
             scrap = int(v["scrapQty"])
             line_ot = _line_ot_flag(v, session_ot)
+            wl_plant_id = _resolve_whitelist_plant_id(v) if _is_part_inspection_part(part) else None
             lot_id = _get_or_add_part_inspection_lot(
                 cursor,
                 part=part,
@@ -2239,6 +2354,7 @@ def inspect_production(
                 qa=qa,
                 scrap=scrap,
                 processed_by=processed_by,
+                plant_id=wl_plant_id,
             )
             line_specs.append({
                 "part_number": part,
@@ -2251,6 +2367,7 @@ def inspect_production(
                 "scrap_qty": scrap,
                 "rework_qty": int(v.get("reworkQty") or 0),
                 "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
+                "qa_remark": v.get("qaRemark") if qa > 0 else None,
                 "rework_remark": v.get("reworkRemark"),
                 "operator_ids": draft_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
@@ -2309,44 +2426,69 @@ def process_production(
         stage_id, next_stages = _erp_stages_for_part(part)
         plant_id = _erp_plant_for_part(part)
         comp_id = erp_stock.resolve_comp_id(part, cursor)
-        erp_stock.validate_lot_lines(
-            part,
-            draft_lines,
-            plant_id=plant_id,
-            cursor=cursor,
-            next_stages=next_stages,
-        )
 
         if _is_part_inspection_part(part):
-            wl_lot_lines = [
-                {
-                    "lotNo": str(ln.get("source_lot_no") or "").strip(),
-                    "qty": int(ln.get("inspected_qty") or 0),
-                }
-                for ln in draft_lines
-            ]
-            erp_stock.whitelist_reduce_stock(
-                cursor,
-                comp_id,
-                plant_id,
-                wl_lot_lines,
-                processed_by,
-            )
+            wl_draft_lines: List[Dict[str, Any]] = []
             for ln in draft_lines:
-                qa_qty = int(ln.get("qa_qty") or 0)
-                if qa_qty <= 0:
-                    continue
-                erp_stock.fg_segregate(
+                lot_no = str(ln.get("source_lot_no") or "").strip()
+                insp = int(ln.get("inspected_qty") or 0)
+                wl_plant = _resolve_whitelist_plant_for_lot_stock(
+                    cursor, comp_id, lot_no, insp, next_stages
+                )
+                wl_draft_lines.append({
+                    "sourceLotNo": lot_no,
+                    "inspectedQty": insp,
+                    "qaQty": int(ln.get("qa_qty") or 0),
+                    "plantId": wl_plant,
+                })
+            erp_stock.validate_lot_lines(
+                part,
+                wl_draft_lines,
+                plant_id=plant_id,
+                cursor=cursor,
+                next_stages=next_stages,
+            )
+            by_plant: Dict[int, List[Dict[str, Any]]] = {}
+            for ln, wl in zip(draft_lines, wl_draft_lines):
+                pid = int(wl["plantId"])
+                by_plant.setdefault(pid, []).append(ln)
+            for wl_plant_id, plant_drafts in by_plant.items():
+                wl_lot_lines = [
+                    {
+                        "lotNo": str(ln.get("source_lot_no") or "").strip(),
+                        "qty": int(ln.get("inspected_qty") or 0),
+                    }
+                    for ln in plant_drafts
+                ]
+                erp_stock.whitelist_reduce_stock(
                     cursor,
                     comp_id,
-                    plant_id,
-                    str(ln.get("source_lot_no") or "").strip(),
-                    qa_qty,
+                    wl_plant_id,
+                    wl_lot_lines,
                     processed_by,
-                    stage_id=erp_stock.LW_WHITELIST_QA_OUTWARD_STAGE_ID,
-                    update_lot_fg=False,
                 )
+                for ln in plant_drafts:
+                    qa_qty = int(ln.get("qa_qty") or 0)
+                    if qa_qty <= 0:
+                        continue
+                    erp_stock.fg_segregate(
+                        cursor,
+                        comp_id,
+                        wl_plant_id,
+                        str(ln.get("source_lot_no") or "").strip(),
+                        qa_qty,
+                        processed_by,
+                        stage_id=erp_stock.LW_WHITELIST_QA_OUTWARD_STAGE_ID,
+                        update_lot_fg=False,
+                    )
         else:
+            erp_stock.validate_lot_lines(
+                part,
+                draft_lines,
+                plant_id=plant_id,
+                cursor=cursor,
+                next_stages=next_stages,
+            )
             lot_lines = [
                 {
                     "lotNo": str(ln.get("source_lot_no") or "").strip(),
@@ -2386,6 +2528,13 @@ def process_production(
             insp = int(ln.get("inspected_qty") or 0)
             qa = int(ln.get("qa_qty") or 0)
             scrap = int(ln.get("scrap_qty") or 0)
+            wl_plant_id = (
+                _resolve_whitelist_plant_for_lot_stock(
+                    cursor, comp_id, source_lot_no, insp, next_stages
+                )
+                if _is_part_inspection_part(part)
+                else None
+            )
             lot_id = _get_or_add_part_inspection_lot(
                 cursor,
                 part=part,
@@ -2395,6 +2544,7 @@ def process_production(
                 qa=qa,
                 scrap=scrap,
                 processed_by=processed_by,
+                plant_id=wl_plant_id,
             )
             cursor.execute(
                 """
@@ -3420,10 +3570,11 @@ def _pack_inventory_inward(
         pack_type = "whitelist"
         if pack_qty > 0:
             comp_id = erp_stock.resolve_comp_id(part_no, cursor)
+            pack_plant = _resolve_whitelist_plant_id(lot_row=lot)
             erp_stock.whitelist_pack_inward(
                 cursor,
                 comp_id,
-                erp_stock.LW_WHITELIST_ERP_PLANT_ID,
+                pack_plant,
                 new_lot_no,
                 pack_qty,
                 user_id=packed_by,
@@ -3607,6 +3758,7 @@ def inspect_packing(
                 "qa_qty": qa,
                 "scrap_qty": scrap,
                 "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
+                "qa_remark": v.get("qaRemark") if int(v.get("qaQty") or 0) > 0 else None,
                 "operator_ids": pack_operator_ids,
                 "time_taken_minutes": time_taken_minutes,
                 "ot_flag": line_ot,
@@ -4278,6 +4430,7 @@ def weld_assembly(
 
             welded_by_part[part_no] = welded_by_part.get(part_no, 0) + welded
             extras = _line_extras_from_item({**c, "otFlag": c.get("otFlag") or session_ot})
+            _require_line_remarks(qa, scrap, extras, f"part {part_no}")
 
             consume_specs.append({
                 "part_number": part_no,
@@ -4291,6 +4444,7 @@ def weld_assembly(
                 "scrap_qty": scrap,
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
+                "qa_remark": extras["qa_remark"],
                 "rework_remark": extras["rework_remark"],
                 "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
@@ -4914,6 +5068,7 @@ def weld_rework_assembly(
                 "scrap_qty": scrap,
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
+                "qa_remark": extras["qa_remark"],
                 "rework_remark": extras["rework_remark"],
                 "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
@@ -5460,6 +5615,7 @@ def weld_sub_assembly(
 
             welded_by_part[part_no] = welded_by_part.get(part_no, 0) + welded
             extras = _line_extras_from_item({**c, "otFlag": c.get("otFlag") or session_ot})
+            _require_line_remarks(qa, scrap, extras, f"part {part_no}")
 
             consume_specs.append({
                 "part_number": part_no,
@@ -5473,6 +5629,7 @@ def weld_sub_assembly(
                 "scrap_qty": scrap,
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
+                "qa_remark": extras["qa_remark"],
                 "rework_remark": extras["rework_remark"],
                 "operator_ids": line_operator_ids,
                 "machine_id": line_machine,
@@ -6104,6 +6261,7 @@ def weld_rework_sub_assembly(
                 "scrap_qty": c["scrap"],
                 "rework_qty": extras["rework_qty"],
                 "scrap_remark": extras["scrap_remark"],
+                "qa_remark": extras["qa_remark"],
                 "rework_remark": extras["rework_remark"],
                 "operator_ids": line_operator_ids,
                 "machine_id": int(draft.get("machine_id") or 0) or None,
@@ -6386,6 +6544,7 @@ def _apply_inspection_to_lot(
     ot_flag: str,
     processed_by: Optional[int],
     source_lot_no: Optional[str] = None,
+    qa_remark: Optional[str] = None,
 ) -> Dict[str, Any]:
     target_lot_id = int(target["lot_id"])
     pending = int(target.get("inspection_pending") or 0)
@@ -6422,6 +6581,7 @@ def _apply_inspection_to_lot(
     )
     source_no = source_lot_no or str(target.get("new_lot_no") or "")
     scrap = int(scrap_qty or 0)
+    qa = int(qa_qty or 0)
     return {
         "part_number": part_number or target.get("part_number"),
         "bom_id": bom_id or target.get("bom_id"),
@@ -6434,6 +6594,7 @@ def _apply_inspection_to_lot(
         "scrap_qty": scrap,
         "rework_qty": 0,
         "scrap_remark": scrap_remark if scrap > 0 else None,
+        "qa_remark": qa_remark if qa > 0 else None,
         "rework_remark": None,
         "operator_ids": operator_ids,
         "time_taken_minutes": time_taken_minutes,
@@ -6449,6 +6610,7 @@ def apply_weld_inspection(
     operator_ids: str,
     time_taken_minutes: int,
     scrap_remark: Optional[str] = None,
+    qa_remark: Optional[str] = None,
     processed_by: Optional[int] = None,
     ot_flag: Optional[str] = None,
 ) -> None:
@@ -6463,6 +6625,12 @@ def apply_weld_inspection(
     if not ids_csv:
         raise ValueError("Operator is required")
     session_ot = _normalize_ot_flag(ot_flag)
+    qa = int(qa_qty or 0)
+    scrap = int(scrap_qty or 0)
+    if scrap > 0 and not _remark_or_none(scrap_remark):
+        raise ValueError("Scrap remarks are required when scrap > 0")
+    if qa > 0 and not _remark_or_none(qa_remark):
+        raise ValueError("QA remarks are required when QA > 0")
 
     with get_cursor() as cursor:
         cursor.execute(
@@ -6484,6 +6652,7 @@ def apply_weld_inspection(
             qa_qty=int(qa_qty or 0),
             scrap_qty=int(scrap_qty or 0),
             scrap_remark=scrap_remark,
+            qa_remark=qa_remark,
             operator_ids=ids_csv,
             part_number=str(target.get("part_number") or ""),
             bom_id=str(target.get("bom_id") or "") or None,
@@ -6609,6 +6778,7 @@ def inspect_assembly(
                     "scrap_qty": scrap,
                     "rework_qty": int(v.get("reworkQty") or 0),
                     "scrap_remark": v.get("scrapRemark") if scrap > 0 else None,
+                    "qa_remark": v.get("qaRemark") if int(v.get("qaQty") or 0) > 0 else None,
                     "rework_remark": v.get("reworkRemark"),
                     "operator_ids": draft_operator_ids,
                     "time_taken_minutes": time_taken_minutes,
@@ -6651,9 +6821,22 @@ def _tracking_erp_available(part_no: str, cache: Dict[str, int]) -> int:
             comp_id = erp_stock.resolve_comp_id(part)
             if comp_id:
                 _, next_stages = _erp_stages_for_part(part)
-                plant_id = _erp_plant_for_part(part)
-                rows = erp_stock.fetch_lot_inventory(comp_id, plant_id, next_stages=next_stages)
-                qty = sum(int(r.get("availableQty") or 0) for r in rows if int(r.get("availableQty") or 0) > 0)
+                if _is_part_inspection_part(part):
+                    rows = erp_stock.fetch_lot_inventory_plants(
+                        comp_id,
+                        _whitelist_erp_plant_ids(),
+                        next_stages=next_stages,
+                    )
+                else:
+                    plant_id = _erp_plant_for_part(part)
+                    rows = erp_stock.fetch_lot_inventory(
+                        comp_id, plant_id, next_stages=next_stages
+                    )
+                qty = sum(
+                    int(r.get("availableQty") or 0)
+                    for r in rows
+                    if int(r.get("availableQty") or 0) > 0
+                )
     except (ValueError, TypeError):
         qty = 0
     cache[part] = max(0, qty)
@@ -7307,6 +7490,7 @@ def _history_item_from_row(
         "scrapQty": scrap,
         "reworkQty": rework,
         "scrapRemark": str(r.get("scrap_remark") or "").strip(),
+        "qaRemark": str(r.get("qa_remark") or "").strip(),
         "reworkRemark": str(r.get("rework_remark") or "").strip(),
         "operatorId": op_fields["operatorId"],
         "operatorIds": op_fields["operatorIds"],
@@ -7549,6 +7733,7 @@ def get_action_history(
             ln.scrap_qty,
             ln.rework_qty,
             ln.scrap_remark,
+            ln.qa_remark,
             ln.rework_remark,
             ln.time_taken_minutes,
             ln.ot_flag,
@@ -8068,8 +8253,43 @@ def get_stock_report(
     }
 
 
-def _report_lines_base_sql() -> str:
-    return """
+def _report_lines_base_sql(
+    *,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    include_supplier: bool = True,
+) -> str:
+    supplier_join = ""
+    if include_supplier and date_from and date_to:
+        supplier_join = """
+        LEFT JOIN (
+            SELECT cid.CD_LOTNO, MIN(sup.ss_Name) AS supplier_name
+            FROM comp_inwarddetails cid
+            INNER JOIN comp_inwardmaster cim ON cim.CM_ID = cid.CD_CMID
+            INNER JOIN supplier sup ON sup.ss_Id = cim.CM_SUPPLIERID
+            WHERE cid.CD_LOTNO IN (
+                SELECT DISTINCT ln2.source_lot_no
+                FROM laser_welding_line ln2
+                WHERE ln2.production_date >= %s
+                  AND ln2.production_date <= %s
+                  AND ln2.source_lot_no IS NOT NULL
+                  AND ln2.source_lot_no <> ''
+            )
+            GROUP BY cid.CD_LOTNO
+        ) lot_sup ON lot_sup.CD_LOTNO = ln.source_lot_no
+        """
+    elif include_supplier:
+        supplier_join = """
+        LEFT JOIN (
+            SELECT cid.CD_LOTNO, MIN(sup.ss_Name) AS supplier_name
+            FROM comp_inwarddetails cid
+            INNER JOIN comp_inwardmaster cim ON cim.CM_ID = cid.CD_CMID
+            INNER JOIN supplier sup ON sup.ss_Id = cim.CM_SUPPLIERID
+            GROUP BY cid.CD_LOTNO
+        ) lot_sup ON lot_sup.CD_LOTNO = ln.source_lot_no
+        """
+    supplier_col = "COALESCE(lot_sup.supplier_name, '') AS supplier_name" if include_supplier else "'' AS supplier_name"
+    return f"""
         SELECT
             ln.line_id,
             ln.production_date,
@@ -8081,6 +8301,7 @@ def _report_lines_base_sql() -> str:
             ln.scrap_qty,
             ln.rework_qty,
             ln.scrap_remark,
+            ln.qa_remark,
             ln.rework_remark,
             ln.time_taken_minutes,
             ln.ot_flag,
@@ -8095,19 +8316,13 @@ def _report_lines_base_sql() -> str:
             b.product_name,
             COALESCE(c.CU_Name, '') AS customer_name,
             COALESCE(m.MCM_Name, '') AS machine_name,
-            COALESCE(lot_sup.supplier_name, '') AS supplier_name
+            {supplier_col}
         FROM laser_welding_line ln
         LEFT JOIN laser_welding_lot l ON l.lot_id = ln.lot_id
         LEFT JOIN bom b ON b.bom_id = COALESCE(l.bom_id, ln.bom_id) AND b.is_latest_version = 'Y'
         LEFT JOIN customer c ON c.CU_Id = b.cust_id
         LEFT JOIN machinemaster m ON m.MCM_Id = ln.machine_id
-        LEFT JOIN (
-            SELECT cid.CD_LOTNO, MIN(sup.ss_Name) AS supplier_name
-            FROM comp_inwarddetails cid
-            INNER JOIN comp_inwardmaster cim ON cim.CM_ID = cid.CD_CMID
-            INNER JOIN supplier sup ON sup.ss_Id = cim.CM_SUPPLIERID
-            GROUP BY cid.CD_LOTNO
-        ) lot_sup ON lot_sup.CD_LOTNO = ln.source_lot_no
+        {supplier_join}
     """
 
 
@@ -8140,6 +8355,7 @@ def _report_entry_from_line(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         work_date_iso = _parse_date(pd) or ""
 
     row_class = _history_row_class(wf_step, part_no, bom_no)
+    op_fields = _line_operator_fields(r)
     return {
         "lineId": int(r["line_id"]),
         "workDate": work_date_iso,
@@ -8161,11 +8377,12 @@ def _report_entry_from_line(r: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "scrapQty": int(r.get("scrap_qty") or 0),
         "reworkQty": int(r.get("rework_qty") or 0),
         "scrapRemark": str(r.get("scrap_remark") or "").strip(),
+        "qaRemark": str(r.get("qa_remark") or "").strip(),
         "reworkRemark": str(r.get("rework_remark") or "").strip(),
-        "operatorId": _line_operator_fields(r)["operatorId"],
-        "operatorIds": _line_operator_fields(r)["operatorIds"],
-        "operatorName": _line_operator_fields(r)["operatorName"],
-        "operatorNames": _line_operator_fields(r)["operatorNames"],
+        "operatorId": op_fields["operatorId"],
+        "operatorIds": op_fields["operatorIds"],
+        "operatorName": op_fields["operatorName"],
+        "operatorNames": op_fields["operatorNames"],
         "machineName": str(r.get("machine_name") or "").strip(),
         "timeTakenMinutes": int(r["time_taken_minutes"]) if r.get("time_taken_minutes") is not None else None,
         "otFlag": _normalize_ot_flag(r.get("ot_flag")),
@@ -8182,7 +8399,7 @@ def _report_entry_matches_search(item: Dict[str, Any], search_q: str) -> bool:
             "workflowLabel", "rowClass", "label", "partNo", "bomNo",
             "partName", "productName", "customerName", "lotNo",
             "operatorName", "operatorEcno", "machineName", "lineType",
-            "scrapRemark", "reworkRemark", "supplierName",
+            "scrapRemark", "qaRemark", "reworkRemark", "supplierName",
         )
     ).lower()
     return search_q in hay
@@ -8213,7 +8430,11 @@ def get_qa_history(
     cap = max(1, min(int(limit or 2500), 5000))
 
     rows = fetch_all(
-        _report_lines_base_sql()
+        _report_lines_base_sql(
+            date_from=d_from,
+            date_to=d_to,
+            include_supplier=True,
+        )
         + """
         WHERE ln.production_date >= %s
           AND ln.production_date <= %s
@@ -8230,7 +8451,7 @@ def get_qa_history(
         ORDER BY ln.production_date DESC, ln.line_id DESC
         LIMIT %s
         """,
-        (d_from, d_to, LINE_QA_DISPOSITION, SESSION_SOURCE_LOT, cap),
+        (d_from, d_to, d_from, d_to, LINE_QA_DISPOSITION, SESSION_SOURCE_LOT, cap),
     )
 
     out: List[Dict[str, Any]] = []
@@ -8280,7 +8501,11 @@ def get_scrap_history(
     cap = max(1, min(int(limit or 2500), 5000))
 
     rows = fetch_all(
-        _report_lines_base_sql()
+        _report_lines_base_sql(
+            date_from=d_from,
+            date_to=d_to,
+            include_supplier=True,
+        )
         + """
         WHERE ln.production_date >= %s
           AND ln.production_date <= %s
@@ -8296,7 +8521,7 @@ def get_scrap_history(
         ORDER BY ln.production_date DESC, ln.line_id DESC
         LIMIT %s
         """,
-        (d_from, d_to, SESSION_SOURCE_LOT, cap),
+        (d_from, d_to, d_from, d_to, SESSION_SOURCE_LOT, cap),
     )
 
     out: List[Dict[str, Any]] = []

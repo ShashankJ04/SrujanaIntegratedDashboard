@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build: pyinstaller run.spec
-# Place a `.env` file next to the generated executable (same folder as run.exe).
+# Place a `.env` file next to the generated executable (same folder as Operations.exe).
 #
-# Shipped via datas: templates/, static/, data/ only.
+# Shipped via datas: templates/, static/ only (UI assets).
+# Operational JSON (reports, rbac, etc.) is NOT bundled — at runtime the exe reads
+# APP_DATA_DIR from .env (e.g. .\data next to the exe).
 # NOT bundled (PM date OCR / ML dev — other branch): models/, notebooks/, tests/,
 # pm_date_training.zip, backend/pm_date_*.py (not imported by run.py → app).
 
@@ -25,7 +27,7 @@ a = Analysis(
     ['run.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('templates', 'templates'), ('static', 'static'), ('data', 'data')],
+    datas=[('templates', 'templates'), ('static', 'static'), ('data/overview_reports_seed.json', 'data')],
     hiddenimports=['dotenv', 'waitress', 'pymysql'],
     hookspath=[],
     hooksconfig={},

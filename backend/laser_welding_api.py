@@ -32,6 +32,10 @@ def _apply_weld_parent_inspection(body: dict, result: dict, user: dict) -> None:
     weld_qty = int(body.get("weldQty") or body.get("reworkQty") or 0)
     if qa_qty + scrap_qty > weld_qty:
         raise ValueError("QA + Scrap cannot exceed weld quantity")
+    if scrap_qty > 0 and not str(body.get("scrapRemark") or "").strip():
+        raise ValueError("Scrap remarks are required when scrap > 0")
+    if qa_qty > 0 and not str(body.get("qaRemark") or "").strip():
+        raise ValueError("QA remarks are required when QA > 0")
     lot_id = result.get("lotId")
     if not lot_id:
         return
@@ -49,6 +53,7 @@ def _apply_weld_parent_inspection(body: dict, result: dict, user: dict) -> None:
         operator_ids=ids_csv,
         time_taken_minutes=inspection_time,
         scrap_remark=str(body.get("scrapRemark") or "").strip() or None,
+        qa_remark=str(body.get("qaRemark") or "").strip() or None,
         processed_by=user.get("userId"),
         ot_flag=body.get("otFlag"),
     )

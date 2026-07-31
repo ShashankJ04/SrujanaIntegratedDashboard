@@ -921,7 +921,7 @@ def get_bom_delivery_kpi(month: int, year: int) -> Dict[str, Any]:
             SELECT
                 COALESCE(SUM(so.QTY), 0) AS total_scheduled,
                 COALESCE(SUM(so.INV_QTY), 0) AS total_delivered
-            FROM erp.sales_order so
+            FROM sales_order so
             INNER JOIN customer c ON c.cu_id = so.CUST_ID
             WHERE so.CATEGORY_ID = 2
               AND so.BOM_NO IS NOT NULL

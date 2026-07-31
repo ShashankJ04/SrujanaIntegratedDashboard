@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_lot (
   rework_pending      INT NOT NULL DEFAULT 0,
   rework_pool         INT NOT NULL DEFAULT 0,
   inspection_pending  INT NOT NULL DEFAULT 0,
+  plant_id            INT NULL,
   processed_at        DATETIME NULL,
   processed_by        INT NULL,
   qa_approved_at      DATETIME NULL,
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_line (
   qa_qty              INT NOT NULL DEFAULT 0,
   scrap_qty           INT NOT NULL DEFAULT 0,
   scrap_remark        VARCHAR(255) NULL,
+  qa_remark           VARCHAR(255) NULL,
   rework_qty          INT NOT NULL DEFAULT 0,
   rework_remark       VARCHAR(255) NULL,
   operator_ids        VARCHAR(500) NOT NULL DEFAULT '',
@@ -76,4 +78,6 @@ CREATE TABLE IF NOT EXISTS lw_re_work_scrap (
 -- UPDATE laser_welding_line SET operator_ids = CAST(operator_id AS CHAR) WHERE (operator_ids IS NULL OR operator_ids = '') AND operator_id IS NOT NULL;
 -- ALTER TABLE laser_welding_line DROP COLUMN operator_id;
 -- ALTER TABLE laser_welding_line MODIFY operator_ids VARCHAR(500) NOT NULL DEFAULT '';
+-- ALTER TABLE laser_welding_line ADD COLUMN qa_remark VARCHAR(255) NULL AFTER scrap_remark;
+-- ALTER TABLE laser_welding_lot ADD COLUMN plant_id INT NULL AFTER inspection_pending;
 

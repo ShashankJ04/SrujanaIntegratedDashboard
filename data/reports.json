@@ -1007,7 +1007,7 @@
       "id": "44f78950-7e3e-46f2-a278-ba88e0c7d8c9",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
       "name": "BOM Dispatch Details",
-      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM erp.sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year}",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year}",
       "variables": [
         "month",
         "year"
@@ -1020,7 +1020,7 @@
       "id": "97e39414-c6d7-4392-aa6f-1972c41cfc1e",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
       "name": "BOM Dispatch Pivot",
-      "queryTemplate": "SELECT C.CU_Name as 'Cumtomer Name',sum(QTY) as 'Schedule Qty',sum(INV_QTY) as 'Dispatched Qty'  \nFROM erp.sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} group by C.CU_Name",
+      "queryTemplate": "SELECT C.CU_Name as 'Cumtomer Name',sum(QTY) as 'Schedule Qty',sum(INV_QTY) as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} group by C.CU_Name",
       "variables": [
         "month",
         "year"
@@ -1053,7 +1053,7 @@
       "id": "e6c36649-266d-4818-a25b-a3ec080f4744",
       "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
       "name": "BOM Dispatch CustomerWise",
-      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM erp.sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} and C.CU_Name = {cust_name}",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} and C.CU_Name = {cust_name}",
       "variables": [
         "month",
         "year",
