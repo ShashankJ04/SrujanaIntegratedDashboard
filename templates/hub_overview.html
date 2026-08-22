@@ -208,7 +208,7 @@
         <div class="ti-card-title">Actual RM Shortage</div>
         <div class="ti-card-subtitle">RM codes below requirement — bar height shows shortage (kgs)</div>
       </div>
-      <div class="ti-card-controls">
+      <div class="ti-card-controls" style="display:flex;align-items:center;gap:10px;">
         <label class="ti-control">
           <span>Show:</span>
           <select id="chart-rm-shortage-mode" class="ti-select ti-select--compact">
@@ -216,6 +216,14 @@
             <option value="all">All Items</option>
           </select>
         </label>
+        <button id="btn-export-rm-shortage" class="ti-btn ti-btn--compact ti-btn--secondary" title="Export all RM shortage items to Excel" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export Excel
+        </button>
       </div>
     </div>
     <div class="ti-card-body ti-card-body--chart">

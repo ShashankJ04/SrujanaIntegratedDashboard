@@ -241,6 +241,89 @@ def dashboard_rm_charts() -> Any:
     return jsonify(data)
 
 
+@api_bp.get("/dashboard/rm-shortage/export")
+def dashboard_rm_shortage_export() -> Any:
+    """Export all actual RM shortage items to Excel."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    data = get_rm_chart_data(limit=5000)
+    items = data.get("rm_shortage_by_material") or []
+
+    shortages = [r for r in items if float(r.get("rm_shortage_actual") or 0) < 0]
+    shortages.sort(key=lambda r: float(r.get("rm_shortage_actual") or 0))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Actual RM Shortage"
+
+    headers = [
+        "S.No.",
+        "RM Code / Material",
+        "Accepted Stock (kgs)",
+        "Production Requirement (kgs)",
+        "Actual Shortage (kgs)",
+    ]
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin", color="E5E7EB"),
+        right=Side(style="thin", color="E5E7EB"),
+        top=Side(style="thin", color="E5E7EB"),
+        bottom=Side(style="thin", color="E5E7EB"),
+    )
+
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(
+            horizontal="center" if col_idx == 1 else "left" if col_idx == 2 else "right",
+            vertical="center",
+        )
+        cell.border = thin_border
+
+    ws.row_dimensions[1].height = 24
+
+    for row_idx, r in enumerate(shortages, 2):
+        ca = float(r.get("current_acceptedqty") or 0)
+        tpr = float(r.get("total_rm_production_requirement") or 0)
+        shortage = abs(float(r.get("rm_shortage_actual") or 0))
+        rm_code = str(r.get("rm_rawmt_part_no") or "").strip()
+
+        row_vals = [row_idx - 1, rm_code, ca, tpr, shortage]
+
+        for col_idx, val in enumerate(row_vals, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = thin_border
+            if col_idx == 1:
+                cell.alignment = Alignment(horizontal="center")
+            elif col_idx == 2:
+                cell.alignment = Alignment(horizontal="left")
+            else:
+                cell.alignment = Alignment(horizontal="right")
+                cell.number_format = "#,##0.00"
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = col[0].column_letter
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="actual_rm_shortage_report.xlsx",
+    )
+
+
+
 @api_bp.get("/dashboard/daily-production-vs-target")
 def dashboard_daily_production_vs_target() -> Any:
     from .production_calendar import get_daily_production_vs_target
