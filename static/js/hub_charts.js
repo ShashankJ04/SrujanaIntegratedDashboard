@@ -47,7 +47,7 @@ const HubCharts = (() => {
   let lastRmShortagePeriod = 'month';
 
   const RM_SHORTAGE_PERIOD_LABELS = {
-    month: 'Month — production calendar net pending requirement, stacked by week (W1–W5)',
+    month: 'Month — total RM shortage (kgs) distributed across weeks W1–W5',
     week_1: 'Week 1 (days 1–7) — production calendar pending vs RM stock',
     week_2: 'Week 2 (days 8–14) — production calendar pending vs RM stock',
     week_3: 'Week 3 (days 15–21) — production calendar pending vs RM stock',
@@ -65,16 +65,65 @@ const HubCharts = (() => {
     'rgba(252, 165, 165, 0.75)',
   ];
 
-  function rmShortageHoverHtml(r) {
+  function rmShortageWeekKgFromReq(r) {
     const wk = r.week_requirement_kg || {};
-    const weekLines = RM_SHORTAGE_WEEK_KEYS.map(
-      (k, i) => `${RM_SHORTAGE_WEEK_LABELS[i]}: ${fmtQty(wk[k] || 0)} kgs`
-    ).join('<br>');
-    return `<b>${r.rm_rawmt_part_no || '–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)} kgs<br>Required: ${fmtQty(r.total_rm_production_requirement)} kgs<br>${weekLines}<br><b>Shortage: ${fmtQty(r.rm_shortage_actual)} kgs</b>`;
+    const shortage = Number(r.rm_shortage_actual) || 0;
+    if (shortage >= 0) return {};
+    const shortageAbs = Math.abs(shortage);
+    const monthReq = Number(r.total_rm_production_requirement) || 0;
+    const weekTotal = RM_SHORTAGE_WEEK_KEYS.reduce((s, k) => s + (Number(wk[k]) || 0), 0);
+    const denom = monthReq > 0 ? monthReq : weekTotal;
+    if (denom <= 0) return {};
+    const out = {};
+    let allocated = 0;
+    RM_SHORTAGE_WEEK_KEYS.forEach((k, i) => {
+      if (i === RM_SHORTAGE_WEEK_KEYS.length - 1) {
+        out[k] = Math.round((shortageAbs - allocated) * 100) / 100;
+      } else {
+        const share = Math.round((shortageAbs * (Number(wk[k]) || 0) / denom) * 100) / 100;
+        out[k] = share;
+        allocated += share;
+      }
+    });
+    return out;
+  }
+
+  function rmShortageWeekKg(r) {
+    const ws = r.week_shortage_kg;
+    if (ws && Object.keys(ws).length) return ws;
+    return rmShortageWeekKgFromReq(r);
+  }
+
+  function rmShortageHoverHtml(r, period) {
+    const shortage = Number(r.rm_shortage_actual) || 0;
+    let body = `<b>${r.rm_rawmt_part_no || '–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)} kgs<br>Required: ${fmtQty(r.total_rm_production_requirement)} kgs<br><b>Shortage: ${fmtQty(shortage)} kgs</b>`;
+    if (period === 'month') {
+      const ws = rmShortageWeekKg(r);
+      const weekLines = RM_SHORTAGE_WEEK_KEYS.map(
+        (k, i) => `${RM_SHORTAGE_WEEK_LABELS[i]}: ${fmtQty(ws[k] || 0)} kgs`
+      ).join('<br>');
+      body += `<br>${weekLines}`;
+    }
+    return body;
   }
 
   function rmShortageCategoryLabels(limited) {
     return limited.map((r) => String(r.rm_rawmt_part_no || '–'));
+  }
+
+  function addRmShortageTotalLabelTrace(traces, labels, displayVals, horizontal) {
+    traces.push({
+      type: 'scatter',
+      mode: 'text',
+      name: '',
+      x: horizontal ? displayVals : labels,
+      y: horizontal ? labels : displayVals,
+      text: displayVals.map(fmtShortageKg),
+      textposition: horizontal ? 'middle right' : 'top center',
+      textfont: { size: 11, color: chartTextColor() },
+      hoverinfo: 'skip',
+      showlegend: false,
+    });
   }
 
   function buildRmShortageWeekStackTraces(limited, labels, horizontal, hovers) {
@@ -92,10 +141,10 @@ const HubCharts = (() => {
       if (horizontal) {
         trace.orientation = 'h';
         trace.y = labels;
-        trace.x = limited.map(r => Number((r.week_requirement_kg || {})[wk]) || 0);
+        trace.x = limited.map((r) => Number(rmShortageWeekKg(r)[wk]) || 0);
       } else {
         trace.x = labels;
-        trace.y = limited.map(r => Number((r.week_requirement_kg || {})[wk]) || 0);
+        trace.y = limited.map((r) => Number(rmShortageWeekKg(r)[wk]) || 0);
       }
       return trace;
     });
@@ -175,12 +224,12 @@ const HubCharts = (() => {
     const limited = showAll ? sorted : sorted.slice(0, 15);
     const useWeekStack = lastRmShortagePeriod === 'month';
     const displayVals = limited.map(r => Math.abs(Number(r.rm_shortage_actual) || 0));
-    const hovers = limited.map(rmShortageHoverHtml);
+    const hovers = limited.map((r) => rmShortageHoverHtml(r, lastRmShortagePeriod));
 
     if (window.Plotly && window.Plotly.purge) window.Plotly.purge(e);
 
     const yAxisCommon = {
-      title: useWeekStack ? 'Requirement (kgs)' : 'Shortage (kgs)',
+      title: 'Shortage (kgs)',
       rangemode: 'tozero',
       tickformat: ',.0f',
       gridcolor: 'rgba(148,163,184,0.08)',
@@ -194,6 +243,7 @@ const HubCharts = (() => {
       const labels = rmShortageCategoryLabels(limited);
       if (useWeekStack) {
         const traces = buildRmShortageWeekStackTraces(limited, labels, true, hovers);
+        addRmShortageTotalLabelTrace(traces, labels, displayVals, true);
         Plotly.newPlot(e, traces, base({
           ...hoverLayout,
           margin: { l: 148, r: 48, t: 52, b: 24 },
@@ -234,6 +284,7 @@ const HubCharts = (() => {
       const labels = rmShortageCategoryLabels(limited);
       if (useWeekStack) {
         const traces = buildRmShortageWeekStackTraces(limited, labels, false, hovers);
+        addRmShortageTotalLabelTrace(traces, labels, displayVals, false);
         Plotly.newPlot(e, traces, base({
           ...hoverLayout,
           margin: { l: 56, r: 24, t: 36, b: 88 },

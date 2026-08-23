@@ -1313,7 +1313,7 @@ def _attach_week_requirement_to_material_items(
     rows: List[Dict[str, Any]],
     week_breakdown_by_rm: Dict[str, Dict[str, float]],
 ) -> None:
-    """Add week_requirement_kg to each material shortage row."""
+    """Add week_requirement_kg and week_shortage_kg to each material shortage row."""
     for item in items:
         rm_code = str(item.get("rm_rawmt_part_no") or "").strip()
         matched: Dict[str, float] = {}
@@ -1324,6 +1324,36 @@ def _attach_week_requirement_to_material_items(
                 matched = week_breakdown_by_rm.get(key, {})
                 break
         item["week_requirement_kg"] = matched
+        item["week_shortage_kg"] = _week_shortage_kg_from_item(item, matched)
+
+
+def _week_shortage_kg_from_item(
+    item: Dict[str, Any],
+    week_requirement: Dict[str, float],
+) -> Dict[str, float]:
+    """Distribute total month shortage (kg) across weeks by requirement share."""
+    shortage = float(item.get("rm_shortage_actual") or 0)
+    if shortage >= 0:
+        return {k: 0.0 for k in RM_SHORTAGE_WEEK_BUCKETS}
+
+    shortage_abs = abs(shortage)
+    month_req = float(item.get("total_rm_production_requirement") or 0)
+    week_req_total = sum(float(week_requirement.get(k, 0) or 0) for k in RM_SHORTAGE_WEEK_BUCKETS)
+    denom = month_req if month_req > 0 else week_req_total
+    if denom <= 0:
+        return {k: 0.0 for k in RM_SHORTAGE_WEEK_BUCKETS}
+
+    keys = list(RM_SHORTAGE_WEEK_BUCKETS.keys())
+    out: Dict[str, float] = {}
+    allocated = 0.0
+    for i, k in enumerate(keys):
+        if i == len(keys) - 1:
+            out[k] = round(max(0.0, shortage_abs - allocated), 2)
+        else:
+            share = round(shortage_abs * (float(week_requirement.get(k, 0) or 0) / denom), 2)
+            out[k] = share
+            allocated += share
+    return out
 
 
 def _week_requirement_breakdown_by_material(

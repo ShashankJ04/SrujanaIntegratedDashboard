@@ -65,42 +65,40 @@
 <!-- ═══ QUANTITY PROGRESS (full width) ═══ -->
 <div class="ti-monitor-row ti-monitor-row--qty">
   <div class="ti-monitor ti-monitor--qty">
-    <div class="ti-monitor-top ti-monitor-top--qty">
-      <span class="ti-monitor-title">Quantity Progress</span>
-    </div>
-    <div class="ti-monitor-metrics ti-monitor-metrics--qty">
-      <div class="ti-monitor-metrics--qty-primary">
-        <div class="ti-monitor-metric-cell">
-          <div class="ti-monitor-metric-label">Planned</div>
-          <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
-        </div>
-        <div class="ti-monitor-metric-cell">
-          <div class="ti-monitor-metric-label">Produced</div>
-          <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
-        </div>
-        <div class="ti-monitor-metric-cell">
-          <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-qty-pending-link" title="Inventory — pending parts only">
-            <div class="ti-monitor-metric-label" title="Balance Production Qty">Balance Qty</div>
-            <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
-          </a>
-        </div>
+    <div class="ti-monitor-qty-grid">
+      <div class="ti-monitor-qty-title">Quantity Progress</div>
+      <div class="ti-monitor-metric-cell">
+        <div class="ti-monitor-metric-label">Planned</div>
+        <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
       </div>
-      <div class="ti-monitor-metrics--qty-derived">
-        <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
-          <div class="ti-monitor-metric-pct" id="mon-actual-produced-pct">–</div>
+      <div class="ti-monitor-metric-cell">
+        <div class="ti-monitor-metric-label">Produced</div>
+        <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
+      </div>
+      <div class="ti-monitor-metric-cell">
+        <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-qty-pending-link" title="Inventory — pending parts only">
+          <div class="ti-monitor-metric-label" title="Balance Production Qty">Balance Qty</div>
+          <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+        </a>
+      </div>
+      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+        <div class="ti-monitor-metric-derived-head">
           <div class="ti-monitor-metric-label">Actual Produced</div>
-          <div class="ti-monitor-metric-value" id="mon-actual-produced-qty">–</div>
+          <span class="ti-monitor-pct" id="mon-actual-produced-pct">–%</span>
         </div>
-        <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
-          <div class="ti-monitor-metric-pct" id="mon-excess-produced-pct">–</div>
-          <a href="/app?section=inventory&rowFilter=excess" class="ti-monitor-metric-stack-link" id="mon-excess-produced-link" title="Inventory — excess production (balance qty &lt; 0 and produced qty &gt; 0)">
-            <div class="ti-monitor-metric-label">Excess Production</div>
-            <div class="ti-monitor-metric-value alert" id="mon-excess-produced-qty">–</div>
-          </a>
+        <div class="ti-monitor-metric-value" id="mon-actual-produced-qty">–</div>
+      </div>
+      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+        <div class="ti-monitor-metric-derived-head">
+          <div class="ti-monitor-metric-label">Excess Production</div>
+          <span class="ti-monitor-pct" id="mon-excess-produced-pct">–%</span>
         </div>
+        <a href="/app?section=inventory&rowFilter=excess" class="ti-monitor-metric-stack-link" id="mon-excess-produced-link" title="Inventory — excess production (balance qty &lt; 0 and produced qty &gt; 0)">
+          <div class="ti-monitor-metric-value alert" id="mon-excess-produced-qty">–</div>
+        </a>
       </div>
     </div>
-    <div class="ti-monitor-progress ti-monitor-progress--qty">
+    <div class="ti-monitor-progress">
       <div class="ti-monitor-bar" id="mon-qty-bar" style="width:0%"></div>
     </div>
   </div>
@@ -212,7 +210,7 @@
     <div class="ti-card-header">
       <div>
         <div class="ti-card-title">Actual RM Shortage</div>
-        <div class="ti-card-subtitle" id="chart-rm-shortage-subtitle">Month shortage — production calendar requirement stacked by week (W1–W5)</div>
+        <div class="ti-card-subtitle" id="chart-rm-shortage-subtitle">Month — total RM shortage (kgs) distributed across weeks W1–W5</div>
       </div>
       <div class="ti-card-controls" style="display:flex;align-items:center;gap:10px;">
         <label class="ti-control">
