@@ -32,7 +32,10 @@ def create_app() -> Flask:
 
     seed_reports_store_from_bundle_if_needed()
 
-    from .overview_report_bootstrap import ensure_overview_reports
+    from .overview_report_bootstrap import (
+        ensure_component_stock_report,
+        ensure_overview_reports,
+    )
 
     try:
         ensure_overview_reports()
@@ -41,6 +44,37 @@ def create_app() -> Flask:
 
         logging.getLogger(__name__).warning(
             "Overview report bootstrap failed: %s", exc
+        )
+
+    try:
+        ensure_component_stock_report()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Component Stock report bootstrap failed: %s", exc
+        )
+
+    try:
+        from .laser_welding import ensure_whitelist_lot_plant_unique
+
+        ensure_whitelist_lot_plant_unique()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "LW lot plant unique migration skipped: %s", exc
+        )
+
+    try:
+        from .models import ensure_dpr_tool_no_column
+
+        ensure_dpr_tool_no_column()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "DPR tool_no column migration skipped: %s", exc
         )
 
     from .api import api_bp
@@ -157,7 +191,7 @@ def create_app() -> Flask:
     VALID_SECTIONS = {
         "overview", "production", "inventory", "maintenance",
         "rm-variance", "rm-correction", "rm-calculator", "reports", "reports-manage",
-        "admin", "dpr", "dispatch-calendar", "production-calendar", "machine-planning",
+        "admin", "dpr",         "dispatch-calendar", "production-calendar", "machine-planning",
         "laser-welding", "production-scheduler",
     }
 
@@ -241,6 +275,8 @@ def create_app() -> Flask:
         extra = {}
         if name == "dpr":
             extra["dpr_edit_allowed"] = is_dpr_editor(user)
+        if name == "overview":
+            extra["has_rept"] = "rept" in perms["access"]
         return render_template(template_name, **extra)
 
     @app.route("/machine/<path:token>")

@@ -1162,10 +1162,11 @@ def assembly_rework_weld() -> Any:
 @require_access("lw")
 def cleaning_rows() -> Any:
     work_date = request.args.get("date", "").strip()
+    scope = request.args.get("scope", "").strip()
     if not work_date:
         return jsonify({"error": "date is required"}), 400
     try:
-        rows = lw.get_cleaning_rows(work_date)
+        rows = lw.get_cleaning_rows(work_date, scope=scope or None)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1178,12 +1179,14 @@ def cleaning_rows() -> Any:
 def cleaning_source_lots() -> Any:
     bom_id = request.args.get("bomId", "").strip()
     sub_assembly_part_no = request.args.get("subAssemblyPartNo", "").strip()
+    step = request.args.get("step", "").strip()
     if not bom_id:
         return jsonify({"error": "bomId is required"}), 400
     try:
         lots = lw.get_cleaning_source_lots(
             bom_id,
             sub_assembly_part_no or None,
+            step=step or None,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -1199,6 +1202,7 @@ def cleaning_pending() -> Any:
     work_date = str(body.get("workDate") or "").strip()
     operator_id = body.get("operatorId")
     sub_assembly_part_no = body.get("subAssemblyPartNo")
+    scope = str(body.get("scope") or body.get("mode") or "").strip()
     if not bom_id:
         return jsonify({"error": "bomId is required"}), 400
     if not work_date:
@@ -1215,6 +1219,7 @@ def cleaning_pending() -> Any:
             work_date=work_date,
             created_by=user.get("userId"),
             sub_assembly_part_no=str(sub_assembly_part_no).strip() if sub_assembly_part_no else None,
+            scope=scope or None,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

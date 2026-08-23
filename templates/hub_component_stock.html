@@ -1,0 +1,95 @@
+<!-- Component Stock — embedded in Overview (ready / in-progress / QA per part) -->
+<div class="ti-cs-page ti-cs-page--overview" id="component-stock-block">
+  <header class="ti-cs-header">
+    <h2 class="ti-cs-title">Component Stock</h2>
+  </header>
+
+  <div class="ti-cs-filters">
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="cs-plant">UNIT</label>
+      <select id="cs-plant" class="ti-input ti-cs-filter-input"></select>
+    </div>
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="cs-partno">PART NUMBER</label>
+      <input type="text" id="cs-partno" class="ti-input ti-cs-filter-input" list="cs-parts-datalist" placeholder="Select part…" autocomplete="off" />
+      <datalist id="cs-parts-datalist"></datalist>
+    </div>
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="cs-partname">PART NAME</label>
+      <input type="text" id="cs-partname" class="ti-input ti-cs-filter-input" disabled />
+    </div>
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="cs-class">CLASS</label>
+      <input type="text" id="cs-class" class="ti-input ti-cs-filter-input" disabled />
+    </div>
+    <div class="ti-cs-gross-total" id="cs-gross-total" hidden>
+      Gross Total: <span id="cs-gross-total-value">0</span>
+    </div>
+  </div>
+
+  <div id="cs-loading" class="ti-cs-loading" hidden>
+    <div class="ti-spinner"></div><span>Loading…</span>
+  </div>
+  <p id="cs-empty" class="ti-cs-empty">Select unit and part number to view stock.</p>
+  <p id="cs-error" class="ti-cs-error" hidden></p>
+
+  <div id="cs-panels" class="ti-cs-panels" hidden>
+    <div class="ti-cs-panel">
+      <div class="ti-cs-panel-head">
+        <span class="ti-cs-panel-title">Ready For Next Stage</span>
+        <span class="ti-cs-panel-total">Total: <span id="cs-ready-total">0</span></span>
+      </div>
+      <div class="ti-cs-table-wrap">
+        <table class="ti-cs-table" id="cs-ready-table">
+          <thead>
+            <tr>
+              <th>SL NO</th>
+              <th>STAGE</th>
+              <th class="ti-cs-num">STOCK</th>
+            </tr>
+          </thead>
+          <tbody id="cs-ready-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ti-cs-panel">
+      <div class="ti-cs-panel-head">
+        <span class="ti-cs-panel-title">In-Progress</span>
+        <span class="ti-cs-panel-total">Total: <span id="cs-inprogress-total">0</span></span>
+      </div>
+      <div class="ti-cs-table-wrap">
+        <table class="ti-cs-table" id="cs-inprogress-table">
+          <thead>
+            <tr>
+              <th>SL NO</th>
+              <th>STAGE</th>
+              <th class="ti-cs-num">IN-HOUSE STOCK</th>
+              <th class="ti-cs-num">SUPPLIER STOCK</th>
+            </tr>
+          </thead>
+          <tbody id="cs-inprogress-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ti-cs-panel">
+      <div class="ti-cs-panel-head">
+        <span class="ti-cs-panel-title">With QA</span>
+        <span class="ti-cs-panel-total">Total: <span id="cs-qa-total">0</span></span>
+      </div>
+      <div class="ti-cs-table-wrap">
+        <table class="ti-cs-table" id="cs-qa-table">
+          <thead>
+            <tr>
+              <th>STAGE</th>
+              <th class="ti-cs-num">IN-HOUSE STOCK</th>
+              <th class="ti-cs-num">SUPPLIER STOCK</th>
+            </tr>
+          </thead>
+          <tbody id="cs-qa-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_lot (
   rework_pending      INT NOT NULL DEFAULT 0,
   rework_pool         INT NOT NULL DEFAULT 0,
   inspection_pending  INT NOT NULL DEFAULT 0,
+  cleaning_pending    INT NOT NULL DEFAULT 0,
   plant_id            INT NULL,
   processed_at        DATETIME NULL,
   processed_by        INT NULL,
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS laser_welding_line (
   lot_id              INT NULL,
   child_lot_id        INT NULL,
   bom_id              VARCHAR(36) NULL,
-  line_type           ENUM('Part_Inspection','Assembly_Inspection','Welding_Consume','Welding_Rework','SubAssembly_Consume','SubAssembly_Rework','QA_Disposition','Packing') NOT NULL DEFAULT 'Part_Inspection',
+  line_type           ENUM('Part_Inspection','Assembly_Inspection','Assembly_Cleaning','Welding_Consume','Welding_Rework','SubAssembly_Consume','SubAssembly_Rework','QA_Disposition','Packing') NOT NULL DEFAULT 'Part_Inspection',
   source_lot_no       VARCHAR(100) NOT NULL DEFAULT '',
   production_date     DATE NULL,
   inspected_qty       INT NOT NULL DEFAULT 0,
@@ -80,4 +81,16 @@ CREATE TABLE IF NOT EXISTS lw_re_work_scrap (
 -- ALTER TABLE laser_welding_line MODIFY operator_ids VARCHAR(500) NOT NULL DEFAULT '';
 -- ALTER TABLE laser_welding_line ADD COLUMN qa_remark VARCHAR(255) NULL AFTER scrap_remark;
 -- ALTER TABLE laser_welding_lot ADD COLUMN plant_id INT NULL AFTER inspection_pending;
+-- ALTER TABLE laser_welding_lot ADD COLUMN cleaning_pending INT NOT NULL DEFAULT 0 AFTER inspection_pending;
+-- ALTER TABLE laser_welding_line MODIFY line_type ENUM(
+--   'Part_Inspection','Assembly_Inspection','Assembly_Cleaning',
+--   'Welding_Consume','Welding_Rework','SubAssembly_Consume',
+--   'SubAssembly_Rework','QA_Disposition','Packing') NOT NULL DEFAULT 'Part_Inspection';
+-- FG backfill after adding cleaning_pending:
+-- UPDATE laser_welding_lot l INNER JOIN bom b ON b.bom_id = l.bom_id
+-- SET cleaning_pending = l.inspection_pending,
+--   inspection_pending = GREATEST(0, l.total_inwarded - COALESCE((
+--     SELECT SUM(ln.inspected_qty) FROM laser_welding_line ln
+--     WHERE ln.lot_id = l.lot_id AND ln.line_type = 'Assembly_Inspection'), 0))
+-- WHERE TRIM(l.part_number) = TRIM(b.bom_no) AND l.new_lot_no IS NOT NULL AND l.new_lot_no NOT LIKE 'PCK/%';
 

@@ -541,10 +541,36 @@ def _increase_component_stock(
     plant_id: int,
     stage_id: int,
     qty: int,
+    *,
+    create_if_missing: bool = False,
 ) -> None:
+    """Increase CS_QTY; optionally insert a new comp_stock row when none exists."""
     if qty <= 0:
         return
-    row = _lock_component_stock(cursor, comp_id, plant_id, stage_id)
+    cursor.execute(
+        """
+        SELECT *
+        FROM comp_stock
+        WHERE CS_COMPID = %s AND CS_PLANTID = %s AND CS_STAGEID = %s
+        FOR UPDATE
+        """,
+        (comp_id, plant_id, stage_id),
+    )
+    row = cursor.fetchone()
+    if not row:
+        if not create_if_missing:
+            raise ValueError(
+                f"Component stock not found for comp_id={comp_id}, "
+                f"plant={plant_id}, stage={stage_id}"
+            )
+        cursor.execute(
+            """
+            INSERT INTO comp_stock (CS_COMPID, CS_PLANTID, CS_STAGEID, CS_QTY)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (comp_id, plant_id, stage_id, qty),
+        )
+        return
     current = int(float(row.get("CS_QTY") or 0))
     cursor.execute(
         """
@@ -674,7 +700,7 @@ def whitelist_pack_inward(
     pack_qty: int,
     user_id: Optional[int] = None,
 ) -> None:
-    """Whitelist pack — inward txn (op 19→6) + comp_stock stage 6↑ only."""
+    """Whitelist pack — inward txn (op 19→6) + comp_stock stage 6↑ (insert row if missing)."""
     lot_no = str(lot_no or "").strip()
     qty = int(pack_qty or 0)
     if not lot_no or qty <= 0:
@@ -694,4 +720,11 @@ def whitelist_pack_inward(
         op_stage=op_stage,
         next_stage=next_stage,
     )
-    _increase_component_stock(cursor, comp_id, stock_plant, next_stage, qty)
+    _increase_component_stock(
+        cursor,
+        comp_id,
+        stock_plant,
+        next_stage,
+        qty,
+        create_if_missing=True,
+    )

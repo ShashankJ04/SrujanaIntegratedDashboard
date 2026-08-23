@@ -39,7 +39,8 @@ _PENDING_FILTER_COLUMN_NAMES = frozenset({
 })
 
 
-_DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None}
+_DASHBOARD_BASE_CACHE: Dict[str, Any] = {"rows": [], "last_refreshed": None, "ts": 0.0}
+_DASHBOARD_BASE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
 _PULSE_SCHEMA_CACHE: Dict[str, Tuple[float, set]] = {}
@@ -466,24 +467,54 @@ def _merge_dispatch_schedule_into_inventory_rows(
 def refresh_dashboard_base_cache() -> Dict[str, Any]:
     """Rebuild dashboard rows from customer schedule + inventory metrics and cache in memory.
 
-    This is intended to be called only on explicit hard refresh.
+    Called on Hard Refresh and when the 5-minute TTL expires.
     """
     global _DASHBOARD_BASE_CACHE
 
     today = date.today()
     rows = _build_inventory_rows_for_dispatch_period(today.month, today.year)
-    _DASHBOARD_BASE_CACHE = {
-        "rows": rows,
-        "last_refreshed": datetime.utcnow(),
-    }
+    with _DASHBOARD_BASE_CACHE_LOCK:
+        _DASHBOARD_BASE_CACHE = {
+            "rows": rows,
+            "last_refreshed": datetime.utcnow(),
+            "ts": time.monotonic(),
+        }
+        snapshot = {
+            "rows": list(rows),
+            "last_refreshed": _DASHBOARD_BASE_CACHE["last_refreshed"],
+        }
     # Keep summary KPI consistent after explicit base cache refresh.
     _clear_reports_summary_cache()
-    return _DASHBOARD_BASE_CACHE
+    return snapshot
+
+
+def _inventory_base_cache_seconds() -> int:
+    try:
+        return int(current_app.config.get("INVENTORY_BASE_CACHE_SECONDS", 300) or 300)
+    except RuntimeError:
+        return 300
 
 
 def _get_cached_base_rows() -> List[Dict[str, Any]]:
     """Return cached base rows (or empty list if cache is empty)."""
-    return list(_DASHBOARD_BASE_CACHE.get("rows", []))
+    with _DASHBOARD_BASE_CACHE_LOCK:
+        return list(_DASHBOARD_BASE_CACHE.get("rows", []))
+
+
+def _ensure_cached_base_rows() -> List[Dict[str, Any]]:
+    """Return inventory base rows, rebuilding if empty or TTL expired."""
+    cache_seconds = _inventory_base_cache_seconds()
+    now = time.monotonic()
+    with _DASHBOARD_BASE_CACHE_LOCK:
+        rows = list(_DASHBOARD_BASE_CACHE.get("rows", []))
+        cached_ts = float(_DASHBOARD_BASE_CACHE.get("ts") or 0.0)
+        fresh = bool(rows) and cache_seconds > 0 and (now - cached_ts) < cache_seconds
+        if cache_seconds <= 0:
+            fresh = False
+    if not fresh:
+        refresh_dashboard_base_cache()
+        return _get_cached_base_rows()
+    return rows
 
 
 def get_dashboard_base_rows(
@@ -499,11 +530,7 @@ def get_dashboard_base_rows(
     cache populated by refresh_dashboard_base_cache().
     """
     columns = get_dashboard_columns()
-    base_rows = _get_cached_base_rows()
-    if not base_rows:
-        # Cache is empty – populate it once from the database.
-        refresh_dashboard_base_cache()
-        base_rows = _get_cached_base_rows()
+    base_rows = _ensure_cached_base_rows()
 
     # Apply global search across all configured columns (string match)
     if global_search:
@@ -695,10 +722,7 @@ def build_enriched_inventory_rows_for_period(
     """Fully enriched inventory grid for a calendar month (live cache or rebuilt schedule)."""
     today = date.today()
     if month == today.month and year == today.year:
-        base_rows = _get_cached_base_rows()
-        if not base_rows:
-            refresh_dashboard_base_cache()
-            base_rows = _get_cached_base_rows()
+        base_rows = _ensure_cached_base_rows()
     else:
         base_rows = _build_inventory_rows_for_dispatch_period(month, year)
 
@@ -856,10 +880,7 @@ def upsert_buffer_config(part_no: str, buffer_qty: float, updated_by: Optional[s
 
 def _get_enriched_rows_for_reports() -> List[Dict[str, Any]]:
     """Return dashboard rows enriched with balance production values."""
-    base_rows = _get_cached_base_rows()
-    if not base_rows:
-        refresh_dashboard_base_cache()
-        base_rows = _get_cached_base_rows()
+    base_rows = _ensure_cached_base_rows()
 
     buffer_map = get_buffer_config_for_all_parts()
     enriched_rows: List[Dict[str, Any]] = []
@@ -1221,6 +1242,110 @@ def get_pending_treemap(limit: int = 40) -> List[Dict[str, Any]]:
     return {"items": items[: max(1, limit)]}
 
 
+RM_SHORTAGE_WEEK_BUCKETS: Dict[str, Tuple[int, int]] = {
+    "week_1": (1, 7),
+    "week_2": (8, 14),
+    "week_3": (15, 21),
+    "week_4": (22, 28),
+    "week_5": (29, 31),
+}
+
+
+def _rm_shortage_by_material_from_req(
+    rows: List[Dict[str, Any]],
+    req_by_rm: Dict[str, float],
+) -> List[Dict[str, Any]]:
+    """Material-level RM shortage from pre-aggregated requirement kg per RM key."""
+    seen_shortage_mat: set = set()
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        key = _rm_material_group_key(row)
+        if key.startswith("__nopart__") or key in seen_shortage_mat:
+            continue
+        seen_shortage_mat.add(key)
+        ca = float(row.get("current_acceptedqty") or 0)
+        tpr = round(float(req_by_rm.get(key, 0.0)), 2)
+        shortage = round(ca - tpr, 2)
+        rm_code = str(row.get("rm_rawmt_part_no") or key).strip() or key
+        out.append(
+            {
+                "rm_rawmt_part_no": rm_code,
+                "current_acceptedqty": ca,
+                "total_rm_production_requirement": tpr,
+                "rm_shortage_actual": shortage,
+            }
+        )
+    out.sort(key=lambda r: abs(float(r["rm_shortage_actual"])), reverse=True)
+    return out
+
+
+def _week_rm_req_by_material(
+    rows: List[Dict[str, Any]],
+    day_qty_by_part: Dict[str, Dict[str, Any]],
+    day_start: int,
+    day_end: int,
+    days_in_month: int,
+) -> Dict[str, float]:
+    """Sum production-calendar pending qty × rm_conval (kg) by RM material key."""
+    req_by_rm: Dict[str, float] = defaultdict(float)
+    for row in rows:
+        pk = _normalize_inventory_part_key(row.get("part_no"))
+        if not pk:
+            continue
+        rm_conval = float(row.get("rm_conval") or 0)
+        if rm_conval <= 0:
+            continue
+        part_days = day_qty_by_part.get(pk)
+        days_map = (part_days or {}).get("days") or {}
+        week_qty = sum(
+            float(days_map.get(f"day_{d}") or 0)
+            for d in range(day_start, min(day_end, days_in_month) + 1)
+        )
+        if week_qty <= 0:
+            continue
+        key = _rm_material_group_key(row)
+        req_by_rm[key] += round((week_qty * rm_conval) / 1000, 2)
+    return dict(req_by_rm)
+
+
+def _attach_week_requirement_to_material_items(
+    items: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    week_breakdown_by_rm: Dict[str, Dict[str, float]],
+) -> None:
+    """Add week_requirement_kg to each material shortage row."""
+    for item in items:
+        rm_code = str(item.get("rm_rawmt_part_no") or "").strip()
+        matched: Dict[str, float] = {}
+        for row in rows:
+            key = _rm_material_group_key(row)
+            code = str(row.get("rm_rawmt_part_no") or key).strip() or key
+            if code == rm_code:
+                matched = week_breakdown_by_rm.get(key, {})
+                break
+        item["week_requirement_kg"] = matched
+
+
+def _week_requirement_breakdown_by_material(
+    rows: List[Dict[str, Any]],
+    day_qty_by_part: Dict[str, Dict[str, Any]],
+    days_in_month: int,
+) -> Dict[str, Dict[str, float]]:
+    """RM material key -> week_1 … week_5 requirement kg."""
+    breakdown: Dict[str, Dict[str, float]] = defaultdict(dict)
+    for period_key, (day_start, day_end) in RM_SHORTAGE_WEEK_BUCKETS.items():
+        week_req = _week_rm_req_by_material(
+            rows,
+            day_qty_by_part,
+            day_start,
+            day_end,
+            days_in_month,
+        )
+        for rm_key, kg in week_req.items():
+            breakdown[rm_key][period_key] = kg
+    return {k: dict(v) for k, v in breakdown.items()}
+
+
 def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
     """Return aggregated raw-material chart series from enriched dashboard rows."""
     rows = _get_enriched_rows_for_reports()
@@ -1327,29 +1452,50 @@ def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
     )
     rm_shortage_by_part = rm_shortage_rows[: max(1, min(limit, 15))]
 
-    seen_shortage_mat: set = set()
-    rm_shortage_by_material: List[Dict[str, Any]] = []
-    for row in rows:
-        key = _rm_material_group_key(row)
-        if key.startswith("__nopart__") or key in seen_shortage_mat:
-            continue
-        seen_shortage_mat.add(key)
-        ca = float(row.get("current_acceptedqty") or 0)
-        tpr = float(row.get("total_rm_production_requirement") or 0)
-        shortage = round(ca - tpr, 2)
-        rm_code = str(row.get("rm_rawmt_part_no") or key).strip() or key
-        rm_shortage_by_material.append(
-            {
-                "rm_rawmt_part_no": rm_code,
-                "current_acceptedqty": ca,
-                "total_rm_production_requirement": tpr,
-                "rm_shortage_actual": shortage,
-            }
-        )
-    rm_shortage_by_material.sort(
-        key=lambda r: abs(float(r["rm_shortage_actual"])), reverse=True
+    from datetime import date as _date_cls
+    import calendar as _calendar_mod
+    from .production_calendar import get_production_day_qty_by_part
+
+    today = _date_cls.today()
+    days_in_month = _calendar_mod.monthrange(today.year, today.month)[1]
+    day_qty_by_part = get_production_day_qty_by_part(today.month, today.year)
+    month_req_by_rm = _week_rm_req_by_material(
+        rows,
+        day_qty_by_part,
+        1,
+        days_in_month,
+        days_in_month,
     )
-    # Provide all items so the frontend can toggle between Top 15 and All Items
+    rm_shortage_by_material = _rm_shortage_by_material_from_req(rows, month_req_by_rm)
+    week_breakdown_by_rm = _week_requirement_breakdown_by_material(
+        rows,
+        day_qty_by_part,
+        days_in_month,
+    )
+    _attach_week_requirement_to_material_items(
+        rm_shortage_by_material,
+        rows,
+        week_breakdown_by_rm,
+    )
+
+    rm_shortage_by_material_periods: Dict[str, List[Dict[str, Any]]] = {
+        "month": rm_shortage_by_material,
+    }
+    for period_key, (day_start, day_end) in RM_SHORTAGE_WEEK_BUCKETS.items():
+        week_req = _week_rm_req_by_material(
+            rows,
+            day_qty_by_part,
+            day_start,
+            day_end,
+            days_in_month,
+        )
+        week_items = _rm_shortage_by_material_from_req(rows, week_req)
+        _attach_week_requirement_to_material_items(
+            week_items,
+            rows,
+            week_breakdown_by_rm,
+        )
+        rm_shortage_by_material_periods[period_key] = week_items
 
     return {
         "top_rm_parts": top_rm,
@@ -1362,6 +1508,7 @@ def get_rm_chart_data(limit: int = 20) -> Dict[str, Any]:
         },
         "rm_shortage_by_part": rm_shortage_by_part,
         "rm_shortage_by_material": rm_shortage_by_material,
+        "rm_shortage_by_material_periods": rm_shortage_by_material_periods,
     }
 
 
@@ -1860,6 +2007,35 @@ def get_rm_calculator_part_options(limit: int = 8000) -> List[Dict[str, str]]:
     return get_dpr_part_options(limit, include_npd=False)
 
 
+def _dpr_active_tools_for_part(part_no: str) -> List[str]:
+    """Active tool numbers for a part, latest first, deduped."""
+    p = str(part_no or "").strip()
+    if not p:
+        return []
+    sql = """
+        SELECT ct.ct_toolno AS tool_no
+        FROM components_tool ct
+        INNER JOIN components c ON ct.CT_COMPID = c.CO_ID
+        WHERE ct.ct_activeyn = 'Y'
+          AND c.co_activeyn = 'Y'
+          AND TRIM(c.co_partNo) = %s
+        ORDER BY ct.ct_id DESC
+    """
+    rows = fetch_all(sql, (p,))
+    seen: set[str] = set()
+    out: List[str] = []
+    for row in rows:
+        tool_no = str(row.get("tool_no") or "").strip()
+        if not tool_no:
+            continue
+        key = tool_no.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tool_no)
+    return out
+
+
 def _dpr_tool_row_for_part(part_no: str) -> Optional[Dict[str, Any]]:
     """Latest active components_tool row for a part."""
     p = str(part_no or "").strip()
@@ -2044,10 +2220,18 @@ def _dpr_derived_fields(
     pm_due_by_tool: Optional[Dict[str, float]] = None,
     rm_coverage_by_part: Optional[Dict[str, float]] = None,
     rm_allocated_by_part: Optional[Dict[str, float]] = None,
+    selected_tool_no: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Tool no, RM values, strokes consumed and PM due for a part + date."""
+    tools = _dpr_active_tools_for_part(part_no)
     tool = _dpr_tool_row_for_part(part_no)
     tool_no = None
+    selected = str(selected_tool_no or "").strip()
+    if selected:
+        for candidate in tools:
+            if str(candidate).strip().lower() == selected.lower():
+                tool_no = str(candidate).strip()
+                break
     strokes = None
     pm_due = None
     rm_avail = None
@@ -2061,10 +2245,11 @@ def _dpr_derived_fields(
     if part_key:
         rm_coverage_nos = coverage_map.get(part_key)
         rm_allocated = alloc_map.get(part_key)
-    if tool:
+    if not tool_no and tool:
         tool_no = tool.get("tool_no")
         if tool_no is not None:
             tool_no = str(tool_no).strip() or None
+    if tool:
         rm_code = str(tool.get("rm_code") or "").strip() or None
         rm_id_raw = tool.get("rm_id")
         comp_id_raw = tool.get("comp_id")
@@ -2087,26 +2272,27 @@ def _dpr_derived_fields(
                 vals = [v for (rid, _cid), v in rm_map.items() if rid == rm_id]
                 rm_issued = sum(vals) if vals else None
 
-        if tool_no:
-            s_map = strokes_by_tool if strokes_by_tool is not None else _dpr_strokes_consumed_by_tool()
-            p_map = pm_due_by_tool if pm_due_by_tool is not None else _dpr_pm_due_by_tool()
-            if tool_no in s_map:
-                strokes = s_map[tool_no]
-            else:
-                for k, v in s_map.items():
-                    if k.strip().lower() == tool_no.lower():
-                        strokes = v
-                        break
-            if tool_no in p_map:
-                pm_due = p_map[tool_no]
-            else:
-                for k, v in p_map.items():
-                    if k.strip().lower() == tool_no.lower():
-                        pm_due = v
-                        break
+    if tool_no:
+        s_map = strokes_by_tool if strokes_by_tool is not None else _dpr_strokes_consumed_by_tool()
+        p_map = pm_due_by_tool if pm_due_by_tool is not None else _dpr_pm_due_by_tool()
+        if tool_no in s_map:
+            strokes = s_map[tool_no]
+        else:
+            for k, v in s_map.items():
+                if k.strip().lower() == tool_no.lower():
+                    strokes = v
+                    break
+        if tool_no in p_map:
+            pm_due = p_map[tool_no]
+        else:
+            for k, v in p_map.items():
+                if k.strip().lower() == tool_no.lower():
+                    pm_due = v
+                    break
 
     return {
         "toolNo": tool_no,
+        "tools": tools,
         "rmCode": rm_code,
         "strokesConsumed": strokes,
         "rmIssued": rm_issued,
@@ -2121,12 +2307,14 @@ def get_dpr_derived_preview(
     part_no: str,
     planned_qty: Optional[float] = None,
     review_date: Optional[str] = None,
+    selected_tool_no: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Tool, RM, strokes and PM due preview for part/date."""
     p = str(part_no or "").strip()
     pq = float(planned_qty or 0)
     d = str(review_date or "").strip() or None
-    return _dpr_derived_fields(p, pq, d)
+    tool = str(selected_tool_no or "").strip() or None
+    return _dpr_derived_fields(p, pq, d, selected_tool_no=tool)
 
 
 def _dpr_part_name_map(part_nos: Sequence[str]) -> Dict[str, str]:
@@ -2204,10 +2392,44 @@ def _dpr_row_created_sort_key(created_at: Any, row_id: Any) -> Tuple[int, int]:
     return (ts, rid)
 
 
+def ensure_dpr_tool_no_column() -> None:
+    """Add tool_no to dpr_daily_review so selected tool survives reload/save."""
+    row = fetch_one(
+        """
+        SELECT COUNT(*) AS c
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'dpr_daily_review'
+          AND COLUMN_NAME = 'tool_no'
+        """
+    )
+    if row and int(row.get("c") or 0) > 0:
+        return
+    execute(
+        "ALTER TABLE dpr_daily_review ADD COLUMN tool_no VARCHAR(64) NULL AFTER part_no"
+    )
+
+
+def _dpr_resolve_stored_tool_no(part_no: str, stored_tool_no: Optional[str]) -> Optional[str]:
+    """Return stored tool if still active for part, else latest active default."""
+    tools = _dpr_active_tools_for_part(part_no)
+    stored = str(stored_tool_no or "").strip()
+    if stored:
+        for candidate in tools:
+            if str(candidate).strip().lower() == stored.lower():
+                return str(candidate).strip()
+    if tools:
+        return str(tools[0]).strip()
+    tool = _dpr_tool_row_for_part(part_no)
+    if tool and tool.get("tool_no"):
+        return str(tool.get("tool_no")).strip() or None
+    return None
+
+
 def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
     """Load DPR rows for a date; tool/strokes/RM derived from part + planned qty."""
     sql = """
-        SELECT id, review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks,
+        SELECT id, review_date, machine_id, op_id, part_no, tool_no, planned_qty, produced_qty, remarks,
                created_by, updated_by, created_at, updated_at
         FROM dpr_daily_review
         WHERE review_date = %s
@@ -2235,6 +2457,8 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
         else:
             review_date_str = str(rd) if rd is not None else ""
         pq = float(r["planned_qty"] or 0)
+        stored_tool = str(r.get("tool_no") or "").strip() or None
+        resolved_tool = _dpr_resolve_stored_tool_no(pno, stored_tool) if pno else None
         derived = _dpr_derived_fields(
             pno,
             pq,
@@ -2244,6 +2468,7 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
             pm_due_by_tool=pm_due_by_tool,
             rm_coverage_by_part=rm_coverage_by_part,
             rm_allocated_by_part=rm_allocated_by_part,
+            selected_tool_no=resolved_tool,
         )
         produced_raw = r.get("produced_qty")
         produced_val = None if produced_raw is None else float(produced_raw)
@@ -2268,6 +2493,7 @@ def list_dpr_rows(review_date: str) -> List[Dict[str, Any]]:
                 "rmCoverageNos": derived.get("rmCoverageNos"),
                 "rmAllocated": derived.get("rmAllocated"),
                 "toolNo": derived.get("toolNo"),
+                "tools": derived.get("tools") or [],
                 "strokesConsumed": derived.get("strokesConsumed"),
                 "pmDue": derived.get("pmDue"),
                 "remarks": r.get("remarks") or "",
@@ -2341,6 +2567,8 @@ def upsert_dpr_row(
     updated_by: Optional[str],
     row_id: Optional[int] = None,
     op_id: Optional[int] = None,
+    tool_no: Optional[str] = None,
+    update_tool_no: bool = False,
 ) -> int:
     """Insert or update a DPR row. Returns row id."""
     machine_id = str(machine_id or "").strip()
@@ -2348,27 +2576,59 @@ def upsert_dpr_row(
     if not machine_id or not part_no:
         raise ValueError("machine_id and part_no are required")
 
+    tool_no_val: Optional[str] = None
+    if update_tool_no:
+        tool_no_val = str(tool_no or "").strip() or None
+        if tool_no_val:
+            active_tools = _dpr_active_tools_for_part(part_no)
+            tool_key = tool_no_val.lower()
+            if not any(str(t).strip().lower() == tool_key for t in active_tools):
+                raise ValueError("Selected tool is not active for this part")
+
     if row_id:
-        sql = """
-            UPDATE dpr_daily_review
-            SET review_date = %s, machine_id = %s, op_id = %s, part_no = %s,
-                planned_qty = %s, produced_qty = %s, remarks = %s, updated_by = %s
-            WHERE id = %s
-        """
-        execute(
-            sql,
-            (
-                review_date,
-                machine_id,
-                op_id,
-                part_no,
-                planned_qty,
-                produced_qty,
-                remarks or "",
-                updated_by,
-                row_id,
-            ),
-        )
+        if update_tool_no:
+            sql = """
+                UPDATE dpr_daily_review
+                SET review_date = %s, machine_id = %s, op_id = %s, part_no = %s, tool_no = %s,
+                    planned_qty = %s, produced_qty = %s, remarks = %s, updated_by = %s
+                WHERE id = %s
+            """
+            execute(
+                sql,
+                (
+                    review_date,
+                    machine_id,
+                    op_id,
+                    part_no,
+                    tool_no_val,
+                    planned_qty,
+                    produced_qty,
+                    remarks or "",
+                    updated_by,
+                    row_id,
+                ),
+            )
+        else:
+            sql = """
+                UPDATE dpr_daily_review
+                SET review_date = %s, machine_id = %s, op_id = %s, part_no = %s,
+                    planned_qty = %s, produced_qty = %s, remarks = %s, updated_by = %s
+                WHERE id = %s
+            """
+            execute(
+                sql,
+                (
+                    review_date,
+                    machine_id,
+                    op_id,
+                    part_no,
+                    planned_qty,
+                    produced_qty,
+                    remarks or "",
+                    updated_by,
+                    row_id,
+                ),
+            )
         one = fetch_one("SELECT id FROM dpr_daily_review WHERE id = %s", (row_id,))
         if not one:
             raise ValueError("Row not found")
@@ -2376,10 +2636,11 @@ def upsert_dpr_row(
 
     sql = """
         INSERT INTO dpr_daily_review
-            (review_date, machine_id, op_id, part_no, planned_qty, produced_qty, remarks, created_by, updated_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (review_date, machine_id, op_id, part_no, tool_no, planned_qty, produced_qty, remarks, created_by, updated_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             op_id = VALUES(op_id),
+            tool_no = COALESCE(VALUES(tool_no), tool_no),
             planned_qty = VALUES(planned_qty),
             produced_qty = VALUES(produced_qty),
             remarks = VALUES(remarks),
@@ -2392,6 +2653,7 @@ def upsert_dpr_row(
             machine_id,
             op_id,
             part_no,
+            tool_no_val if update_tool_no else None,
             planned_qty,
             produced_qty,
             remarks or "",

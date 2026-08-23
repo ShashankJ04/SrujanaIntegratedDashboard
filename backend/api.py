@@ -9,6 +9,7 @@ from flask import Blueprint, current_app, g, jsonify, request, send_file, url_fo
 from .auth import api_login_required, is_dpr_editor
 from .dispatch_calendar import build_dispatch_calendar_payload
 from .production_calendar import build_production_calendar_payload
+from .component_stock import build_component_stock_payload, get_plant_options, search_parts
 from .rbac import require_access
 from .export import generate_excel_response
 from .db import execute, fetch_one
@@ -338,7 +339,13 @@ def dpr_derived() -> Any:
             date.fromisoformat(review_date)
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid date"}), 400
-    data = get_dpr_derived_preview(part_no, planned, review_date or None)
+    selected_tool_no = (request.args.get("toolNo") or "").strip() or None
+    data = get_dpr_derived_preview(
+        part_no,
+        planned,
+        review_date or None,
+        selected_tool_no=selected_tool_no,
+    )
     return jsonify(data)
 
 
@@ -416,6 +423,11 @@ def dpr_rows_save() -> Any:
 
     updated_by = str(g.current_user.get("login") or "")
 
+    tool_no_raw = payload.get("toolNo")
+    tool_no = str(tool_no_raw).strip() if tool_no_raw is not None else None
+    if tool_no == "":
+        tool_no = None
+
     try:
         new_id = upsert_dpr_row(
             review_date=review_date,
@@ -427,6 +439,8 @@ def dpr_rows_save() -> Any:
             updated_by=updated_by,
             row_id=rid,
             op_id=op_id,
+            tool_no=tool_no,
+            update_tool_no=True,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -687,4 +701,36 @@ def api_dispatch_calendar_export() -> Any:
         as_attachment=True,
         download_name=f"dispatch_calendar_{year}_{month:02d}.xlsx",
     )
+
+
+@api_bp.get("/component-stock/meta")
+@require_access("rept")
+def api_component_stock_meta() -> Any:
+    return jsonify({"plants": get_plant_options()})
+
+
+@api_bp.get("/component-stock/parts")
+@require_access("rept")
+def api_component_stock_parts() -> Any:
+    q = str(request.args.get("q") or "").strip()
+    limit = _parse_int("limit", 30)
+    if limit < 1:
+        limit = 30
+    if limit > 100:
+        limit = 100
+    return jsonify({"parts": search_parts(q, limit=limit)})
+
+
+@api_bp.get("/component-stock")
+@require_access("rept")
+def api_component_stock() -> Any:
+    plant_id = _parse_int("plantId", 0)
+    part_no = str(request.args.get("partNo") or "").strip()
+    if not part_no:
+        return jsonify({"message": "partNo is required"}), 400
+    try:
+        payload = build_component_stock_payload(plant_id, part_no)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    return jsonify(payload)
 

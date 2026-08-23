@@ -796,3 +796,35 @@ def build_production_calendar_payload(month: int, year: int) -> Dict[str, Any]:
     payload["partDailyProduction"] = daily_production
     payload["daysInMonth"] = payload.get("daysInMonth") or calendar.monthrange(year, month)[1]
     return payload
+
+
+def get_production_day_qty_by_part(month: int, year: int) -> Dict[str, Dict[str, Any]]:
+    """Per-part net pending production qty by calendar day (production calendar)."""
+    payload = build_production_calendar_payload(month, year)
+    day_cols = _all_day_cols_for_payload(payload)
+    rows = payload.get("rows") or []
+    row_meta = payload.get("rowMeta") or []
+    out: Dict[str, Dict[str, Any]] = {}
+
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        meta = row_meta[idx] if idx < len(row_meta) and isinstance(row_meta[idx], dict) else {}
+        if meta.get("isGrandTotal"):
+            continue
+        pk = _normalize_part_key(row.get(PART_NO_COL))
+        if not pk:
+            continue
+        day_qty: Dict[str, float] = {}
+        for col_name, d in day_cols:
+            val = row.get(col_name)
+            if _is_null_qty(val):
+                continue
+            qty = _to_float(val)
+            if qty > 0:
+                day_qty[f"day_{d}"] = qty
+        out[pk] = {
+            "partNo": str(row.get(PART_NO_COL) or "").strip(),
+            "days": day_qty,
+        }
+    return out

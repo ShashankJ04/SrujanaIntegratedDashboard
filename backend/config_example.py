@@ -41,6 +41,12 @@ class Config:
         os.environ.get("REPORTS_SUMMARY_CACHE_SECONDS", "30")
     )
     PM_STATUS_CACHE_SECONDS = int(os.environ.get("PM_STATUS_CACHE_SECONDS", "20"))
+    INVENTORY_BASE_CACHE_SECONDS = int(
+        os.environ.get("INVENTORY_BASE_CACHE_SECONDS", "300")
+    )
+    LW_PART_INSPECTION_CACHE_SECONDS = int(
+        os.environ.get("LW_PART_INSPECTION_CACHE_SECONDS", "300")
+    )
 
     # Runtime paths for packaged deployments
     APP_DATA_DIR = resolve_runtime_path(os.environ.get("APP_DATA_DIR", ""), "data")

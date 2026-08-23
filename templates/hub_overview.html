@@ -65,37 +65,42 @@
 <!-- ═══ QUANTITY PROGRESS (full width) ═══ -->
 <div class="ti-monitor-row ti-monitor-row--qty">
   <div class="ti-monitor ti-monitor--qty">
-    <div class="ti-monitor-top">
+    <div class="ti-monitor-top ti-monitor-top--qty">
       <span class="ti-monitor-title">Quantity Progress</span>
-      <span class="ti-monitor-pct" id="mon-qty-pct">–%</span>
     </div>
     <div class="ti-monitor-metrics ti-monitor-metrics--qty">
-      <div class="ti-monitor-metric-cell">
-        <div class="ti-monitor-metric-label">Planned</div>
-        <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
+      <div class="ti-monitor-metrics--qty-primary">
+        <div class="ti-monitor-metric-cell">
+          <div class="ti-monitor-metric-label">Planned</div>
+          <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
+        </div>
+        <div class="ti-monitor-metric-cell">
+          <div class="ti-monitor-metric-label">Produced</div>
+          <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
+        </div>
+        <div class="ti-monitor-metric-cell">
+          <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-qty-pending-link" title="Inventory — pending parts only">
+            <div class="ti-monitor-metric-label" title="Balance Production Qty">Balance Qty</div>
+            <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
+          </a>
+        </div>
       </div>
-      <div class="ti-monitor-metric-cell">
-        <div class="ti-monitor-metric-label">Produced</div>
-        <div class="ti-monitor-metric-value success" id="mon-produced-qty">–</div>
-      </div>
-      <div class="ti-monitor-metric-cell">
-        <a href="/app?section=inventory&rowFilter=pending" class="ti-monitor-metric-stack-link" id="mon-qty-pending-link" title="Inventory — pending parts only">
-          <div class="ti-monitor-metric-label" title="Balance Production Qty">Balance Qty</div>
-          <div class="ti-monitor-metric-value alert" id="mon-pending-qty">–</div>
-        </a>
-      </div>
-      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
-        <div class="ti-monitor-metric-label">Actual Produced</div>
-        <div class="ti-monitor-metric-value" id="mon-actual-produced-qty">–</div>
-      </div>
-      <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
-        <a href="/app?section=inventory&rowFilter=excess" class="ti-monitor-metric-stack-link" id="mon-excess-produced-link" title="Inventory — excess production (balance qty &lt; 0 and produced qty &gt; 0)">
-          <div class="ti-monitor-metric-label">Excess Production</div>
-          <div class="ti-monitor-metric-value alert" id="mon-excess-produced-qty">–</div>
-        </a>
+      <div class="ti-monitor-metrics--qty-derived">
+        <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+          <div class="ti-monitor-metric-pct" id="mon-actual-produced-pct">–</div>
+          <div class="ti-monitor-metric-label">Actual Produced</div>
+          <div class="ti-monitor-metric-value" id="mon-actual-produced-qty">–</div>
+        </div>
+        <div class="ti-monitor-metric-cell ti-monitor-metric-cell--derived">
+          <div class="ti-monitor-metric-pct" id="mon-excess-produced-pct">–</div>
+          <a href="/app?section=inventory&rowFilter=excess" class="ti-monitor-metric-stack-link" id="mon-excess-produced-link" title="Inventory — excess production (balance qty &lt; 0 and produced qty &gt; 0)">
+            <div class="ti-monitor-metric-label">Excess Production</div>
+            <div class="ti-monitor-metric-value alert" id="mon-excess-produced-qty">–</div>
+          </a>
+        </div>
       </div>
     </div>
-    <div class="ti-monitor-progress">
+    <div class="ti-monitor-progress ti-monitor-progress--qty">
       <div class="ti-monitor-bar" id="mon-qty-bar" style="width:0%"></div>
     </div>
   </div>
@@ -200,15 +205,27 @@
   </div>
 </div>
 
+
 <!-- ═══ ACTUAL RM SHORTAGE — FULL WIDTH, FIRST CHART ═══ -->
 <div class="ti-grid-full ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header">
       <div>
         <div class="ti-card-title">Actual RM Shortage</div>
-        <div class="ti-card-subtitle">RM codes below requirement — bar height shows shortage (kgs)</div>
+        <div class="ti-card-subtitle" id="chart-rm-shortage-subtitle">Month shortage — production calendar requirement stacked by week (W1–W5)</div>
       </div>
       <div class="ti-card-controls">
+        <label class="ti-control">
+          <span>Period:</span>
+          <select id="chart-rm-shortage-period" class="ti-select ti-select--compact">
+            <option value="month">Month</option>
+            <option value="week_1">Week 1</option>
+            <option value="week_2">Week 2</option>
+            <option value="week_3">Week 3</option>
+            <option value="week_4">Week 4</option>
+            <option value="week_5">Week 5</option>
+          </select>
+        </label>
         <label class="ti-control">
           <span>Show:</span>
           <select id="chart-rm-shortage-mode" class="ti-select ti-select--compact">
@@ -421,10 +438,22 @@
     const excessProduction = pcProduced - actualProduced;
     document.getElementById('mon-actual-produced-qty').textContent = Hub.utils.formatIndian(actualProduced);
     document.getElementById('mon-excess-produced-qty').textContent = Hub.utils.formatIndian(excessProduction);
+
+    const actualProducedPctEl = document.getElementById('mon-actual-produced-pct');
+    const excessProducedPctEl = document.getElementById('mon-excess-produced-pct');
+    if (actualProducedPctEl) {
+      actualProducedPctEl.textContent = pcPlanned > 0
+        ? Math.round((actualProduced / pcPlanned) * 100) + '%'
+        : '–';
+    }
+    if (excessProducedPctEl) {
+      excessProducedPctEl.textContent = pcPlanned > 0
+        ? Math.round((excessProduction / pcPlanned) * 100) + '%'
+        : '–';
+    }
     
     const qtyPctRaw = pcPlanned > 0 ? ((pcPlanned - totalPendingQty) / pcPlanned) * 100 : 0;
     const qtyPct = Math.round(Number.isFinite(qtyPctRaw) ? qtyPctRaw : 0);
-    document.getElementById('mon-qty-pct').textContent = qtyPct + '%';
     const qtyBar = document.getElementById('mon-qty-bar');
     qtyBar.style.width = Math.min(100, Math.max(0, qtyPct)) + '%';
     qtyBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, qtyPct) / 100) * 120));

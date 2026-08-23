@@ -114,8 +114,11 @@ window.DprPage = (() => {
 
   const Api = {
     options: () => apiFetch(`${BASE}/dpr/options`),
-    derived: (partNo, plannedQty, date) =>
-      apiFetch(`${BASE}/dpr/derived?${qs({ partNo, plannedQty, date })}`),
+    derived: (partNo, plannedQty, date, toolNo) => {
+      const params = { partNo, plannedQty, date };
+      if (toolNo) params.toolNo = toolNo;
+      return apiFetch(`${BASE}/dpr/derived?${qs(params)}`);
+    },
     summary: (date) => apiFetch(`${BASE}/dpr/summary?${qs({ date })}`),
     rows: (date) => apiFetch(`${BASE}/dpr/rows?${qs({ date })}`),
     save: (payload) =>
@@ -330,6 +333,103 @@ window.DprPage = (() => {
     if (submitBtn) submitBtn.style.display = isSuccess ? "none" : "";
   }
 
+  function populateToolSelect(el, tools, selectedTool) {
+    if (!el) return "";
+    el.innerHTML = "";
+    const selectedKey = String(selectedTool || "").trim().toLowerCase();
+    let resolved = "";
+    tools.forEach((toolNo) => {
+      const opt = document.createElement("option");
+      opt.value = toolNo;
+      opt.textContent = toolNo;
+      if (!resolved && toolNo.toLowerCase() === selectedKey) {
+        opt.selected = true;
+        resolved = toolNo;
+      }
+      el.appendChild(opt);
+    });
+    if (!resolved && tools.length) {
+      el.selectedIndex = 0;
+      resolved = tools[0];
+    }
+    return resolved;
+  }
+
+  function isActiveToolForRow(row, toolNo) {
+    const key = String(toolNo || "").trim().toLowerCase();
+    if (!key) return false;
+    const tools = Array.isArray(row?.tools) ? row.tools : [];
+    return tools.some((t) => String(t || "").trim().toLowerCase() === key);
+  }
+
+  function buildToolNoCell(row, idx, editable, dateVal, tr) {
+    const td = document.createElement("td");
+    td.dataset.colName = "tool_no";
+    const partNo = String(row.partNo || "").trim();
+    const tools = Array.isArray(row.tools)
+      ? row.tools.map((t) => String(t || "").trim()).filter(Boolean)
+      : [];
+
+    if (editable && partNo && tools.length > 1) {
+      const sel = document.createElement("select");
+      sel.className = "ti-dpr-select dpr-select dpr-tool-select";
+      const resolved = populateToolSelect(sel, tools, row.toolNo);
+      if (!row.toolNo && resolved) row.toolNo = resolved;
+      sel.addEventListener("change", async () => {
+        const toolNo = String(sel.value || "").trim();
+        if (!toolNo) return;
+        if (await toolHasActiveBreakdown(toolNo)) {
+          sel.value = pendingRows[idx].toolNo || "";
+          openDprWarningModal(
+            `Tool ${toolNo} is in an active tooldown and has not been closed yet. Please choose a different tool.`
+          );
+          return;
+        }
+        pendingRows[idx].toolNo = toolNo;
+        await refreshDerived(idx, { selectedToolNo: toolNo });
+        const setCell = (colName, value) => {
+          const cel = tr.querySelector(`[data-col-name="${colName}"]`);
+          if (cel) cel.textContent = formatCellNumber(value);
+        };
+        setCell("strokes_consumed", pendingRows[idx].strokesConsumed);
+        setCell("pm_due", pendingRows[idx].pmDue);
+        scheduleRowAutoSave(pendingRows[idx], dateVal, 0);
+      });
+      td.appendChild(sel);
+    } else {
+      td.textContent = formatCellNumber(row.toolNo);
+    }
+    return td;
+  }
+
+  async function pickAvailableTool(row) {
+    const tools = Array.isArray(row?.tools)
+      ? row.tools.map((t) => String(t || "").trim()).filter(Boolean)
+      : [];
+    if (!tools.length) return "";
+    for (const toolNo of tools) {
+      if (!(await toolHasActiveBreakdown(toolNo))) return toolNo;
+    }
+    return "";
+  }
+
+  async function loadActiveToolsForRow(row) {
+    let tools = Array.isArray(row?.tools)
+      ? row.tools.map((t) => String(t || "").trim()).filter(Boolean)
+      : [];
+    if (!tools.length && String(row?.partNo || "").trim()) {
+      const pq = row.plannedQty === null || row.plannedQty === undefined ? 0 : row.plannedQty;
+      const dateVal = document.getElementById("dpr-date")?.value || "";
+      const res = await Api.derived(row.partNo, pq, dateVal, row.toolNo || undefined);
+      tools = Array.isArray(res.tools)
+        ? res.tools.map((t) => String(t || "").trim()).filter(Boolean)
+        : [];
+      row.tools = tools;
+      if (!row.toolNo && res.toolNo) row.toolNo = res.toolNo;
+    }
+    return tools;
+  }
+
   async function checkOpenBreakdown(toolNo) {
     if (!toolNo) return false;
     try {
@@ -357,6 +457,7 @@ window.DprPage = (() => {
     }
     const rowIdx = pendingRows.indexOf(row);
     const dateVal = document.getElementById("dpr-date")?.value || "";
+    const selectedToolBeforeSave = String(row?.toolNo || "").trim();
     if (rowIdx >= 0 && dateVal) {
       await saveRow(rowIdx, dateVal, { silent: true });
       row = pendingRows[rowIdx];
@@ -364,15 +465,32 @@ window.DprPage = (() => {
         notify("Enter Produced Qty on this line before raising a tooldown (0 is allowed).", true);
         return;
       }
+      if (selectedToolBeforeSave) row.toolNo = selectedToolBeforeSave;
     }
-    const toolNo = String(row?.toolNo || "").trim();
-    if (!toolNo) {
-      notify("Tool number is missing for this line.", true);
+    let tools = [];
+    try {
+      tools = await loadActiveToolsForRow(row);
+    } catch (e) {
+      console.error(e);
+      notify(e.message || "Could not load tools for this part.", true);
+      return;
+    }
+    if (!tools.length) {
+      notify("No active tools found for this part.", true);
       return;
     }
     const machineLabel = row?.machineLabel || labelByMachineId(row?.machineId) || row?.machineId || "";
     const partNo = row?.partNo || "";
     const partName = row?.partName || "";
+    const selectedTool = String(row?.toolNo || "").trim();
+    if (!selectedTool) {
+      notify("Select a tool on this line before raising a tooldown.", true);
+      return;
+    }
+    if (!isActiveToolForRow(row, selectedTool)) {
+      notify("Selected tool is not active for this part.", true);
+      return;
+    }
     const issueInput = document.getElementById("dpr-breakdown-issue");
     const priorityInput = document.getElementById("dpr-breakdown-priority");
     const toolDownInput = document.getElementById("dpr-breakdown-tooldown");
@@ -390,7 +508,7 @@ window.DprPage = (() => {
     if (machineEl) machineEl.value = String(machineLabel || "");
     if (partNoEl) partNoEl.value = String(partNo || "");
     if (partNameEl) partNameEl.value = String(partName || "");
-    if (toolNoEl) toolNoEl.value = String(toolNo || "");
+    if (toolNoEl) toolNoEl.value = selectedTool;
     if (downtimeEl) downtimeEl.value = formatDateTimeLocal(now);
     if (producedEl) producedEl.value = formatCellNumber(row?.producedQty);
     if (issueInput) issueInput.value = "";
@@ -402,7 +520,7 @@ window.DprPage = (() => {
 
     breakdownModalState = {
       row,
-      toolNo,
+      toolNo: selectedTool,
       partNo,
       partName,
       machineId: row?.machineId || "",
@@ -413,7 +531,7 @@ window.DprPage = (() => {
 
     modal.classList.add("open");
 
-    const hasOpen = await checkOpenBreakdown(toolNo);
+    const hasOpen = await checkOpenBreakdown(selectedTool);
     if (submitBtn) submitBtn.disabled = hasOpen;
     setBreakdownWarning(
       hasOpen ? "An open tooldown already exists for this tool." : ""
@@ -1122,6 +1240,7 @@ window.DprPage = (() => {
       rmCoverageNos: null,
       rmAllocated: null,
       toolNo: null,
+      tools: [],
       strokesConsumed: null,
       pmDue: null,
       remarks: "",
@@ -1161,13 +1280,14 @@ window.DprPage = (() => {
     return combined;
   }
 
-  async function refreshDerived(index) {
+  async function refreshDerived(index, opts = {}) {
     const row = pendingRows[index];
     if (!row) return;
     const dateInput = document.getElementById("dpr-date");
     const dateVal = dateInput ? dateInput.value : "";
     if (!String(row.partNo || "").trim()) {
       row.toolNo = null;
+      row.tools = [];
       row.rmIssued = null;
       row.rmAvailable = null;
       row.rmCode = null;
@@ -1177,10 +1297,23 @@ window.DprPage = (() => {
       row.pmDue = null;
       return;
     }
+    const prevTool = opts.selectedToolNo || row.toolNo;
     try {
       const pq = row.plannedQty === null || row.plannedQty === undefined ? 0 : row.plannedQty;
-      const res = await Api.derived(row.partNo, pq, dateVal);
-      row.toolNo = res.toolNo ?? null;
+      const res = await Api.derived(row.partNo, pq, dateVal, prevTool || undefined);
+      row.tools = Array.isArray(res.tools)
+        ? res.tools.map((t) => String(t || "").trim()).filter(Boolean)
+        : [];
+      if (
+        prevTool &&
+        row.tools.some((t) => String(t).trim().toLowerCase() === String(prevTool).trim().toLowerCase())
+      ) {
+        row.toolNo = row.tools.find(
+          (t) => String(t).trim().toLowerCase() === String(prevTool).trim().toLowerCase()
+        );
+      } else {
+        row.toolNo = res.toolNo ?? null;
+      }
       row.rmIssued = res.rmIssued ?? null;
       row.rmAvailable = res.rmAvailable ?? null;
       row.rmCode = res.rmCode ?? null;
@@ -1192,6 +1325,7 @@ window.DprPage = (() => {
     } catch (e) {
       console.error(e);
       row.toolNo = null;
+      row.tools = [];
       row.rmIssued = null;
       row.rmAvailable = null;
       row.rmCode = null;
@@ -1225,7 +1359,18 @@ window.DprPage = (() => {
       setCell("rm_code", row.rmCode);
       setCell("rm_coverage_nos", row.rmCoverageNos);
       setCell("rm_allocated", row.rmAllocated);
-      setCell("tool_no", row.toolNo);
+      const toolTd = tr.querySelector('[data-col-name="tool_no"]');
+      if (toolTd) {
+        const tools = Array.isArray(row.tools)
+          ? row.tools.map((t) => String(t || "").trim()).filter(Boolean)
+          : [];
+        const sel = toolTd.querySelector("select");
+        if (sel && tools.length > 1) {
+          populateToolSelect(sel, tools, row.toolNo);
+        } else if (!sel) {
+          toolTd.textContent = formatCellNumber(row.toolNo);
+        }
+      }
       setCell("strokes_consumed", row.strokesConsumed);
       setCell("pm_due", row.pmDue);
     }, 200);
@@ -1337,6 +1482,7 @@ window.DprPage = (() => {
             pendingRows[idx].partNo = "";
             pendingRows[idx].partName = "";
             pendingRows[idx].toolNo = null;
+            pendingRows[idx].tools = [];
             pendingRows[idx].rmIssued = null;
             pendingRows[idx].rmAvailable = null;
             pendingRows[idx].rmCode = null;
@@ -1351,11 +1497,13 @@ window.DprPage = (() => {
           pendingRows[idx].partNo = partNo;
           pendingRows[idx].partName = partNameFor(partNo);
           await refreshDerived(idx);
-          const toolNo = String(pendingRows[idx].toolNo || "").trim();
-          if (toolNo && (await toolHasActiveBreakdown(toolNo))) {
+          const availableTool = await pickAvailableTool(pendingRows[idx]);
+          if (!availableTool) {
+            const blockedTool = String(pendingRows[idx].toolNo || "").trim();
             pendingRows[idx].partNo = "";
             pendingRows[idx].partName = "";
             pendingRows[idx].toolNo = null;
+            pendingRows[idx].tools = [];
             pendingRows[idx].rmIssued = null;
             pendingRows[idx].rmAvailable = null;
             pendingRows[idx].rmCode = null;
@@ -1365,10 +1513,16 @@ window.DprPage = (() => {
             pendingRows[idx].pmDue = null;
             inp.value = "";
             openDprWarningModal(
-                `Tool ${toolNo} is in an active tooldown and has not been closed yet. Please choose a different part number.`
+              blockedTool
+                ? `All active tools for this part are in an open tooldown (including ${blockedTool}). Please choose a different part number.`
+                : "No active tools found for this part."
             );
             render();
             return;
+          }
+          if (availableTool !== String(pendingRows[idx].toolNo || "").trim()) {
+            pendingRows[idx].toolNo = availableTool;
+            await refreshDerived(idx, { selectedToolNo: availableTool });
           }
           await autoSaveReadyRow(idx, dateVal);
           render();
@@ -1515,7 +1669,7 @@ window.DprPage = (() => {
       tr.appendChild(mkDerived("rm_code", row.rmCode));
       tr.appendChild(mkDerived("rm_coverage_nos", row.rmCoverageNos));
       tr.appendChild(mkDerived("rm_allocated", row.rmAllocated));
-      tr.appendChild(mkDerived("tool_no", row.toolNo));
+      tr.appendChild(buildToolNoCell(row, idx, editable, dateVal, tr));
       tr.appendChild(mkDerived("strokes_consumed", row.strokesConsumed));
       tr.appendChild(mkDerived("pm_due", row.pmDue));
 
@@ -1554,14 +1708,17 @@ window.DprPage = (() => {
         operatorId:
           row.operatorId === null || row.operatorId === undefined ? null : row.operatorId,
         partNo: row.partNo || "",
+        toolNo: row.toolNo || null,
         plannedQty: row.plannedQty === null || row.plannedQty === undefined ? 0 : row.plannedQty,
         producedQty:
           row.producedQty === null || row.producedQty === undefined ? null : row.producedQty,
         remarks: row.remarks || "",
       };
       const res = await Api.save(payload);
+      const prevTool = row.toolNo;
       if (res.row) {
         Object.assign(row, res.row);
+        if (!row.toolNo && prevTool) row.toolNo = prevTool;
       } else if (res.id) {
         row.id = res.id;
       }

@@ -68,6 +68,12 @@ class Config:
         os.environ.get("REPORTS_SUMMARY_CACHE_SECONDS", "30")
     )
     PM_STATUS_CACHE_SECONDS = int(os.environ.get("PM_STATUS_CACHE_SECONDS", "20"))
+    INVENTORY_BASE_CACHE_SECONDS = int(
+        os.environ.get("INVENTORY_BASE_CACHE_SECONDS", "300")
+    )
+    LW_PART_INSPECTION_CACHE_SECONDS = int(
+        os.environ.get("LW_PART_INSPECTION_CACHE_SECONDS", "300")
+    )
 
     # Tool Management daily schedule: scheduled_production (default) | production_calendar
     _tool_schedule_raw = os.environ.get(

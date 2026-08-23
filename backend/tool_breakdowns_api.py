@@ -17,6 +17,7 @@ from . import rbac
 from .db import execute, fetch_all, fetch_one
 from .pm_api import _norm_tool_no
 from . import pm_store
+from .models import _dpr_active_tools_for_part
 
 tool_breakdowns_bp = Blueprint("tool_breakdowns_bp", __name__, url_prefix="/api/tool-breakdowns")
 
@@ -366,6 +367,15 @@ def create_breakdown():
     if not tool_no:
         return jsonify({"error": "toolNo is required"}), 400
 
+    part_no = str(payload.get("partNo") or "").strip() or None
+    if part_no:
+        active_tools = _dpr_active_tools_for_part(part_no)
+        tool_key = tool_no.lower()
+        if not any(str(t).strip().lower() == tool_key for t in active_tools):
+            return jsonify({
+                "error": "Selected tool is inactive or not linked to this part.",
+            }), 400
+
     issue = str(payload.get("issue") or "").strip()
     if not issue:
         return jsonify({"error": "Issue/Problem is required"}), 400
@@ -390,7 +400,6 @@ def create_breakdown():
     if open_row:
         return jsonify({"error": "An open breakdown already exists for this tool"}), 409
 
-    part_no = str(payload.get("partNo") or "").strip() or None
     part_name = str(payload.get("partName") or "").strip() or None
     machine_id = str(payload.get("machineId") or "").strip() or None
     machine_name = str(payload.get("machineName") or "").strip() or None

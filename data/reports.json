@@ -1062,6 +1062,17 @@
       "pinned": false,
       "createdAt": "2026-07-25T09:03:19.439464+00:00",
       "updatedAt": "2026-07-25T09:03:19.439464+00:00"
+    },
+    {
+      "id": "e6f7a8b9-0c1d-4e2f-9a3b-4c5d6e7f8a9b",
+      "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
+      "name": "Component Stock Sections",
+      "queryTemplate": "",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-08-23T07:55:34.725062+00:00",
+      "updatedAt": "2026-08-23T07:55:34.725062+00:00",
+      "handler": "component_stock"
     }
   ]
 }

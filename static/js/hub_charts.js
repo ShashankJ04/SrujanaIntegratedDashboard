@@ -43,56 +43,130 @@ const HubCharts = (() => {
   const DIM = 'rgba(100,116,139,0.5)';
 
   let lastRmChartData = null;
+  let lastRmShortageMode = '15';
+  let lastRmShortagePeriod = 'month';
 
-  function wireRmShortageMode(data) {
-    const sel = document.getElementById('chart-rm-shortage-mode');
-    if (!sel || sel.dataset.wired === '1') return;
-    sel.dataset.wired = '1';
-    sel.addEventListener('change', () => {
-      if (lastRmChartData) renderRmShortageByMaterial(lastRmChartData, sel.value);
+  const RM_SHORTAGE_PERIOD_LABELS = {
+    month: 'Month — production calendar net pending requirement, stacked by week (W1–W5)',
+    week_1: 'Week 1 (days 1–7) — production calendar pending vs RM stock',
+    week_2: 'Week 2 (days 8–14) — production calendar pending vs RM stock',
+    week_3: 'Week 3 (days 15–21) — production calendar pending vs RM stock',
+    week_4: 'Week 4 (days 22–28) — production calendar pending vs RM stock',
+    week_5: 'Week 5 (days 29–31) — production calendar pending vs RM stock',
+  };
+
+  const RM_SHORTAGE_WEEK_KEYS = ['week_1', 'week_2', 'week_3', 'week_4', 'week_5'];
+  const RM_SHORTAGE_WEEK_LABELS = ['W1', 'W2', 'W3', 'W4', 'W5'];
+  const RM_SHORTAGE_WEEK_COLORS = [
+    'rgba(127, 29, 29, 0.95)',
+    'rgba(185, 28, 28, 0.9)',
+    'rgba(239, 68, 68, 0.85)',
+    'rgba(248, 113, 113, 0.8)',
+    'rgba(252, 165, 165, 0.75)',
+  ];
+
+  function rmShortageHoverHtml(r) {
+    const wk = r.week_requirement_kg || {};
+    const weekLines = RM_SHORTAGE_WEEK_KEYS.map(
+      (k, i) => `${RM_SHORTAGE_WEEK_LABELS[i]}: ${fmtQty(wk[k] || 0)} kgs`
+    ).join('<br>');
+    return `<b>${r.rm_rawmt_part_no || '–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)} kgs<br>Required: ${fmtQty(r.total_rm_production_requirement)} kgs<br>${weekLines}<br><b>Shortage: ${fmtQty(r.rm_shortage_actual)} kgs</b>`;
+  }
+
+  function rmShortageCategoryLabels(limited) {
+    return limited.map((r) => String(r.rm_rawmt_part_no || '–'));
+  }
+
+  function buildRmShortageWeekStackTraces(limited, labels, horizontal, hovers) {
+    return RM_SHORTAGE_WEEK_KEYS.map((wk, i) => {
+      const trace = {
+        type: 'bar',
+        name: RM_SHORTAGE_WEEK_LABELS[i],
+        marker: {
+          color: RM_SHORTAGE_WEEK_COLORS[i],
+          line: { color: 'rgba(127, 29, 29, 0.35)', width: 0 },
+        },
+        hoverinfo: 'text',
+        hovertext: hovers,
+      };
+      if (horizontal) {
+        trace.orientation = 'h';
+        trace.y = labels;
+        trace.x = limited.map(r => Number((r.week_requirement_kg || {})[wk]) || 0);
+      } else {
+        trace.x = labels;
+        trace.y = limited.map(r => Number((r.week_requirement_kg || {})[wk]) || 0);
+      }
+      return trace;
     });
   }
 
+  function rmShortageItemsForPeriod(data, period) {
+    const key = period || 'month';
+    const periods = data?.rm_shortage_by_material_periods || {};
+    if (key === 'month') {
+      return data?.rm_shortage_by_material || periods.month || [];
+    }
+    return periods[key] || [];
+  }
+
+  function updateRmShortageSubtitle(period) {
+    const el = document.getElementById('chart-rm-shortage-subtitle');
+    if (!el) return;
+    el.textContent = RM_SHORTAGE_PERIOD_LABELS[period] || RM_SHORTAGE_PERIOD_LABELS.month;
+  }
+
+  function wireRmShortageControls() {
+    const modeSel = document.getElementById('chart-rm-shortage-mode');
+    const periodSel = document.getElementById('chart-rm-shortage-period');
+    if (modeSel && modeSel.dataset.wired !== '1') {
+      modeSel.dataset.wired = '1';
+      modeSel.addEventListener('change', () => {
+        lastRmShortageMode = modeSel.value || '15';
+        if (lastRmChartData) renderRmShortageByMaterial(lastRmChartData);
+      });
+    }
+    if (periodSel && periodSel.dataset.wired !== '1') {
+      periodSel.dataset.wired = '1';
+      periodSel.addEventListener('change', () => {
+        lastRmShortagePeriod = periodSel.value || 'month';
+        if (lastRmChartData) renderRmShortageByMaterial(lastRmChartData);
+      });
+    }
+  }
+
   // ── RM Charts (from dashboard-charts.js, dark-themed) ──────────────
-  function renderRmShortageByMaterial(data, mode) {
+  function renderRmShortageByMaterial(data, mode, period) {
     lastRmChartData = data;
-    wireRmShortageMode(data);
+    wireRmShortageControls();
     const e = el('chart-rm-shortage-by-material'); if (!e) return;
-    const items = data.rm_shortage_by_material || [];
+    const modeSel = document.getElementById('chart-rm-shortage-mode');
+    const periodSel = document.getElementById('chart-rm-shortage-period');
+    if (mode !== undefined && mode !== null) lastRmShortageMode = mode;
+    else if (modeSel) lastRmShortageMode = modeSel.value || lastRmShortageMode;
+    if (period !== undefined && period !== null) lastRmShortagePeriod = period;
+    else if (periodSel) lastRmShortagePeriod = periodSel.value || lastRmShortagePeriod;
+    updateRmShortageSubtitle(lastRmShortagePeriod);
+    const items = rmShortageItemsForPeriod(data, lastRmShortagePeriod);
     const shortages = items.filter(r => Number(r.rm_shortage_actual) < 0);
     if (!shortages.length) {
       e.innerHTML = '<div class="ti-placeholder">No actual RM shortages (stock meets or exceeds requirement)</div>';
       return;
     }
 
-    const showAll = mode === 'all';
+    const showAll = lastRmShortageMode === 'all';
     const sorted = [...shortages].sort(
       (a, b) => Number(a.rm_shortage_actual) - Number(b.rm_shortage_actual)
     );
     const limited = showAll ? sorted : sorted.slice(0, 15);
-
+    const useWeekStack = lastRmShortagePeriod === 'month';
     const displayVals = limited.map(r => Math.abs(Number(r.rm_shortage_actual) || 0));
-    const hovers = limited.map(r => `<b>${r.rm_rawmt_part_no || '–'}</b><br>Stock: ${fmtQty(r.current_acceptedqty)} kgs<br>Required: ${fmtQty(r.total_rm_production_requirement)} kgs<br><b>Shortage: ${fmtQty(r.rm_shortage_actual)} kgs</b>`);
+    const hovers = limited.map(rmShortageHoverHtml);
 
     if (window.Plotly && window.Plotly.purge) window.Plotly.purge(e);
 
-    const barTrace = {
-      type: 'bar',
-      marker: {
-        color: 'rgba(239, 68, 68, 0.88)',
-        line: { color: 'rgba(185, 28, 28, 0.45)', width: 1 },
-        cornerradius: 4,
-      },
-      text: displayVals.map(fmtShortageKg),
-      textposition: 'outside',
-      textfont: { size: 11, color: chartTextColor() },
-      cliponaxis: false,
-      hoverinfo: 'text',
-      hovertext: hovers,
-    };
-
     const yAxisCommon = {
-      title: 'Shortage (kgs)',
+      title: useWeekStack ? 'Requirement (kgs)' : 'Shortage (kgs)',
       rangemode: 'tozero',
       tickformat: ',.0f',
       gridcolor: 'rgba(148,163,184,0.08)',
@@ -100,37 +174,95 @@ const HubCharts = (() => {
       zerolinecolor: 'rgba(148,163,184,0.15)',
     };
 
+    const hoverLayout = { hovermode: 'closest' };
+
     if (showAll) {
-      const labels = limited.map(r => trunc(r.rm_rawmt_part_no, 28));
-      Plotly.newPlot(e, [{
-        ...barTrace,
-        orientation: 'h',
-        y: labels,
-        x: displayVals,
-      }], base({
-        margin: { l: 148, r: 48, t: 52, b: 24 },
-        xaxis: { ...yAxisCommon, side: 'top' },
-        yaxis: { automargin: true, tickfont: { size: 11 }, autorange: 'reversed' },
-        height: Math.min(900, Math.max(360, limited.length * 30)),
-        bargap: 0.28,
-      }), CFG);
+      const labels = rmShortageCategoryLabels(limited);
+      if (useWeekStack) {
+        const traces = buildRmShortageWeekStackTraces(limited, labels, true, hovers);
+        Plotly.newPlot(e, traces, base({
+          ...hoverLayout,
+          margin: { l: 148, r: 48, t: 52, b: 24 },
+          barmode: 'stack',
+          xaxis: { ...yAxisCommon, side: 'top' },
+          yaxis: { automargin: true, tickfont: { size: 11 }, autorange: 'reversed' },
+          height: Math.min(900, Math.max(360, limited.length * 30)),
+          bargap: 0.28,
+          legend: { orientation: 'h', y: 1.08, x: 0, font: { size: 10 } },
+        }), CFG);
+      } else {
+        Plotly.newPlot(e, [{
+          type: 'bar',
+          orientation: 'h',
+          y: labels,
+          x: displayVals,
+          marker: {
+            color: 'rgba(239, 68, 68, 0.88)',
+            line: { color: 'rgba(185, 28, 28, 0.45)', width: 1 },
+            cornerradius: 4,
+          },
+          text: displayVals.map(fmtShortageKg),
+          textposition: 'outside',
+          textfont: { size: 11, color: chartTextColor() },
+          cliponaxis: false,
+          hoverinfo: 'text',
+          hovertext: hovers,
+        }], base({
+          ...hoverLayout,
+          margin: { l: 148, r: 48, t: 52, b: 24 },
+          xaxis: { ...yAxisCommon, side: 'top' },
+          yaxis: { automargin: true, tickfont: { size: 11 }, autorange: 'reversed' },
+          height: Math.min(900, Math.max(360, limited.length * 30)),
+          bargap: 0.28,
+        }), CFG);
+      }
     } else {
-      const labels = limited.map(r => trunc(r.rm_rawmt_part_no, 14));
-      Plotly.newPlot(e, [{
-        ...barTrace,
-        x: labels,
-        y: displayVals,
-      }], base({
-        margin: { l: 56, r: 24, t: 28, b: 88 },
-        yaxis: yAxisCommon,
-        xaxis: {
-          automargin: true,
-          tickfont: { size: 11 },
-          tickangle: 0,
-        },
-        height: 400,
-        bargap: 0.35,
-      }), CFG);
+      const labels = rmShortageCategoryLabels(limited);
+      if (useWeekStack) {
+        const traces = buildRmShortageWeekStackTraces(limited, labels, false, hovers);
+        Plotly.newPlot(e, traces, base({
+          ...hoverLayout,
+          margin: { l: 56, r: 24, t: 36, b: 88 },
+          barmode: 'stack',
+          yaxis: yAxisCommon,
+          xaxis: {
+            automargin: true,
+            tickfont: { size: 11 },
+            tickangle: -35,
+          },
+          height: 400,
+          bargap: 0.35,
+          legend: { orientation: 'h', y: 1.12, x: 0, font: { size: 10 } },
+        }), CFG);
+      } else {
+        Plotly.newPlot(e, [{
+          type: 'bar',
+          x: labels,
+          y: displayVals,
+          marker: {
+            color: 'rgba(239, 68, 68, 0.88)',
+            line: { color: 'rgba(185, 28, 28, 0.45)', width: 1 },
+            cornerradius: 4,
+          },
+          text: displayVals.map(fmtShortageKg),
+          textposition: 'outside',
+          textfont: { size: 11, color: chartTextColor() },
+          cliponaxis: false,
+          hoverinfo: 'text',
+          hovertext: hovers,
+        }], base({
+          ...hoverLayout,
+          margin: { l: 56, r: 24, t: 28, b: 88 },
+          yaxis: yAxisCommon,
+          xaxis: {
+            automargin: true,
+            tickfont: { size: 11 },
+            tickangle: -35,
+          },
+          height: 400,
+          bargap: 0.35,
+        }), CFG);
+      }
     }
   }
 

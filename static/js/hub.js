@@ -444,6 +444,7 @@ const Hub = (() => {
 
   async function navigate(section, opts = {}) {
     if (!SECTIONS[section]) section = 'overview';
+    if (section === 'component-stock') section = 'overview';
     if (!canAccessSection(section)) section = getDefaultSection();
     if (section !== 'dpr') document.body.classList.remove('dpr-fullscreen-mode');
     const skipHistory = opts.skipHistory === true;
@@ -833,7 +834,8 @@ const Hub = (() => {
 
   function getInitialSection() {
     const params = new URLSearchParams(window.location.search);
-    const requested = params.get('section') || 'overview';
+    let requested = params.get('section') || 'overview';
+    if (requested === 'component-stock') requested = 'overview';
     return canAccessSection(requested) ? requested : getDefaultSection();
   }
 

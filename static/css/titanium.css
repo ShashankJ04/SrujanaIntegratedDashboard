@@ -2969,8 +2969,50 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
 }
 
 .ti-monitor-metrics--qty {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.ti-monitor--qty {
+  padding: 12px 16px 10px;
+}
+
+.ti-monitor--qty .ti-monitor-top--qty {
+  margin-bottom: 8px;
+}
+
+.ti-monitor-metrics--qty-primary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 20px;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: end;
+}
+
+.ti-monitor-metrics--qty-derived {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 152px));
+  gap: 10px;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.ti-monitor-metrics--qty .ti-monitor-metric-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.ti-monitor-progress--qty {
+  margin-top: 8px;
+}
+
+.ti-monitor-metric-pct--spacer {
+  display: none;
 }
 
 .ti-monitor .ti-monitor-progress {
@@ -2982,10 +3024,31 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
 }
 
 .ti-monitor-metric-cell--derived {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--ti-surface-2) 88%, transparent);
   border: 1px solid var(--ti-border);
+  justify-content: flex-end;
+}
+
+.ti-monitor-metric-cell--derived .ti-monitor-metric-pct {
+  font-size: clamp(13px, 1.8cqi, 15px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ti-text-bright);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  margin-bottom: 2px;
+}
+
+.ti-monitor-metrics--qty .ti-monitor-metric-label {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.ti-monitor-metrics--qty .ti-monitor-metric-value {
+  font-size: clamp(14px, 2cqi, 19px);
+  line-height: 1.2;
 }
 
 .ti-monitor-metric-label {
@@ -3010,26 +3073,33 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
   text-overflow: ellipsis;
 }
 
-.ti-monitor-metrics--qty .ti-monitor-metric-value {
-  font-size: clamp(14px, 2.1cqi, 20px);
-}
-
 @media (max-width: 1200px) {
   .ti-monitor-metrics--qty {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ti-monitor-metrics--qty-primary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .ti-monitor-metrics--qty-derived {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .ti-monitor-metric-cell--derived:nth-child(4) {
-    grid-column: 1 / 2;
+    grid-column: auto;
   }
 
   .ti-monitor-metric-cell--derived:nth-child(5) {
-    grid-column: 2 / 3;
+    grid-column: auto;
   }
 }
 
 @media (max-width: 640px) {
-  .ti-monitor-metrics--qty {
+  .ti-monitor-metrics--qty-primary,
+  .ti-monitor-metrics--qty-derived {
     grid-template-columns: 1fr;
   }
 
@@ -4186,9 +4256,10 @@ body.dpr-col-resizing {
 .dpr-qr-modal-card {
   position: relative;
   z-index: 1;
+  width: min(420px, 100%);
   max-width: 100%;
   padding: 16px 18px 20px;
-  background: var(--ti-surface, #1e293b);
+  background: var(--ti-bg-subtle, #1e293b);
   border-radius: 12px;
   border: 1px solid var(--ti-glass-border);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -4223,10 +4294,37 @@ body.dpr-col-resizing {
 .dpr-qr-modal-hint {
   margin: 12px 0 0;
   font-size: 0.88rem;
+  color: var(--ti-text);
+  line-height: 1.5;
 }
 
 .dpr-qr-modal-hint a {
   color: var(--ti-accent);
+}
+
+.dpr-warning-modal-message {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--ti-text);
+  text-align: left;
+  background: var(--ti-red-soft, rgba(239, 68, 68, 0.12));
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 8px;
+}
+
+[data-theme="light"] .dpr-qr-modal-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+}
+
+[data-theme="light"] .dpr-warning-modal-message {
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .dpr-col-qr {
@@ -5082,6 +5180,13 @@ body.dpr-col-resizing {
   --rr-grand-total-bg: #1e2433;
   --rr-grand-total-fg: #e2e8f0;
   --rr-grand-total-border: rgba(255, 255, 255, 0.1);
+}
+
+.rr-component-stock-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 24px;
 }
 
 [data-theme="light"] .reports-runner {
@@ -6327,6 +6432,13 @@ body.dpr-col-resizing {
 .ti-laser-welding.lw-tab--packing #lw-table .lw-col-lot--pack {
   width: 118px;
   min-width: 96px;
+}
+
+.ti-laser-welding.lw-tab--lw-cleaning #lw-table .lw-col-qa,
+.ti-laser-welding.lw-tab--lw-cleaning #lw-table .lw-col-scrap,
+.ti-laser-welding.lw-tab--lw-cleaning #lw-table-head .lw-col-qa,
+.ti-laser-welding.lw-tab--lw-cleaning #lw-table-head .lw-col-scrap {
+  display: none;
 }
 
 .ti-laser-welding .lw-pack-output-lot {
@@ -11898,4 +12010,205 @@ body.lw-track-drawer-open .lw-track-drawer {
 .ti-laser-welding #lw-tracking-panel .lw-track-dash-shell {
   flex: 1;
   min-height: 0;
+}
+
+/* ── Component Stock hub section ── */
+.ti-cs-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 4px 0;
+}
+
+.ti-cs-page--overview .ti-cs-panels {
+  flex: none;
+}
+
+.ti-cs-page--overview .ti-cs-panel {
+  min-height: 280px;
+}
+
+.ti-cs-page--overview .ti-cs-table-wrap {
+  max-height: 360px;
+}
+
+.ti-cs-header {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ti-cs-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ti-text-bright);
+}
+
+.ti-cs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 20px;
+  padding: 10px 14px;
+  background: var(--ti-bg-surface, var(--ti-surface-1));
+  border: 1px solid var(--ti-border);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.ti-cs-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.ti-cs-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ti-accent, #1565c0);
+  text-transform: uppercase;
+}
+
+.ti-cs-filter-input {
+  min-width: 160px;
+  width: 100%;
+}
+
+.ti-cs-gross-total {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ti-green, #2e7d32);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.ti-cs-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  color: var(--ti-text-muted);
+}
+
+.ti-cs-loading[hidden] {
+  display: none !important;
+}
+
+.ti-cs-empty,
+.ti-cs-error {
+  padding: 16px;
+  text-align: center;
+  color: var(--ti-text-muted);
+  font-size: 14px;
+}
+
+.ti-cs-empty[hidden],
+.ti-cs-error[hidden] {
+  display: none !important;
+}
+
+.ti-cs-error {
+  color: var(--ti-red, #c62828);
+}
+
+.ti-cs-panels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-cs-panels[hidden] {
+  display: none !important;
+}
+
+.ti-cs-gross-total[hidden] {
+  display: none !important;
+}
+
+.ti-cs-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--ti-border);
+  border-radius: 8px;
+  background: var(--ti-bg-surface, var(--ti-surface-1));
+  overflow: hidden;
+}
+
+.ti-cs-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #e8f4fc 0%, #d6ebf7 100%);
+  border-bottom: 1px solid var(--ti-border);
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d3b66;
+}
+
+.ti-cs-panel-total {
+  font-weight: 700;
+  color: #0d3b66;
+}
+
+.ti-cs-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ti-cs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ti-cs-table th,
+.ti-cs-table td {
+  border: 1px solid var(--ti-border);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ti-cs-table thead th {
+  background: var(--ti-bg-hover, #f5f7fa);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ti-cs-table .ti-cs-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .ti-cs-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .ti-cs-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ti-cs-gross-total {
+    margin-left: 0;
+    text-align: right;
+  }
 }

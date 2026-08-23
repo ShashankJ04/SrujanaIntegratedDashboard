@@ -37,6 +37,11 @@
     </div>
   </div>
 
+  <!-- Component Stock widget (handler report only; hidden by default) -->
+  <div id="runComponentStockHost" class="rr-component-stock-host" style="display:none">
+    {% include 'hub_component_stock.html' %}
+  </div>
+
   <!-- Hidden picker kept for sidebar-collapsed fallback -->
   <select id="reportsRunnerPicker" class="rr-hidden-picker" style="display:none" aria-hidden="true">
     <option value="">Choose a report…</option>
@@ -547,12 +552,30 @@
     }
   }
 
+  function isComponentStockReport(report) {
+    return String(report?.handler || '').trim() === 'component_stock';
+  }
+
+  function setComponentStockViewerVisible(show) {
+    const host = document.getElementById('runComponentStockHost');
+    const gridHost = document.querySelector('.rr-grid-host');
+    const runBtn = document.getElementById('runExecuteBtn');
+    const exportBtn = document.getElementById('runExportBtn');
+    if (host) host.style.display = show ? 'block' : 'none';
+    if (gridHost) gridHost.style.display = show ? 'none' : '';
+    if (runBtn) runBtn.style.display = show ? 'none' : '';
+    if (exportBtn) exportBtn.style.display = show ? 'none' : '';
+  }
+
   function showEmptyViewer() {
     currentRunReport = null;
     lastRunResult = null;
     currentRunVariables = {};
     currentViewMode = 'root';
     runViewStack.length = 0;
+    setComponentStockViewerVisible(false);
+    document.getElementById('runExecuteBtn').style.display = '';
+    document.getElementById('runExportBtn').style.display = '';
     document.getElementById('runReportTitle').textContent = 'Reports';
     const sub = document.getElementById('runReportSub');
     sub.textContent = 'Select a report from the sidebar';
@@ -575,6 +598,7 @@
   }
 
   function canAutoRunReport(report) {
+    if (String(report?.handler || '').trim() === 'component_stock') return false;
     const vars = report?.variables || [];
     if (!vars.length) return true;
     return vars.every(v => {
@@ -601,6 +625,27 @@
     document.getElementById('runError').style.display = 'none';
     setReportsGridToolsVisible(false);
     lastRunResult = null;
+
+    if (isComponentStockReport(report)) {
+      setComponentStockViewerVisible(true);
+      const varsPanel = document.getElementById('runVarsPanel');
+      varsPanel.style.display = 'none';
+      varsPanel.innerHTML = '';
+      document.getElementById('runEmpty').style.display = 'none';
+      document.getElementById('runClearBtn').style.display = 'none';
+      document.getElementById('runExecuteBtn').disabled = true;
+      updateBackButtonState();
+      syncReportsPicker(report.id);
+      if (typeof window.ComponentStockPage?.init === 'function') {
+        window.ComponentStockPage.init();
+      }
+      return;
+    }
+
+    setComponentStockViewerVisible(false);
+    document.getElementById('runExecuteBtn').style.display = '';
+    document.getElementById('runExportBtn').style.display = '';
+    document.getElementById('runClearBtn').style.display = '';
 
     const varsPanel = document.getElementById('runVarsPanel');
     const vars = report.variables || [];

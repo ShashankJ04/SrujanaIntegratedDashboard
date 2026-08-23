@@ -122,6 +122,7 @@ BUILTIN_REPORT_HANDLERS: Tuple[str, ...] = (
     "lw_stock",
     "lw_qa",
     "lw_scrap",
+    "component_stock",
 )
 
 
@@ -144,7 +145,7 @@ def _normalize_filter_column(value: Any) -> str:
 
 
 def _default_variables_for_handler(handler: str) -> List[str]:
-    if handler == "lw_stock":
+    if handler in ("lw_stock", "component_stock"):
         return []
     return ["from_date", "to_date"]
 
@@ -526,6 +527,17 @@ def compile_report_query(
 def get_groups() -> List[Dict[str, Any]]:
     store = _read_store()
     return sorted(store["groups"], key=lambda g: g.get("name", ""))
+
+
+def find_group_id_by_name(name: str) -> str:
+    """Return group id for an exact name match (case-insensitive), or empty string."""
+    target = str(name or "").strip().lower()
+    if not target:
+        return ""
+    for g in get_groups():
+        if str(g.get("name") or "").strip().lower() == target:
+            return str(g.get("id") or "")
+    return ""
 
 
 def create_group(name: str) -> Dict[str, Any]:

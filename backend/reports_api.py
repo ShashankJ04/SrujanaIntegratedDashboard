@@ -229,6 +229,17 @@ def run_report(report_id):
     if not report:
         return jsonify({"message": "Report not found"}), 404
 
+    handler_key = str(report.get("handler") or "").strip()
+    if handler_key == "component_stock":
+        return jsonify(
+            {
+                "message": (
+                    "Component Stock Sections uses the interactive viewer; "
+                    "SQL run is not available."
+                )
+            }
+        ), 400
+
     data = request.get_json(force=True, silent=True) or {}
     variables = data.get("variables", {})
 
@@ -268,6 +279,17 @@ def export_report(report_id):
     report = reports_store.get_report_by_id(report_id)
     if not report:
         return jsonify({"message": "Report not found"}), 404
+
+    handler_key = str(report.get("handler") or "").strip()
+    if handler_key == "component_stock":
+        return jsonify(
+            {
+                "message": (
+                    "Component Stock Sections cannot be exported as Excel; "
+                    "use the interactive viewer."
+                )
+            }
+        ), 400
 
     data = request.get_json(force=True, silent=True) or {}
     variables = data.get("variables", {})

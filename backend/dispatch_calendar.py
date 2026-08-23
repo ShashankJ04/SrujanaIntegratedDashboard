@@ -896,6 +896,35 @@ def get_dispatch_schedule_by_part(month: int, year: int) -> Dict[str, Dict[str, 
     return out
 
 
+def get_dispatch_day_qty_by_part(month: int, year: int) -> Dict[str, Dict[str, Any]]:
+    """Per-part dispatch scheduled qty by calendar day (day_1 … day_31)."""
+    templates = _load_dispatch_calendar_query_templates()
+    mo_qt = templates.get(MONTHLY_ORDER_REPORT_ID, "")
+    if not mo_qt:
+        return {}
+    mo_sql, mo_params = reports_store.compile_report_query(
+        mo_qt,
+        {"month": month, "year": year},
+    )
+    mo_rows = fetch_all(mo_sql, tuple(mo_params))
+    days_in_month = calendar.monthrange(year, month)[1]
+    out: Dict[str, Dict[str, Any]] = {}
+    for raw in mo_rows:
+        if _is_grand_total_row(raw):
+            continue
+        pk = _normalize_part_key(_mo_part_no_raw(raw))
+        if not pk:
+            continue
+        day_qty: Dict[str, float] = {}
+        for d in range(1, days_in_month + 1):
+            day_qty[f"day_{d}"] = _to_float(raw.get(_day_column_key(d)))
+        out[pk] = {
+            "partNo": str(_mo_part_no_raw(raw) or "").strip(),
+            "days": day_qty,
+        }
+    return out
+
+
 def get_scheduled_qty_by_part(month: int, year: int) -> Dict[str, float]:
     """Per-part Total Scheduled Qty from the dispatch monthly-order report."""
     return {

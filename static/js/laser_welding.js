@@ -6,7 +6,8 @@ window.LaserWeldingPage = (() => {
   const GRID_PRIMARY_QTY_LABELS = {
     inspection: 'Inspected',
     sa_cleaning: 'Inspected',
-    lw_cleaning: 'Inspected',
+    lw_cleaning: 'Cleaned',
+    lw_inspection: 'Inspected',
     qa: 'Disposition',
     packing: 'Consumed',
   };
@@ -17,7 +18,8 @@ window.LaserWeldingPage = (() => {
     sa_cleaning: 'SA Inspection',
     sa_rework: 'SA Re-Work',
     laser_welding: 'Laser Welding',
-    lw_cleaning: 'LW Cleaning/Inspection',
+    lw_cleaning: 'LW Cleaning',
+    lw_inspection: 'LW Inspection',
     lw_rework: 'LW Re-Work',
     packing: 'Packing',
     trays_carton: 'Trays/Carton',
@@ -26,7 +28,7 @@ window.LaserWeldingPage = (() => {
     reports: 'Reports — activity, stock, QA & scrap',
   };
 
-  const GRID_TABS = new Set(['inspection', 'sa_cleaning', 'lw_cleaning', 'qa', 'packing']);
+  const GRID_TABS = new Set(['inspection', 'sa_cleaning', 'lw_cleaning', 'lw_inspection', 'qa', 'packing']);
   const SA_TABS = new Set(['sub_assembly', 'sa_rework']);
   const ASM_TABS = new Set(['laser_welding', 'lw_rework']);
   const TRACK_TABS = new Set(['tracking', 'reports']);
@@ -229,7 +231,25 @@ window.LaserWeldingPage = (() => {
 
   function isCleaningTab(tab) {
     const t = tab || _tab;
-    return t === 'sa_cleaning' || t === 'lw_cleaning';
+    return t === 'sa_cleaning' || t === 'lw_cleaning' || t === 'lw_inspection';
+  }
+
+  function isLwCleanOnlyTab(tab) {
+    return (tab || _tab) === 'lw_cleaning';
+  }
+
+  function cleaningScopeForTab(tab) {
+    const t = tab || _tab;
+    if (t === 'lw_inspection') return 'lw_inspection';
+    if (t === 'lw_cleaning') return 'lw_cleaning';
+    if (t === 'sa_cleaning') return 'sa_cleaning';
+    return '';
+  }
+
+  function cleaningSourceLotsStep(mode) {
+    const m = mode || _prodModalMode;
+    if (m === 'lw_inspection') return 'inspect';
+    return 'clean';
   }
 
   function gridApiMode(tab) {
@@ -237,6 +257,7 @@ window.LaserWeldingPage = (() => {
     if (t === 'inspection') return 'inspection';
     if (t === 'sa_cleaning') return 'sa_cleaning';
     if (t === 'lw_cleaning') return 'lw_cleaning';
+    if (t === 'lw_inspection') return 'lw_inspection';
     return t;
   }
 
@@ -244,6 +265,7 @@ window.LaserWeldingPage = (() => {
     const t = tab || _tab;
     if (t === 'inspection') return 'inspection';
     if (t === 'qa') return 'qa';
+    if (t === 'lw_inspection') return 'lw_inspection';
     if (isCleaningTab(t)) return t;
     return 'production';
   }
@@ -867,6 +889,7 @@ window.LaserWeldingPage = (() => {
   function inspectActionLabel() {
     if (_tab === 'qa') return 'QA';
     if (_tab === 'packing') return 'Pack';
+    if (_tab === 'lw_cleaning') return 'Clean';
     return 'Inspect';
   }
 
@@ -1182,6 +1205,7 @@ window.LaserWeldingPage = (() => {
         operatorId,
         operatorIds: [operatorId],
         workDate: _workDate,
+        scope: cleaningScopeForTab(),
         subAssemblyPartNo: partMatch.isSubAssembly ? (partMatch.subAssemblyPartNo || bomNo) : undefined,
       });
       bomInput.value = '';
@@ -1294,12 +1318,14 @@ window.LaserWeldingPage = (() => {
     return _packingLotsCache[pn];
   }
 
-  async function fetchCleaningSourceLots(bomId, subAssemblyPartNo) {
+  async function fetchCleaningSourceLots(bomId, subAssemblyPartNo, step) {
     const bid = String(bomId || '').trim();
     if (!bid) return [];
     const saPart = String(subAssemblyPartNo || '').trim();
-    const cacheKey = saPart ? `${bid}:${saPart}` : bid;
-    let url = '/api/laser-welding/cleaning/source-lots?bomId=' + encodeURIComponent(bid);
+    const stepKey = step || cleaningSourceLotsStep();
+    const cacheKey = saPart ? `${bid}:${saPart}:${stepKey}` : `${bid}:${stepKey}`;
+    let url = '/api/laser-welding/cleaning/source-lots?bomId=' + encodeURIComponent(bid)
+      + '&step=' + encodeURIComponent(stepKey);
     if (saPart) url += '&subAssemblyPartNo=' + encodeURIComponent(saPart);
     const data = await apiFetch(url);
     _cleaningLotsCache[cacheKey] = data.lots || [];
@@ -1308,8 +1334,9 @@ window.LaserWeldingPage = (() => {
 
   function cleaningLotsCacheKey() {
     const bid = bomIdKey(_prodModalBomId);
-    if (_prodModalSubAssemblyPartNo) return `${bid}:${_prodModalSubAssemblyPartNo}`;
-    return bid;
+    const stepKey = cleaningSourceLotsStep();
+    if (_prodModalSubAssemblyPartNo) return `${bid}:${_prodModalSubAssemblyPartNo}:${stepKey}`;
+    return `${bid}:${stepKey}`;
   }
 
   function packMaterialOptionsHtml(items, selectedCode) {
@@ -1867,9 +1894,14 @@ window.LaserWeldingPage = (() => {
     }
   }
 
+  function lotUnitLabel(plantId) {
+    return plantId != null && plantId !== '' ? ` · Unit ${plantId}` : '';
+  }
+
   function prodLotOptionsHtml(partNo, selectedLot, usedLots, selectedTargetId, usedTargetIds, selectedPlantId) {
-    if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning') {
+    if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning' || _prodModalMode === 'lw_inspection') {
       const lots = _cleaningLotsCache[cleaningLotsCacheKey()] || [];
+      const useCleaningPending = _prodModalMode === 'lw_cleaning';
       let html = '<option value="">Select lot…</option>';
       lots.forEach(l => {
         const lotId = Number(l.lotId);
@@ -1877,8 +1909,11 @@ window.LaserWeldingPage = (() => {
         if (!lotId || !lotNo) return;
         if (usedTargetIds.has(lotId) && lotId !== Number(selectedTargetId)) return;
         const sel = lotId === Number(selectedTargetId) ? ' selected' : '';
-        const pending = Number(l.inspectionPending || l.noOfComp) || 0;
-        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)} (pending: ${pending})</option>`;
+        const qty = useCleaningPending
+          ? Number(l.cleaningPending || l.noOfComp) || 0
+          : Number(l.inspectionPending || l.noOfComp) || 0;
+        const label = useCleaningPending ? 'clean pending' : 'inspect pending';
+        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)} (${label}: ${qty})</option>`;
       });
       return html;
     }
@@ -1893,7 +1928,8 @@ window.LaserWeldingPage = (() => {
         if (usedTargetIds.has(lotId) && lotId !== Number(selectedTargetId)) return;
         const sel = lotId === Number(selectedTargetId) ? ' selected' : '';
         const qa = Number(l.totalQa || l.noOfComp) || 0;
-        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)} (QA: ${qa})</option>`;
+        const unitLabel = lotUnitLabel(l.plantId);
+        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)} (QA: ${qa})</option>`;
       });
       return html;
     }
@@ -1908,7 +1944,8 @@ window.LaserWeldingPage = (() => {
         if (usedTargetIds.has(lotId) && lotId !== Number(selectedTargetId)) return;
         const sel = lotId === Number(selectedTargetId) ? ' selected' : '';
         const avail = Number(l.totalOkayed || l.noOfComp) || 0;
-        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)} (avail: ${avail})</option>`;
+        const unitLabel = lotUnitLabel(l.plantId);
+        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)} (avail: ${avail})</option>`;
       });
       return html;
     }
@@ -1922,7 +1959,7 @@ window.LaserWeldingPage = (() => {
       const selected = lotMatchesLine(l, { sourceLotNo: selectedLot, plantId: selectedPlantId });
       if (usedLots.has(optVal) && !selected) return;
       const sel = selected ? ' selected' : '';
-      const unitLabel = l.plantId ? ` · Unit ${l.plantId}` : '';
+      const unitLabel = lotUnitLabel(l.plantId);
       html += `<option value="${escapeAttr(optVal)}"${sel}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)}</option>`;
     });
     return html;
@@ -2226,6 +2263,9 @@ window.LaserWeldingPage = (() => {
       html += '<th class="lw-prod-col-lot">Lot</th><th class="lw-prod-col-avail">Available</th>';
       html += '<th class="lw-prod-col-num">Consumed</th><th class="lw-prod-col-num">QA</th><th class="lw-prod-col-num">Scrap</th>';
       html += '<th class="lw-prod-col-remark">QA Remarks</th><th class="lw-prod-col-remark">Scrap Remarks</th><th class="lw-prod-col-action"></th>';
+    } else if (_prodModalMode === 'lw_cleaning') {
+      html += '<th class="lw-prod-col-lot">Lot No</th><th class="lw-prod-col-avail">Available</th>';
+      html += '<th class="lw-prod-col-num">Cleaned</th><th class="lw-prod-col-action"></th>';
     } else if (isBo) {
       html += '<th class="lw-prod-col-avail">Available</th>';
       html += '<th class="lw-prod-col-num">Inspected</th><th class="lw-prod-col-num">Scrap</th><th class="lw-prod-col-remark">Scrap Remarks</th>';
@@ -2298,6 +2338,22 @@ window.LaserWeldingPage = (() => {
           return;
         }
 
+        if (_prodModalMode === 'lw_cleaning') {
+          const max = lotAvailableQty(ln);
+          const cleaned = Number(ln.inspectedQty) || 0;
+          html += '<tr>';
+          html += `<td class="lw-prod-col-lot"><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
+          html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds, ln.plantId);
+          html += '</select></td>';
+          html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
+          html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-insp" data-idx="${idx}" min="0" max="${max}" value="${cleaned}" /></td>`;
+          html += !isTrailingEmpty
+            ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
+            : '<td class="lw-prod-col-action"></td>';
+          html += '</tr>';
+          return;
+        }
+
         const max = lotAvailableQty(ln);
         const insp = Number(ln.inspectedQty) || 0;
         const qa = Number(ln.qaQty) || 0;
@@ -2339,6 +2395,7 @@ window.LaserWeldingPage = (() => {
   function prodModalModeForTab() {
     if (_tab === 'sa_cleaning') return 'sa_cleaning';
     if (_tab === 'lw_cleaning') return 'lw_cleaning';
+    if (_tab === 'lw_inspection') return 'lw_inspection';
     if (_tab === 'qa') return 'qa';
     if (_tab === 'packing') return 'packing';
     return 'production';
@@ -2348,7 +2405,8 @@ window.LaserWeldingPage = (() => {
     const titles = {
       production: 'Part Inspection',
       sa_cleaning: 'SA Cleaning Inspection',
-      lw_cleaning: 'LW Cleaning Inspection',
+      lw_cleaning: 'LW Cleaning',
+      lw_inspection: 'LW Inspection',
       qa: 'QA Disposition',
       packing: 'Packing',
     };
@@ -2422,7 +2480,11 @@ window.LaserWeldingPage = (() => {
       _prodModalIsBo = false;
       _prodModalLines = [emptyLine()];
     } else if (isCleaningTab() && _prodModalBomId) {
-      await fetchCleaningSourceLots(_prodModalBomId, _prodModalSubAssemblyPartNo);
+      await fetchCleaningSourceLots(
+        _prodModalBomId,
+        _prodModalSubAssemblyPartNo,
+        cleaningSourceLotsStep(mode),
+      );
       if (openSeq !== _prodModalOpenSeq) return;
       _prodModalIsBo = false;
       _prodModalLines = [emptyLine()];
@@ -2472,7 +2534,11 @@ window.LaserWeldingPage = (() => {
 
   function collectProductionModalLines() {
     const partNo = $('#lw-prod-modal-part')?.dataset.partNumber || '';
-    const isCleaning = _prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning';
+    const isCleaningModal = _prodModalMode === 'sa_cleaning'
+      || _prodModalMode === 'lw_cleaning'
+      || _prodModalMode === 'lw_inspection';
+    const isLwCleanOnly = _prodModalMode === 'lw_cleaning';
+    const isLwInspect = _prodModalMode === 'lw_inspection';
     const isBo = _prodModalIsBo && _prodModalMode === 'production';
     const lines = [];
 
@@ -2501,6 +2567,7 @@ window.LaserWeldingPage = (() => {
             qaPassed: passed,
             scrapQty: scrap,
             reworkQty: rework,
+            rework: rework,
             scrapRemark: scrap > 0 ? scrapRemark : undefined,
             reworkRemark: rework > 0 ? reworkRemark : undefined,
           });
@@ -2584,16 +2651,35 @@ window.LaserWeldingPage = (() => {
       let qa = parseInt(qaInp?.value, 10) || 0;
       let scrap = parseInt(scrapInp?.value, 10) || 0;
 
-      if (isCleaning) {
+      if (isCleaningModal) {
         const targetLotId = parseInt(sel.value, 10) || null;
         const match = asmLots.find(l => Number(l.lotId) === targetLotId);
         const lotNo = match?.newLotNo || '';
-        const max = Number(match?.inspectionPending || match?.noOfComp) || 0;
+        const max = isLwCleanOnly
+          ? Number(match?.cleaningPending || match?.noOfComp) || 0
+          : Number(match?.inspectionPending || match?.noOfComp) || 0;
+        if (isLwCleanOnly) {
+          if (insp > max && max > 0) {
+            throw new Error(`Cleaned QTY cannot exceed cleaning pending (${max}) for lot ${lotNo}`);
+          }
+          if (targetLotId || insp > 0) {
+            if (!targetLotId) throw new Error('Select a lot for lines with quantity');
+            lines.push({
+              targetLotId,
+              sourceLotNo: lotNo,
+              noOfComp: max,
+              availableQty: max,
+              inspectedQty: insp,
+            });
+          }
+          return;
+        }
         if (qa + scrap > insp) {
           throw new Error(`QA + Scrap cannot exceed Inspected QTY for lot ${lotNo || targetLotId}`);
         }
         if (insp > max && max > 0) {
-          throw new Error(`Inspected QTY cannot exceed inspection pending (${max}) for lot ${lotNo}`);
+          const limitLabel = isLwCleanOnly ? 'cleaning pending' : 'inspection pending';
+          throw new Error(`Inspected QTY cannot exceed ${limitLabel} (${max}) for lot ${lotNo}`);
         }
         if (targetLotId || insp > 0 || qa > 0 || scrap > 0) {
           if (!targetLotId) throw new Error('Select a lot for lines with quantity');
@@ -2671,7 +2757,8 @@ window.LaserWeldingPage = (() => {
     } else {
       const nonZero = lines.filter(l => Number(l.inspectedQty) > 0);
       if (!nonZero.length) {
-        showSnackbar('Enter at least one line with Inspected QTY > 0', 'warning');
+        const qtyLabel = _prodModalMode === 'lw_cleaning' ? 'Cleaned' : 'Inspected';
+        showSnackbar(`Enter at least one line with ${qtyLabel} QTY > 0`, 'warning');
         return;
       }
     }
@@ -2691,7 +2778,7 @@ window.LaserWeldingPage = (() => {
     let endpoint = '/api/laser-welding/child-parts/inspect';
     const payload = { draftLineId, workDate: _workDate, lines, timeTakenMinutes, otFlag };
 
-    if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning') {
+    if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning' || _prodModalMode === 'lw_inspection') {
       endpoint = '/api/laser-welding/cleaning/inspect';
     } else if (_prodModalMode === 'qa') {
       endpoint = '/api/laser-welding/qa/inspect';
@@ -2716,7 +2803,8 @@ window.LaserWeldingPage = (() => {
       const successMsgs = {
         production: `Inspected — Lot No: ${data.newLotNo || data.lots?.[0]?.newLotNo || ''}`,
         sa_cleaning: 'SA cleaning inspection saved',
-        lw_cleaning: 'LW cleaning inspection saved',
+        lw_cleaning: 'LW cleaning saved',
+        lw_inspection: 'LW inspection saved',
         qa: 'QA disposition saved',
         packing: data.packLotNo
           ? `Packing saved — PCK lot: ${data.packLotNo}`
@@ -2758,7 +2846,9 @@ window.LaserWeldingPage = (() => {
   function onProductionModalLotChange(sel) {
     const idx = Number(sel.getAttribute('data-idx'));
     const partNo = $('#lw-prod-modal-part')?.dataset.partNumber || '';
-    const isCleaning = _prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning';
+    const isCleaningModal = _prodModalMode === 'sa_cleaning'
+      || _prodModalMode === 'lw_cleaning'
+      || _prodModalMode === 'lw_inspection';
 
     // Preserve in-progress edits on other rows before we rewrite the table.
     syncProdModalLinesFromDom();
@@ -2771,6 +2861,7 @@ window.LaserWeldingPage = (() => {
       const match = (_qaLotsCache[partNo] || []).find(l => Number(l.lotId) === targetLotId);
       _prodModalLines[idx].targetLotId = targetLotId;
       _prodModalLines[idx].sourceLotNo = match?.newLotNo || '';
+      _prodModalLines[idx].plantId = match?.plantId ?? null;
       const avail = Number(match?.totalQa || match?.noOfComp) || 0;
       _prodModalLines[idx].noOfComp = avail;
       _prodModalLines[idx].availableQty = avail;
@@ -2779,15 +2870,18 @@ window.LaserWeldingPage = (() => {
       const match = (_packingLotsCache[partNo] || []).find(l => Number(l.lotId) === targetLotId);
       _prodModalLines[idx].targetLotId = targetLotId;
       _prodModalLines[idx].sourceLotNo = match?.newLotNo || '';
+      _prodModalLines[idx].plantId = match?.plantId ?? null;
       const avail = Number(match?.totalOkayed || match?.noOfComp) || 0;
       _prodModalLines[idx].noOfComp = avail;
       _prodModalLines[idx].availableQty = avail;
-    } else if (isCleaning) {
+    } else if (isCleaningModal) {
       const targetLotId = parseInt(sel.value, 10) || null;
       const match = (_cleaningLotsCache[cleaningLotsCacheKey()] || []).find(l => Number(l.lotId) === targetLotId);
       _prodModalLines[idx].targetLotId = targetLotId;
       _prodModalLines[idx].sourceLotNo = match?.newLotNo || '';
-      const avail = Number(match?.inspectionPending || match?.noOfComp) || 0;
+      const avail = _prodModalMode === 'lw_cleaning'
+        ? Number(match?.cleaningPending || match?.noOfComp) || 0
+        : Number(match?.inspectionPending || match?.noOfComp) || 0;
       _prodModalLines[idx].noOfComp = avail;
       _prodModalLines[idx].availableQty = avail;
     } else {
@@ -4480,9 +4574,11 @@ window.LaserWeldingPage = (() => {
     const lineIdx = Number(removeBtn.getAttribute('data-line-idx'));
     const ch = _weldModalChildren[partIdx];
     if (!ch?.lines) return;
+    // Preserve other lines, then drop this one without re-reading the removed DOM row.
+    syncWeldModalLinesFromDom();
     ch.lines.splice(lineIdx, 1);
     if (!ch.lines.length) ch.lines.push(emptyWeldLine());
-    renderWeldModalChildren();
+    renderWeldModalChildren({ skipSync: true });
   }
 
   function onWeldModalChange(e) {
@@ -4598,7 +4694,10 @@ window.LaserWeldingPage = (() => {
 
     showPanel(tab);
     const root = $('#lw-root');
-    if (root) root.classList.toggle('lw-tab--packing', tab === 'packing');
+    if (root) {
+      root.classList.toggle('lw-tab--packing', tab === 'packing');
+      root.classList.toggle('lw-tab--lw-cleaning', tab === 'lw_cleaning');
+    }
     updateGridTableHeaders();
     const subtitle = $('#lw-subtitle');
     if (subtitle) subtitle.textContent = TAB_LABELS[tab] || '';
@@ -4706,11 +4805,15 @@ window.LaserWeldingPage = (() => {
     const removeBtn = e.target.closest('.lw-prod-line-remove');
     if (removeBtn) {
       const idx = Number(removeBtn.getAttribute('data-idx'));
+      // Capture other rows first, then drop this one without re-reading removed DOM indexes.
+      syncProdModalLinesFromDom();
       _prodModalLines.splice(idx, 1);
       if (!_prodModalLines.length) _prodModalLines.push(emptyLine());
-      renderProductionModalLines();
-      return;
+      renderProductionModalLines({ skipSync: true });
     }
+  }
+
+  function onProductionModalChange(e) {
     const lotSel = e.target.closest('.lw-prod-line-lot');
     if (lotSel) onProductionModalLotChange(lotSel);
   }
@@ -4778,6 +4881,7 @@ window.LaserWeldingPage = (() => {
   ];
   const TRACK_FG_PHASES = [
     { id: 'awaiting_clean', label: 'Awaiting clean' },
+    { id: 'awaiting_inspection', label: 'Awaiting inspection' },
     { id: 'qa_pending', label: 'QA pending' },
     { id: 'ready_to_pack', label: 'Ready to pack' },
     { id: 'rework_pending', label: 'Rework' },
@@ -4789,6 +4893,7 @@ window.LaserWeldingPage = (() => {
     qa_pending: 'QA pending',
     consumed: 'Consumed',
     awaiting_clean: 'Awaiting clean',
+    awaiting_inspection: 'Awaiting inspection',
     ready_for_weld: 'Ready for weld',
     ready_to_pack: 'Ready to pack',
     rework_pending: 'Rework pending',
@@ -4800,7 +4905,8 @@ window.LaserWeldingPage = (() => {
     { id: 'sa_cleaning', label: 'SA Inspection', tab: 'sa_cleaning', filterPhases: ['awaiting_clean'], kinds: ['sa'] },
     { id: 'sa_rework', label: 'SA Re-Work', tab: 'sa_rework', filterPhases: ['rework_pending'], kinds: ['sa'] },
     { id: 'laser_welding', label: 'Laser Welding', tab: 'laser_welding', filterPhases: ['ready_for_weld'], kinds: ['fg'] },
-    { id: 'lw_cleaning', label: 'LW Cleaning/Inspection', tab: 'lw_cleaning', filterPhases: ['awaiting_clean'], kinds: ['fg'] },
+    { id: 'lw_cleaning', label: 'LW Cleaning', tab: 'lw_cleaning', filterPhases: ['awaiting_clean'], kinds: ['fg'] },
+    { id: 'lw_inspection', label: 'LW Inspection', tab: 'lw_inspection', filterPhases: ['awaiting_inspection'], kinds: ['fg'] },
     { id: 'lw_rework', label: 'LW Re-Work', tab: 'lw_rework', filterPhases: ['rework_pending'], kinds: ['fg'] },
     { id: 'packing', label: 'Packing', tab: 'packing', filterPhases: ['ready_to_pack'], kinds: ['fg'] },
     { id: 'qa', label: 'QA', tab: 'qa', filterPhases: ['qa_pending'] },
@@ -4814,6 +4920,7 @@ window.LaserWeldingPage = (() => {
     }
     if (phase === 'qa_pending') return 'qa';
     if (phase === 'awaiting_clean') return kind === 'sa' ? 'sa_cleaning' : 'lw_cleaning';
+    if (phase === 'awaiting_inspection' && kind === 'fg') return 'lw_inspection';
     if (phase === 'rework_pending') return kind === 'sa' ? 'sa_rework' : 'lw_rework';
     if (phase === 'ready_to_pack' && kind === 'fg') return 'packing';
     if (phase === 'ready_for_weld' && kind === 'sa') return 'laser_welding';
@@ -5048,12 +5155,14 @@ window.LaserWeldingPage = (() => {
   };
 
   const STOCK_QTY_COLUMNS = [
+    { key: 'cleaning_pending', label: 'Cleaning Pending' },
     { key: 'inspection_pending', label: 'Inspection Pending' },
-    { key: 'fg', label: 'FG' },
+    { key: 'fg', label: 'Inspected' },
+    { key: 'packed', label: 'FG' },
     { key: 'qa', label: 'QA' },
     { key: 'scrap', label: 'Scrap' },
     { key: 'rework_pending', label: 'Rework Pending' },
-    { key: 'packed', label: 'Packed' },
+    { key: 'packed_total', label: 'Packed' },
   ];
 
   const HISTORY_GRID_COLUMNS = [
@@ -5088,7 +5197,22 @@ window.LaserWeldingPage = (() => {
     },
     { key: 'operator', label: 'Operator', width: 130 },
     { key: 'machineName', label: 'Machine', width: 110 },
-    { key: 'inspectedQty', label: 'Qty', align: 'right', width: 64 },
+    {
+      key: 'inspectedQty',
+      label: 'Qty',
+      align: 'right',
+      width: 64,
+      format: (v, row) => {
+        const n = Number(v) || 0;
+        if (row.workflowStep === 'lw_cleaning') {
+          return `<span title="Cleaned">${n}</span>`;
+        }
+        if (row.workflowStep === 'lw_inspection') {
+          return `<span title="Inspected">${n}</span>`;
+        }
+        return String(n);
+      },
+    },
     { key: 'qaQty', label: 'QA', align: 'right', width: 52 },
     { key: 'scrapQty', label: 'Scrap', align: 'right', width: 58 },
     { key: 'reworkQty', label: 'Rework', align: 'right', width: 64 },
@@ -5432,7 +5556,7 @@ window.LaserWeldingPage = (() => {
       _stockGrid,
       stockGridColumns(),
       _stockRows,
-      'lw-stock-report',
+      'lw-stock-report-v3',
       'No stock on hand',
     );
   }
@@ -5611,6 +5735,7 @@ window.LaserWeldingPage = (() => {
     qa_pending: '#f59e0b',
     consumed: '#94a3b8',
     awaiting_clean: '#3b82f6',
+    awaiting_inspection: '#0ea5e9',
     ready_for_weld: '#10b981',
     ready_to_pack: '#059669',
     rework_pending: '#ef4444',
@@ -5783,12 +5908,12 @@ window.LaserWeldingPage = (() => {
     const nodes = [
       'ERP stock', 'Inspected', 'Child QA', 'Consumed',
       'SA clean', 'SA QA', 'SA ready', 'SA rework',
-      'FG clean', 'FG QA', 'Ready pack', 'FG rework', 'Pack',
+      'FG clean', 'FG inspect', 'FG QA', 'Ready pack', 'FG rework', 'Pack',
     ];
     const nodeColors = [
       '#8b5cf6', '#10b981', '#f59e0b', '#94a3b8',
       '#3b82f6', '#f59e0b', '#10b981', '#ef4444',
-      '#3b82f6', '#f59e0b', '#059669', '#ef4444', '#6366f1',
+      '#3b82f6', '#0ea5e9', '#f59e0b', '#059669', '#ef4444', '#6366f1',
     ];
 
     const links = [];
@@ -5802,14 +5927,15 @@ window.LaserWeldingPage = (() => {
     link(1, 2, childC.qa_pending || s.childQaPending || 0);
     link(1, 4, saC.awaiting_clean || s.saAwaitingClean || 0);
     link(1, 8, fgC.awaiting_clean || s.fgAwaitingClean || 0);
+    link(8, 9, fgC.awaiting_inspection || s.fgAwaitingInspection || 0);
     link(4, 5, saC.qa_pending || 0);
     link(5, 6, saC.ready_for_weld || s.saReadyForWeld || 0);
     link(6, 8, saC.ready_for_weld || 0);
-    link(8, 9, fgC.qa_pending || 0);
-    link(9, 10, fgC.ready_to_pack || s.fgReadyToPack || 0);
-    link(10, 12, fgC.ready_to_pack || s.fgReadyToPack || 0);
+    link(9, 10, fgC.qa_pending || 0);
+    link(10, 11, fgC.ready_to_pack || s.fgReadyToPack || 0);
+    link(11, 13, fgC.ready_to_pack || s.fgReadyToPack || 0);
     link(4, 7, saC.rework_pending || 0);
-    link(8, 11, fgC.rework_pending || 0);
+    link(8, 12, fgC.rework_pending || 0);
 
     if (!links.length) {
       el.innerHTML = '<p class="lw-track-dash-empty">No WIP flow data</p>';
@@ -5859,6 +5985,7 @@ window.LaserWeldingPage = (() => {
         { label: 'SA awaiting clean', v: saC.awaiting_clean || s.saAwaitingClean || 0 },
         { label: 'SA ready weld', v: saC.ready_for_weld || s.saReadyForWeld || 0 },
         { label: 'FG awaiting clean', v: fgC.awaiting_clean || s.fgAwaitingClean || 0 },
+        { label: 'FG awaiting inspection', v: fgC.awaiting_inspection || s.fgAwaitingInspection || 0 },
         { label: 'FG ready pack', v: fgC.ready_to_pack || s.fgReadyToPack || 0 },
         { label: 'Rework', v: (saC.rework_pending || 0) + (fgC.rework_pending || 0) + (s.reworkPendingTotal || 0) },
       ].filter(b => b.v > 0).sort((a, b) => b.v - a.v);
@@ -6306,7 +6433,7 @@ window.LaserWeldingPage = (() => {
     const stepsByKind = {
       child: ['erp_stock', 'inspected_ready', 'qa_pending', 'consumed'],
       sa: ['awaiting_clean', 'qa_pending', 'ready_for_weld', 'rework_pending'],
-      fg: ['awaiting_clean', 'qa_pending', 'ready_to_pack', 'rework_pending'],
+      fg: ['awaiting_clean', 'awaiting_inspection', 'qa_pending', 'ready_to_pack', 'rework_pending'],
     };
     const steps = stepsByKind[kind] || stepsByKind.fg;
     const idx = Math.max(0, steps.indexOf(phase));
@@ -6342,7 +6469,10 @@ window.LaserWeldingPage = (() => {
     if (phase === 'qa_pending') return { text: 'Approve in QA Disposition', tab: 'qa' };
     if (phase === 'awaiting_clean') {
       if (kind === 'sa') return { text: 'SA Inspection', tab: 'sa_cleaning' };
-      return { text: 'LW Cleaning/Inspection', tab: 'lw_cleaning' };
+      return { text: 'LW Cleaning', tab: 'lw_cleaning' };
+    }
+    if (phase === 'awaiting_inspection' && kind === 'fg') {
+      return { text: 'LW Inspection', tab: 'lw_inspection' };
     }
     if (phase === 'ready_for_weld') return { text: 'Weld into final assembly', tab: 'laser_welding' };
     if (phase === 'ready_to_pack') return { text: 'Pack lot', tab: 'packing' };
@@ -6383,7 +6513,10 @@ window.LaserWeldingPage = (() => {
     const extras = [];
     if (item.phase === 'awaiting_clean' && kind === 'sa' && action?.tab !== 'sa_cleaning') {
       if (kind === 'sa') extras.push({ text: 'SA Inspection', tab: 'sa_cleaning' });
-      else extras.push({ text: 'LW Cleaning/Inspection', tab: 'lw_cleaning' });
+      else extras.push({ text: 'LW Cleaning', tab: 'lw_cleaning' });
+    }
+    if (item.phase === 'awaiting_inspection' && kind === 'fg' && action?.tab !== 'lw_inspection') {
+      extras.push({ text: 'LW Inspection', tab: 'lw_inspection' });
     }
     if (item.phase === 'ready_to_pack' && action?.tab !== 'packing') {
       extras.push({ text: 'Pack', tab: 'packing' });
@@ -6594,7 +6727,7 @@ window.LaserWeldingPage = (() => {
       if (e.target.id === 'lw-production-modal-overlay') closeProductionModal();
     });
     $('#lw-prod-modal-lines')?.addEventListener('click', onProductionModalClick);
-    $('#lw-prod-modal-lines')?.addEventListener('change', onProductionModalClick);
+    $('#lw-prod-modal-lines')?.addEventListener('change', onProductionModalChange);
     $('#lw-prod-modal-lines')?.addEventListener('input', onProductionModalInput);
     $('#lw-prod-modal-mins')?.addEventListener('input', e => {
       const inp = e.target;

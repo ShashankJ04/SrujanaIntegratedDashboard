@@ -10,6 +10,10 @@ from . import reports_store
 logger = logging.getLogger(__name__)
 
 # Reports linked directly from hub_overview.html and related KPI modules.
+# Pinned Reports catalog — Component Stock interactive viewer (same widget as Overview).
+COMPONENT_STOCK_REPORT_ID = "e6f7a8b9-0c1d-4e2f-9a3b-4c5d6e7f8a9b"
+COMPONENT_STOCK_GROUP_NAME = "Component Stock"
+
 OVERVIEW_LINKED_REPORT_IDS: tuple[str, ...] = (
     "88a9ed8d-8131-44cb-8fef-fc2782449986",  # Tool BreakDowns
     "5749a7ed-e4be-4b41-a73b-78bd416f46b2",  # Distinct Component Details - With Tools
@@ -164,4 +168,60 @@ def ensure_overview_reports() -> Dict[str, Any]:
         "createdReports": created_reports,
         "missingFromCatalog": missing_from_catalog,
         "seedPath": reports_store.overview_reports_seed_path(),
+    }
+
+
+def ensure_component_stock_report() -> Dict[str, Any]:
+    """Insert Component Stock Sections report into the existing Component Stock group."""
+    group_id = reports_store.find_group_id_by_name(COMPONENT_STOCK_GROUP_NAME)
+    if not group_id:
+        logger.warning(
+            "Component Stock report bootstrap: group %r not found — skipping",
+            COMPONENT_STOCK_GROUP_NAME,
+        )
+        return {
+            "createdReport": False,
+            "groupId": "",
+            "reportId": COMPONENT_STOCK_REPORT_ID,
+            "skipped": True,
+        }
+
+    catalog_report = {
+        "id": COMPONENT_STOCK_REPORT_ID,
+        "groupId": group_id,
+        "name": "Component Stock Sections",
+        "queryTemplate": "",
+        "handler": "component_stock",
+        "variables": [],
+        "pinned": True,
+        "drilldowns": [],
+    }
+    runtime_reports = reports_store.get_reports()
+    report_by_id = {
+        str(r.get("id")): r
+        for r in runtime_reports
+        if isinstance(r, dict) and r.get("id")
+    }
+    created_report = False
+    try:
+        created_report = reports_store.upsert_catalog_report(
+            catalog_report,
+            report_by_id,
+        )
+        if created_report:
+            logger.info(
+                "Component Stock report bootstrap: created report %s in group %s",
+                COMPONENT_STOCK_REPORT_ID,
+                group_id,
+            )
+    except Exception as exc:
+        logger.warning(
+            "Component Stock report bootstrap failed: %s",
+            exc,
+        )
+    return {
+        "createdReport": created_report,
+        "groupId": group_id,
+        "reportId": COMPONENT_STOCK_REPORT_ID,
+        "skipped": False,
     }
