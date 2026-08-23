@@ -133,6 +133,20 @@ const HubCharts = (() => {
         if (lastRmChartData) renderRmShortageByMaterial(lastRmChartData);
       });
     }
+
+    const exportBtn = document.getElementById('btn-export-rm-shortage');
+    if (exportBtn && exportBtn.dataset.wired !== '1') {
+      exportBtn.dataset.wired = '1';
+      exportBtn.addEventListener('click', () => {
+        if (typeof apiDownloadGet === 'function') {
+          apiDownloadGet('/api/dashboard/rm-shortage/export', 'actual_rm_shortage_report.xlsx');
+        } else if (typeof Hub !== 'undefined' && Hub.api && Hub.api.download) {
+          Hub.api.download('/api/dashboard/rm-shortage/export', null, 'actual_rm_shortage_report.xlsx');
+        } else {
+          window.location.href = '/api/dashboard/rm-shortage/export';
+        }
+      });
+    }
   }
 
   // ── RM Charts (from dashboard-charts.js, dark-themed) ──────────────

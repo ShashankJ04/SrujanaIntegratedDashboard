@@ -42,7 +42,6 @@ Thumbs.db
 
 # Local environment config
 .env
-.env.example
 /dashboards
 
 # Personal Obsidian vault (local documentation only)

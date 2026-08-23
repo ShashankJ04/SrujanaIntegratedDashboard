@@ -1,0 +1,164 @@
+{
+  "groups": [
+    {
+      "id": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Masters",
+      "createdAt": "2026-03-22T08:33:43.975Z",
+      "updatedAt": "2026-03-22T08:33:43.975Z"
+    },
+    {
+      "id": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Dispatch",
+      "createdAt": "2026-03-30T13:25:36.670Z",
+      "updatedAt": "2026-03-30T13:25:36.670Z"
+    },
+    {
+      "id": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Child Reports",
+      "createdAt": "2026-04-20T08:45:26.669047+00:00",
+      "updatedAt": "2026-04-20T08:45:26.669047+00:00"
+    },
+    {
+      "id": "f06ae007-823b-49e3-98e5-a65269bcaffd",
+      "name": "Tools",
+      "createdAt": "2026-05-23T15:25:32.094067+00:00",
+      "updatedAt": "2026-05-23T15:25:32.094067+00:00"
+    }
+  ],
+  "reports": [
+    {
+      "id": "e6c36649-266d-4818-a25b-a3ec080f4744",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "BOM Dispatch CustomerWise",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} and C.CU_Name = {cust_name}",
+      "variables": [
+        "month",
+        "year",
+        "cust_name"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-25T09:03:19.439464+00:00",
+      "updatedAt": "2026-07-25T09:03:19.439464+00:00"
+    },
+    {
+      "id": "44f78950-7e3e-46f2-a278-ba88e0c7d8c9",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "BOM Dispatch Details",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year}",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-25T08:26:28.558185+00:00",
+      "updatedAt": "2026-07-25T09:02:35.145137+00:00"
+    },
+    {
+      "id": "97e39414-c6d7-4392-aa6f-1972c41cfc1e",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "BOM Dispatch Pivot",
+      "queryTemplate": "SELECT C.CU_Name as 'Cumtomer Name',sum(QTY) as 'Schedule Qty',sum(INV_QTY) as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} group by C.CU_Name",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-25T09:02:56.147735+00:00",
+      "updatedAt": "2026-07-25T09:04:17.722656+00:00",
+      "drilldowns": [
+        {
+          "column": "Cumtomer Name",
+          "targetReportId": "e6c36649-266d-4818-a25b-a3ec080f4744",
+          "variables": {
+            "cust_name": {
+              "type": "column",
+              "value": "Cumtomer Name"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "5749a7ed-e4be-4b41-a73b-78bd416f46b2",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Distinct  Component Details - With Tools",
+      "queryTemplate": "SELECT \n    cu_name AS 'Parent Customer',\n    CO_PARTNO AS 'Part_No',\n    CO_PARTNAME AS 'Part Name',\n    CO_NoOfOp AS 'No of Operations',\n    MAX(mt_name) AS 'Material',\n    ROUND((1/MAX(t.conVal))*1000,2) AS 'Total Wt',\n    MAX(CO_WEIGHT) AS 'Component Weight',\n    ROUND(ROUND((1/MAX(t.conVal))*1000,2)-MAX(CO_WEIGHT),3) AS 'Comp Scrap',\n    ROUND((MAX(CO_WEIGHT)/ROUND((1/MAX(t.conVal))*1000,2))*100,2) AS 'Comp Yield (%)',\n    MAX(CO_WIDTH) AS Width,\n    MAX(CO_LENGTH) AS Thickness,\n    MAX(CO_REVISION) AS Revision,\n    MAX(gm_name) AS Grade,\n    MAX(coalesce(pl_name,'')) AS Plating,\n    MAX(coalesce(ft_name,'') ) AS 'Finish Type',\n    MAX(CO_MICRON) AS Micron,\n    -- Aggregate material names and tool numbers\n    GROUP_CONCAT(DISTINCT t.MM_RawMtPartNo ORDER BY t.MM_RawMtPartNo) AS 'RawMaterial/s',\n    GROUP_CONCAT(DISTINCT t.CT_TOOLNO ORDER BY t.CT_TOOLNO) AS 'Tool/s'\nFROM components c\nLEFT JOIN customer ON CO_CUSTID = cu_id\nLEFT JOIN materialtypemaster ON co_materialtypeid = mt_id\nLEFT JOIN grademaster ON CO_GRADEID = gm_id\nLEFT JOIN plating ON CO_ELECTROPLATING = pl_id\nLEFT JOIN finishtype ON CO_FINISH = ft_id\nLEFT JOIN (\n    SELECT \n        CT_COMPID,\n        CT_TOOLNO,\n        CT_RMID,\n        MM_RawMtPartNo,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * \n         ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n    FROM components_tool\n    INNER JOIN materialmaster ON CT_RMID = MM_Id\n    INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n    WHERE CT_ActiveYN='Y' AND CT_PPC='Y'\n      AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0\n) t ON t.CT_COMPID = CO_ID\nWHERE CO_ID IN (\n    SELECT DISTINCT CO_PARENTID \n    FROM components \n    WHERE CO_ACTIVEYN='Y'\n)\nGROUP BY CO_ID\norder by cu_name,CO_PARTNO ;",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-07-23T11:30:15.845403+00:00",
+      "updatedAt": "2026-07-24T04:03:54.805247+00:00"
+    },
+    {
+      "id": "3b289936-891a-4770-b669-b8b724672431",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Distinct Customers",
+      "queryTemplate": "select CU_Name as Customer from customer where CU_Status = 'R';",
+      "variables": [],
+      "createdAt": "2026-03-22T09:01:43.882Z",
+      "updatedAt": "2026-05-17T16:01:21.302464+00:00",
+      "pinned": true
+    },
+    {
+      "id": "51a29798-a36d-4933-bbfe-05e4097ba83d",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Distinct Raw Materials",
+      "queryTemplate": "select MM_RawMtPartNo as RawMaterial ,MT_Name as Material ,MM_Thickness as Thickness ,MM_StripWidth as Width,hm_name as Hardness,GM_Name as Grade from materialmaster\n\tleft join grademaster on MM_gmId=gm_id\n\tleft join hardnessmaster on MM_hmId=HM_Id\n\tleft join materialtypemaster on MM_mtId=mt_id where mm_activeyn='Y';",
+      "variables": [],
+      "createdAt": "2026-03-22T08:34:23.927Z",
+      "updatedAt": "2026-07-13T04:05:10.777824+00:00",
+      "pinned": true
+    },
+    {
+      "id": "ed95ec7b-1c11-4e58-8adb-524421ea224c",
+      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
+      "name": "Distinct Tools with PartNos",
+      "queryTemplate": "SELECT \n    ct_toolno AS Tool,\n    max(TL_spm) AS SPM,\n    GROUP_CONCAT(DISTINCT CT_PITCH ORDER BY CT_PITCH SEPARATOR ' ,') AS 'Pitch',\n    GROUP_CONCAT(DISTINCT CT_NO_OF_CAVITY ORDER BY CT_NO_OF_CAVITY SEPARATOR '  ,') AS 'Cavity', \n    COUNT(*) AS 'Component Count',\n    COUNT(DISTINCT NULLIF(TRIM(MM_RawMtPartNo), '')) AS 'Raw Material Count',\n    COALESCE(MAX(CASE WHEN rn = 1 THEN CO_PARTNO END), '') AS Component1,\n    COALESCE(MAX(CASE WHEN rn = 2 THEN CO_PARTNO END), '') AS Component2,\n    COALESCE(MAX(CASE WHEN rn = 3 THEN CO_PARTNO END), '') AS Component3,\n    COALESCE(MAX(CASE WHEN rn = 4 THEN CO_PARTNO END), '') AS Component4,\n    COALESCE(MAX(CASE WHEN rn = 1 THEN MM_RawMtPartNo END), '') AS RawMaterial1,\n    COALESCE(MAX(CASE WHEN rn = 2 THEN MM_RawMtPartNo END), '') AS RawMaterial2,\n    COALESCE(MAX(CASE WHEN rn = 3 THEN MM_RawMtPartNo END), '') AS RawMaterial3,\n    COALESCE(MAX(CASE WHEN rn = 4 THEN MM_RawMtPartNo END), '') AS RawMaterial4\nFROM (\n    SELECT \n        ct_toolno,\n        CO_PARTNO,\n        CT_PITCH,\n        CT_NO_OF_CAVITY,\n        MM_RawMtPartNo,\na.TL_spm ,\n        ROW_NUMBER() OVER (PARTITION BY ct_toolno ORDER BY CO_PARTNO) AS rn\n    FROM components_tool \n    LEFT JOIN components ON CT_COMPID = CO_ID\n    LEFT JOIN materialmaster ON CT_RMID = mm_id\n    LEFT JOIN (select distinct TRIM(TL_tool_number) AS TL_tool_number,MAX(TL_spm) AS TL_spm from tool_life GROUP BY TRIM(TL_tool_number)) a on a.TL_tool_number = ct_toolno \n    WHERE ct_activeyn = 'Y'\n) t\nGROUP BY ct_toolno\nORDER BY ct_toolno;",
+      "variables": [],
+      "createdAt": "2026-03-25T12:13:51.363Z",
+      "updatedAt": "2026-07-25T06:13:30.390610+00:00",
+      "pinned": true
+    },
+    {
+      "id": "88a9ed8d-8131-44cb-8fef-fc2782449986",
+      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
+      "name": "Tool BreakDowns",
+      "queryTemplate": "SELECT \n    TRIM(tool_no) AS Tool_no,\n    SUM(tool_down = 'Breakdown') AS `Breakdown`,\n    SUM(tool_down = 'RM Complete') AS `RM Complete`,\n    SUM(tool_down = 'Schedule Complete') AS `Schedule Complete`,\n    SUM(tool_down = 'Preventive Maintenance') AS `Preventive Maintenance`\nFROM (select trim(PM_tool_number) as Tool_NO,'Preventive Maintenance' as tool_down from preventive_maintenance\nunion all\nselect trim(tool_no) as Tool_no,tool_down from tool_breakdowns) a\nGROUP BY TRIM(tool_no)\nORDER BY Tool_no;",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-07-04T10:28:52.791983+00:00",
+      "updatedAt": "2026-07-11T10:27:16.837572+00:00",
+      "drilldowns": [
+        {
+          "column": "Breakdown",
+          "targetReportId": "4fac67f2-929b-488c-910d-83c0dcb722cb",
+          "variables": {
+            "tool_number": {
+              "type": "column",
+              "value": "Tool_no"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "4fac67f2-929b-488c-910d-83c0dcb722cb",
+      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
+      "name": "Tool Breakdown Details",
+      "queryTemplate": "SELECT\n    TOOL_NO AS `Tool No`,\n    PART_NO AS `Part No`,\n    PART_NAME AS `Part Name`,\n    MACHINE_NAME AS `Machine Name`,\n    DPR_PRODUCED_QTY AS `Produced Quantity`,\n    ISSUE AS `Issue`,\n    TOOL_DOWN AS `Tool Down`,\n    OPERATOR_NAME AS `Operator Name`,\n    DOWNTIME_AT AS `Downtime At`,\n    ROOT_CAUSE AS `Root Cause`,\n    ANALYSIS AS `Analysis`,\n    ACTION_TAKEN AS `Action Taken`,\n    REMARKS AS `Remarks`,\n    SPARE_CONSUMED AS `Spare Consumed`,\n    COMPLETED_AT AS `Completed At`,\n    HOURS_SPENT AS `Hours Spent`,\n    CURRENT_STROKE AS `Current Stroke`,\n    NEXT_STROKE AS `Next Stroke`\nFROM tool_breakdowns\nWHERE tool_no = {tool_number};",
+      "variables": [
+        "tool_number"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-11T10:22:40.582915+00:00",
+      "updatedAt": "2026-07-11T14:48:11.147693+00:00"
+    }
+  ]
+}
