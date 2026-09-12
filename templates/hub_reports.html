@@ -59,6 +59,43 @@
   let _prevSidebarState = null; // remember sidebar state before auto-collapse
   let _activeNoFormatColumns = new Set(); // columns that should not receive number grouping
 
+  /* ── Expansion Manager ─────────────────────────────────────────────── */
+  const ExpansionMgr = {
+    _expanded: new Set(),          // Set of row indices that are currently expanded
+    _cache: {},                    // { rowIdx: { html, report, result } }
+    _loading: new Set(),           // row indices currently loading
+    _childExpansions: {},          // { rowIdx: ExpansionMgr-like instance for child }
+
+    reset() {
+      this._expanded.clear();
+      this._cache = {};
+      this._loading.clear();
+      this._childExpansions = {};
+    },
+    isExpanded(idx) { return this._expanded.has(idx); },
+    toggle(idx) {
+      if (this._expanded.has(idx)) {
+        this._expanded.delete(idx);
+        delete this._childExpansions[idx];
+      } else {
+        this._expanded.add(idx);
+      }
+    },
+    setLoading(idx, loading) {
+      if (loading) this._loading.add(idx); else this._loading.delete(idx);
+    },
+    isLoading(idx) { return this._loading.has(idx); },
+    cacheResult(idx, html, report, result) {
+      this._cache[idx] = { html, report, result };
+    },
+    getCached(idx) { return this._cache[idx] || null; },
+    collapseAll() {
+      this._expanded.clear();
+      this._loading.clear();
+      this._childExpansions = {};
+    },
+  };
+
   function reportsRowFilter() {
     const v = new URLSearchParams(window.location.search).get('rowFilter');
     return v ? String(v).trim().toLowerCase() : '';
@@ -503,9 +540,221 @@
     });
   }
 
+  function getReportExpansion(report) {
+    const expansions = report && Array.isArray(report.expansions) ? report.expansions : [];
+    return expansions.length ? expansions[0] : null;
+  }
+
+  function buildExpansionTableHtml(childReport, result, parentVariables, depth) {
+    const cols = result.columns || (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
+    const rows = result.rows || [];
+    const childExpansion = getReportExpansion(childReport);
+    const noFmtList = Array.isArray(result.noFormatColumns) ? result.noFormatColumns : [];
+    const noFmtSet = new Set(noFmtList.map(c => String(c).trim().toLowerCase()));
+    const label = (childReport._expansionLabel) || childReport.name || 'Expanded Data';
+    const drilldowns = Array.isArray(childReport.drilldowns) ? childReport.drilldowns : [];
+
+    let html = '<div class="rr-expansion-panel" style="--rr-depth:' + depth + '">';
+    html += '<div class="rr-expansion-header"><span>📋</span> ' + escapeHtml(label) + ' <span class="rr-expansion-count">(' + rows.length + ' row' + (rows.length !== 1 ? 's' : '') + ')</span></div>';
+
+    if (!rows.length) {
+      html += '<div class="rr-expansion-empty">No data</div></div>';
+      return html;
+    }
+
+    html += '<table class="rr-expansion-table">';
+    // Header
+    html += '<thead><tr>';
+    if (childExpansion) html += '<th class="rr-expand-th" style="width:30px"></th>';
+    cols.forEach(c => { html += '<th>' + escapeHtml(c) + '</th>'; });
+    html += '</tr></thead>';
+    // Body
+    html += '<tbody>';
+    rows.forEach((row, rIdx) => {
+      const rowId = 'exp_' + depth + '_' + rIdx + '_' + Date.now();
+      html += '<tr data-exp-row="' + rowId + '">';
+      if (childExpansion) {
+        html += '<td class="rr-expand-td"><button type="button" class="rr-expand-toggle" data-exp-toggle="' + rowId + '" data-child-id="' + attrEscape(childExpansion.targetReportId) + '" data-exp-depth="' + (depth + 1) + '" data-exp-row-data="' + attrEscape(JSON.stringify(row)) + '" data-exp-parent-vars="' + attrEscape(JSON.stringify(parentVariables)) + '" data-exp-config="' + attrEscape(JSON.stringify(childExpansion)) + '" data-exp-label="' + attrEscape(childExpansion.label || '') + '">▶</button></td>';
+      }
+      cols.forEach(c => {
+        let val = row[c];
+        // Check for drilldowns on this column
+        const colDd = drilldowns.filter(d => d && String(d.column || '').trim().toLowerCase() === String(c).trim().toLowerCase());
+        const skipFmt = noFmtSet.has(String(c).trim().toLowerCase()) || isIdentifierColumnName(c);
+        let display = skipFmt ? escapeHtml(String(val ?? '')) : escapeHtml(formatIndianValue(val, c));
+        if (colDd.length && val !== null && val !== undefined && val !== '') {
+          const payload = attrEscape(JSON.stringify({ col: c, row: row, drilldown: colDd[0] }));
+          display = '<button type="button" class="rr-link-btn" data-exp-drilldown="' + payload + '" style="all:unset;color:#1565c0;cursor:pointer;text-decoration:underline">' + display + '</button>';
+        }
+        html += '<td>' + display + '</td>';
+      });
+      html += '</tr>';
+      // Expansion placeholder row (hidden by default, toggled by JS)
+      if (childExpansion) {
+        html += '<tr class="rr-expansion-child-row" data-exp-child-of="' + rowId + '" style="display:none"><td colspan="' + (cols.length + 1) + '" class="rr-expansion-child-cell"><div class="rr-expansion-loading">Loading…</div></td></tr>';
+      }
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function bindExpansionEvents(container) {
+    // Toggle expand/collapse on child expansion tables
+    container.addEventListener('click', async (e) => {
+      const toggleBtn = e.target.closest('button[data-exp-toggle]');
+      if (toggleBtn) {
+        e.stopPropagation();
+        const rowId = toggleBtn.getAttribute('data-exp-toggle');
+        const childRow = container.querySelector('tr[data-exp-child-of="' + rowId + '"]');
+        if (!childRow) return;
+
+        if (childRow.style.display !== 'none') {
+          // Collapse
+          childRow.style.display = 'none';
+          toggleBtn.textContent = '▶';
+          return;
+        }
+
+        // Expand
+        childRow.style.display = '';
+        toggleBtn.textContent = '▼';
+
+        // Check if already loaded
+        const cell = childRow.querySelector('.rr-expansion-child-cell');
+        if (cell && cell.dataset.loaded === '1') return;
+
+        // Fetch child data
+        const childId = toggleBtn.getAttribute('data-child-id');
+        const depth = Number(toggleBtn.getAttribute('data-exp-depth')) || 1;
+        const parentRow = JSON.parse(toggleBtn.getAttribute('data-exp-row-data') || '{}');
+        const parentVars = JSON.parse(toggleBtn.getAttribute('data-exp-parent-vars') || '{}');
+        const expLabel = toggleBtn.getAttribute('data-exp-label') || '';
+
+        try {
+          const childReport = await apiFetch('/api/reports/reports/' + encodeURIComponent(childId));
+          // Parse the expansion config (variable mappings) embedded in the button
+          // This is the expansion rule from the *parent* report that targets this child
+          let expansionConfig = null;
+          try {
+            expansionConfig = JSON.parse(toggleBtn.getAttribute('data-exp-config') || 'null');
+          } catch (_) {}
+          const variables = buildExpansionVariables(expansionConfig, parentRow, parentVars);
+
+          const result = await apiPost('/api/reports/reports/' + childId + '/run', { variables });
+          childReport._expansionLabel = expLabel || childReport.name;
+          const html = buildExpansionTableHtml(childReport, result, variables, depth);
+          if (cell) {
+            cell.innerHTML = html;
+            cell.dataset.loaded = '1';
+            bindExpansionEvents(cell); // recursive binding for deeper levels
+          }
+        } catch (err) {
+          if (cell) {
+            cell.innerHTML = '<div class="rr-expansion-error">⚠️ ' + escapeHtml(err.message) + '</div>';
+            cell.dataset.loaded = '1';
+          }
+        }
+        return;
+      }
+
+      // Handle drilldown clicks inside expansion tables
+      const ddBtn = e.target.closest('button[data-exp-drilldown]');
+      if (ddBtn) {
+        e.stopPropagation();
+        try {
+          const parsed = JSON.parse(decodeURIComponent(ddBtn.getAttribute('data-exp-drilldown') || ''));
+          const drilldown = parsed.drilldown;
+          if (!drilldown) return;
+          const variables = {};
+          Object.entries(drilldown.variables || {}).forEach(([targetVar, sourceSpec]) => {
+            let raw = '';
+            if (sourceSpec && typeof sourceSpec === 'object') {
+              if (sourceSpec.type === 'parentVariable') {
+                raw = (currentRunVariables || {})[String(sourceSpec.value || '').trim()];
+              } else {
+                raw = parsed.row ? parsed.row[String(sourceSpec.value || '').trim()] : '';
+              }
+            } else {
+              raw = parsed.row ? parsed.row[String(sourceSpec || '').trim()] : '';
+            }
+            variables[targetVar] = raw === null || raw === undefined ? '' : String(raw);
+          });
+          await runDrilldown(drilldown, variables);
+        } catch (_) {}
+        return;
+      }
+    });
+  }
+
+  function findExpansionConfigForChild(container, childId, toggleBtn) {
+    // Walk up to find the closest expansion panel's parent report expansion config
+    // For the top-level expansion, use currentRunReport's expansion
+    // For nested expansions, we need the expansion stored in the child report's result
+    // The toggle button stores the necessary data
+    if (!lastRunResult) return null;
+    const expansions = lastRunResult.expansions || [];
+    if (expansions.length && expansions[0].targetReportId === childId) return expansions[0];
+    // For deeper nesting, the expansion config comes from the child report we fetched
+    return null;
+  }
+
+  function buildExpansionVariables(expansionConfig, parentRow, parentVars) {
+    const variables = {};
+    if (!expansionConfig) return variables;
+    Object.entries(expansionConfig.variables || {}).forEach(([targetVar, sourceSpec]) => {
+      let raw = '';
+      if (sourceSpec && typeof sourceSpec === 'object') {
+        if (sourceSpec.type === 'parentVariable') {
+          raw = parentVars[String(sourceSpec.value || '').trim()];
+        } else {
+          raw = parentRow[String(sourceSpec.value || '').trim()];
+        }
+      } else {
+        raw = parentRow[String(sourceSpec || '').trim()];
+      }
+      variables[targetVar] = raw === null || raw === undefined ? '' : String(raw);
+    });
+    return variables;
+  }
+
+  function evaluateRowColorRules(row, rules) {
+    if (!rules || !rules.length) return '';
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      const colVal = row[rule.column];
+      let targetVal = rule.targetType === 'column' ? row[rule.targetValue] : rule.targetValue;
+
+      if (colVal == null || targetVal == null) continue;
+
+      let nCol = Number(colVal);
+      let nTarget = Number(targetVal);
+      let isNum = !isNaN(nCol) && !isNaN(nTarget) && colVal !== '' && targetVal !== '';
+
+      let c = isNum ? nCol : String(colVal).trim().toLowerCase();
+      let t = isNum ? nTarget : String(targetVal).trim().toLowerCase();
+
+      let match = false;
+      switch (rule.operator) {
+        case '<': match = c < t; break;
+        case '<=': match = c <= t; break;
+        case '>': match = c > t; break;
+        case '>=': match = c >= t; break;
+        case '==': match = c == t; break;
+        case '!=': match = c != t; break;
+      }
+      if (match) {
+        // use !important to override zebra striping or hover if needed, 
+        // though row level inline style usually takes precedence
+        return `background-color: ${rule.color} !important;`;
+      }
+    }
+    return '';
+  }
+
   function renderResultGrid(report, result, restoreSearchValue) {
     const runTableEl = document.getElementById('runTable');
     if (runGrid && runGrid.destroy) runGrid.destroy();
+    ExpansionMgr.reset();
     const cols = result.columns || (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
     const filteredRows = applyReportsRowFilter(result.rows || []);
     updateReportsRowFilterHint();
@@ -518,36 +767,154 @@
       setReportsGridToolsVisible(false);
       return;
     }
-    const dgCols = withDrilldownFormatters(report, filteredRows, cols);
+
+    const expansion = getReportExpansion(report);
+    const hasExpansion = !!(expansion && result.expansions && result.expansions.length);
+
+    let dgCols = withDrilldownFormatters(report, filteredRows, cols);
+
+    // Prepend chevron toggle column if expansion is configured
+    if (hasExpansion) {
+      dgCols = [{
+        key: '__expand__',
+        label: '',
+        sortable: false,
+        width: 36,
+        format: function(value, row, idx) {
+          if (isReportsGrandTotalRow(row)) return '';
+          const icon = ExpansionMgr.isExpanded(idx) ? '▼' : '▶';
+          // Embed full row data in the button (same approach as drilldowns)
+          // so expansion always resolves variables from the correct row
+          // regardless of SuperGrid sort/filter order.
+          const rowPayload = encodeURIComponent(JSON.stringify(row));
+          return '<button type="button" class="rr-expand-toggle" data-expand-idx="' + idx + '" data-expand-row="' + rowPayload + '">' + icon + '</button>';
+        },
+      }].concat(dgCols);
+    }
+
     runTableEl.innerHTML = '';
     runTableEl.style.display = 'flex';
     setReportsGridToolsVisible(true);
+
+    const sgOptions = {
+      search: true,
+      omitToolbar: true,
+      countElement: document.getElementById('reportsGridCount'),
+      searchInputElement: document.getElementById('reportsGridSearch'),
+      countLabel: 'rows',
+      exportBtn: false,
+      resizable: true,
+      grandTotalRowFn: buildReportsGrandTotalRow,
+      grandTotalPosition: 'top',
+      rowStyle: function(row) {
+        if (isReportsGrandTotalRow(row)) return '';
+        return evaluateRowColorRules(row, result.rowColors || report.rowColors || []);
+      },
+      onBodyRendered: function(tbody) {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(syncReportsGrandTotalSticky);
+        });
+        // Bind expansion toggle clicks
+        if (hasExpansion) {
+          tbody.querySelectorAll('button[data-expand-idx]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              const idx = Number(btn.getAttribute('data-expand-idx'));
+              ExpansionMgr.toggle(idx);
+
+              if (ExpansionMgr.isExpanded(idx) && !ExpansionMgr.getCached(idx)) {
+                // Parse the actual row data embedded in the button
+                // (same pattern as drilldowns — immune to sort/filter reordering)
+                let clickedRow;
+                try {
+                  clickedRow = JSON.parse(decodeURIComponent(btn.getAttribute('data-expand-row') || '{}'));
+                } catch (_) {
+                  clickedRow = {};
+                }
+
+                // Need to fetch child data
+                ExpansionMgr.setLoading(idx, true);
+                runGrid.setRows(runGrid.getFilteredRows()); // re-render to show loading
+                try {
+                  const childReport = await apiFetch('/api/reports/reports/' + encodeURIComponent(expansion.targetReportId));
+                  const variables = buildExpansionVariables(expansion, clickedRow, currentRunVariables);
+                  const childResult = await apiPost('/api/reports/reports/' + expansion.targetReportId + '/run', { variables });
+                  childReport._expansionLabel = expansion.label || childReport.name;
+                  const html = buildExpansionTableHtml(childReport, childResult, variables, 1);
+                  ExpansionMgr.cacheResult(idx, html, childReport, childResult);
+                } catch (err) {
+                  ExpansionMgr.cacheResult(idx, '<div class="rr-expansion-error">⚠️ ' + escapeHtml(err.message) + '</div>', null, null);
+                }
+                ExpansionMgr.setLoading(idx, false);
+              }
+              runGrid.setRows(runGrid.getFilteredRows()); // re-render with expansion
+            });
+          });
+        }
+      },
+    };
+
+    // Add expansion hooks if configured
+    if (hasExpansion) {
+      sgOptions.detailRowExpanded = function(row, idx) {
+        if (isReportsGrandTotalRow(row)) return false;
+        return ExpansionMgr.isExpanded(idx);
+      };
+      sgOptions.detailRowHtml = function(row, idx, colCount) {
+        if (ExpansionMgr.isLoading(idx)) {
+          return '<div class="rr-expansion-loading">Loading child report…</div>';
+        }
+        const cached = ExpansionMgr.getCached(idx);
+        return cached ? cached.html : '<div class="rr-expansion-loading">Loading…</div>';
+      };
+    }
+
     runGrid = SuperGrid.create(runTableEl, {
       columns: dgCols,
       rows: filteredRows,
-      options: {
-        search: true,
-        omitToolbar: true,
-        countElement: document.getElementById('reportsGridCount'),
-        searchInputElement: document.getElementById('reportsGridSearch'),
-        countLabel: 'rows',
-        exportBtn: false,
-        resizable: true,
-        grandTotalRowFn: buildReportsGrandTotalRow,
-        grandTotalPosition: 'top',
-        onBodyRendered: function() {
-          requestAnimationFrame(function() {
-            requestAnimationFrame(syncReportsGrandTotalSticky);
-          });
-        },
-      },
+      options: sgOptions,
     });
+
+    // After SuperGrid renders, bind expansion events on detail rows
+    if (hasExpansion) {
+      const observer = new MutationObserver(() => {
+        runTableEl.querySelectorAll('.sg-detail-cell').forEach(cell => {
+          if (cell.dataset.expBound !== '1') {
+            cell.dataset.expBound = '1';
+            bindExpansionEvents(cell);
+          }
+        });
+      });
+      observer.observe(runTableEl, { childList: true, subtree: true });
+      // Also bind immediately
+      runTableEl.querySelectorAll('.sg-detail-cell').forEach(cell => {
+        if (cell.dataset.expBound !== '1') {
+          cell.dataset.expBound = '1';
+          bindExpansionEvents(cell);
+        }
+      });
+    }
+
+    // Collapse expansions when search changes
+    const searchEl = document.getElementById('reportsGridSearch');
+    if (searchEl && hasExpansion) {
+      const origHandler = searchEl._expCollapseHandler;
+      if (origHandler) searchEl.removeEventListener('input', origHandler);
+      const collapseHandler = () => {
+        if (ExpansionMgr._expanded.size > 0) {
+          ExpansionMgr.collapseAll();
+        }
+      };
+      searchEl._expCollapseHandler = collapseHandler;
+      searchEl.addEventListener('input', collapseHandler);
+    }
+
     bindDrilldownClicks();
     if (typeof restoreSearchValue === 'string' && restoreSearchValue.length) {
-      const searchEl = document.getElementById('reportsGridSearch');
-      if (searchEl) {
-        searchEl.value = restoreSearchValue;
-        searchEl.dispatchEvent(new Event('input', { bubbles: true }));
+      const searchEl2 = document.getElementById('reportsGridSearch');
+      if (searchEl2) {
+        searchEl2.value = restoreSearchValue;
+        searchEl2.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
   }

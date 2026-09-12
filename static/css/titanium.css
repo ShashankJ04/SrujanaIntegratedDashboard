@@ -5548,6 +5548,110 @@ body.dpr-col-resizing {
   opacity: 0;
 }
 
+/* ── Row Expansion ────────────────────────────────────────── */
+.rr-expand-toggle {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--ti-text-dim, #64748b);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.rr-expand-toggle:hover {
+  background: var(--ti-blue-soft, rgba(59, 130, 246, 0.1));
+  color: var(--ti-blue, #3b82f6);
+}
+
+.rr-expansion-panel {
+  padding: 10px 14px 10px calc(14px + var(--rr-depth, 0) * 18px);
+  border-left: 3px solid var(--ti-blue, #3b82f6);
+  background: var(--ti-surface-2, rgba(255, 255, 255, 0.03));
+  border-radius: 0 0 6px 6px;
+  margin: 4px 0;
+}
+
+.rr-expansion-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ti-text-bright, #f8fafc);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rr-expansion-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ti-text-dim, #64748b);
+}
+
+.rr-expansion-empty {
+  font-size: 12px;
+  color: var(--ti-text-dim, #64748b);
+  font-style: italic;
+  padding: 6px 0;
+}
+
+.rr-expansion-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  border: 1px solid var(--ti-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ti-surface, #0f172a);
+}
+
+.rr-expansion-table th {
+  background: var(--ti-surface-2, #1e293b);
+  color: var(--ti-text-muted, #94a3b8);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ti-border, rgba(255, 255, 255, 0.1));
+  text-align: left;
+}
+
+.rr-expansion-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ti-border, rgba(255, 255, 255, 0.05));
+  color: var(--ti-text, #e2e8f0);
+}
+
+.rr-expansion-table tr:last-child td {
+  border-bottom: none;
+}
+
+.rr-expansion-table tr:hover td {
+  background: var(--ti-bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.rr-expansion-loading {
+  padding: 12px;
+  text-align: center;
+  color: var(--ti-text-dim, #64748b);
+  font-size: 12px;
+}
+
+.rr-expansion-error {
+  padding: 10px;
+  color: var(--ti-red, #ef4444);
+  font-size: 12px;
+  background: var(--ti-red-soft, rgba(239, 68, 68, 0.1));
+  border-radius: 4px;
+}
+
 /* ── Light theme ──────────────────────────────────────────── */
 [data-theme="light"] .rr-toolbar {
   background: rgba(255, 255, 255, 0.85);

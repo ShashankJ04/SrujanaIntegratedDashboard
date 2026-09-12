@@ -55,6 +55,7 @@ const SuperGrid = (() => {
       searchInputElement: searchInputElementOption = null,
       detailRowExpanded = null,
       detailRowHtml = null,
+      rowStyle = null,
       onBodyRendered = null,
       grandTotalRowFn = null,
       grandTotalPosition = 'bottom',
@@ -483,7 +484,8 @@ const SuperGrid = (() => {
         const stickyTopCls = row && row.__sgStickyTop ? ' sg-sticky-top-row' : '';
         const stickyBottomCls = row && row.__sgStickyBottom ? ' sg-sticky-bottom-row' : '';
         const stickyTopAttr = row && row.__sgStickyTop ? ' data-sg-sticky-top="1"' : '';
-        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}${stickyBottomCls}"${stickyTopAttr}>`;
+        const rowStyleAttr = rowStyle ? ` style="${rowStyle(row, globalOffset + i) || ''}"` : '';
+        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}${stickyBottomCls}"${stickyTopAttr}${rowStyleAttr}>`;
         cols.forEach(col => {
           const raw = row[col.key];
           let display;

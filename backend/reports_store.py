@@ -168,6 +168,177 @@ def _normalize_no_format_columns(raw: Any) -> List[str]:
     return out
 
 
+# ── Expansions ──────────────────────────────────────────────────────────
+
+
+def _normalize_expansion(
+    expansion: Any,
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Normalise a single expansion rule (lenient — drops invalid entries)."""
+    if not isinstance(expansion, dict):
+        return None
+    target_id = str(expansion.get("targetReportId", "")).strip()
+    label = str(expansion.get("label", "")).strip()
+    mapping = expansion.get("variables")
+    if not target_id or not isinstance(mapping, dict):
+        return None
+    target = report_by_id.get(target_id)
+    if not target:
+        return None
+    target_vars = set(target.get("variables") or [])
+    src_vars = list(source_report_vars or [])
+    normalized_map: Dict[str, Dict[str, str]] = {}
+    for child_var, source_spec in mapping.items():
+        t = str(child_var).strip()
+        if not t or t not in target_vars:
+            continue
+        ns = _normalize_source_spec(source_spec, src_vars)
+        if not ns:
+            continue
+        normalized_map[t] = ns
+    if not normalized_map:
+        return None
+    out: Dict[str, Any] = {
+        "targetReportId": target_id,
+        "variables": normalized_map,
+    }
+    if label:
+        out["label"] = label
+    return out
+
+
+def _normalize_expansions(
+    report: Dict[str, Any],
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Normalise the expansions list on a report (lenient read-path)."""
+    raw = report.get("expansions")
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in raw:
+        norm = _normalize_expansion(item, report_by_id, source_report_vars)
+        if norm:
+            out.append(norm)
+            break  # only one expansion allowed
+    return out
+
+
+def _detect_expansion_cycle(
+    report_id: str,
+    target_id: str,
+    report_by_id: Dict[str, Dict[str, Any]],
+) -> bool:
+    """Walk the expansion chain from *target_id*; return True if *report_id* is reachable."""
+    visited: set = {report_id}
+    cursor = target_id
+    while cursor:
+        if cursor in visited:
+            return True
+        visited.add(cursor)
+        target_report = report_by_id.get(cursor)
+        if not target_report:
+            break
+        expansions = target_report.get("expansions") or []
+        if not expansions:
+            break
+        cursor = str(expansions[0].get("targetReportId") or "").strip()
+    return False
+
+
+def _validate_and_normalize_expansion_from_input(
+    expansion: Any,
+    report_id: str,
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Strict validator for a user-supplied expansion rule."""
+    if expansion is None:
+        return None
+    if not isinstance(expansion, dict):
+        raise ValueError("Expansion rule must be an object")
+
+    target_id = str(expansion.get("targetReportId", "")).strip()
+    label = str(expansion.get("label", "")).strip()
+    mapping = expansion.get("variables")
+
+    if not target_id:
+        raise ValueError("Expansion: targetReportId is required")
+    if not isinstance(mapping, dict) or not mapping:
+        raise ValueError("Expansion: variables mapping is required")
+
+    target = report_by_id.get(target_id)
+    if not target:
+        raise ValueError("Expansion: target report not found")
+
+    # Circular reference check
+    if _detect_expansion_cycle(report_id, target_id, report_by_id):
+        raise ValueError(
+            "Expansion: circular reference detected — "
+            "this would create an infinite expansion chain"
+        )
+
+    target_vars = list(target.get("variables") or [])
+    target_var_set = set(target_vars)
+    src_vars = list(source_report_vars or [])
+
+    normalized_map: Dict[str, Dict[str, str]] = {}
+    for child_var, source_spec in mapping.items():
+        t = str(child_var).strip()
+        if not t:
+            raise ValueError("Expansion: child variable name is required")
+        if t not in target_var_set:
+            raise ValueError(
+                f'Expansion: "{t}" is not an input of the target report'
+            )
+        ns = _normalize_source_spec(source_spec, src_vars)
+        if not ns:
+            raise ValueError(
+                f'Expansion: invalid source mapping for child input "{t}"'
+            )
+        normalized_map[t] = ns
+
+    # All target variables must be mapped
+    if len(target_vars) > 0:
+        missing = [v for v in target_vars if v not in normalized_map]
+        if missing:
+            raise ValueError(
+                f'Expansion: target report requires all inputs; missing {", ".join(missing)}'
+            )
+
+    out: Dict[str, Any] = {
+        "targetReportId": target_id,
+        "variables": normalized_map,
+    }
+    if label:
+        out["label"] = label
+    return out
+
+
+def _validate_and_normalize_expansions_from_input(
+    expansions: Any,
+    report_id: str,
+    report_by_id: Dict[str, Dict[str, Any]],
+    source_report_vars: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Validate user-supplied expansions list (max one entry)."""
+    if expansions is None:
+        return []
+    if not isinstance(expansions, list):
+        raise ValueError("expansions must be a list")
+    if len(expansions) == 0:
+        return []
+    # Only the first entry is used
+    first = expansions[0] if expansions else None
+    norm = _validate_and_normalize_expansion_from_input(
+        first, report_id, report_by_id, source_report_vars
+    )
+    return [norm] if norm else []
+
+
 def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     report_by_id = {
         str(r.get("id")): r
@@ -189,6 +360,15 @@ def _normalize_reports(reports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             next_report["drilldowns"] = drilldowns
         else:
             next_report.pop("drilldowns", None)
+        expansions = _normalize_expansions(
+            report,
+            report_by_id,
+            source_report_vars=report.get("variables") or [],
+        )
+        if expansions:
+            next_report["expansions"] = expansions
+        else:
+            next_report.pop("expansions", None)
         handler = str(report.get("handler") or "").strip()
         if handler:
             if handler in BUILTIN_REPORT_HANDLERS:
@@ -592,6 +772,28 @@ def get_report_by_id(report_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _validate_and_normalize_row_colors(row_colors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized = []
+    for rc in row_colors:
+        if not isinstance(rc, dict):
+            continue
+        col = str(rc.get("column") or "").strip()
+        op = str(rc.get("operator") or "").strip()
+        target_type = str(rc.get("targetType") or "").strip()
+        target_val = str(rc.get("targetValue") or "").strip()
+        color = str(rc.get("color") or "").strip()
+        if not col or not op or not target_type or not target_val or not color:
+            continue
+        normalized.append({
+            "column": col,
+            "operator": op,
+            "targetType": target_type,
+            "targetValue": target_val,
+            "color": color,
+        })
+    return normalized
+
+
 def create_report(
     group_id: str,
     name: str,
@@ -602,6 +804,8 @@ def create_report(
     filter_column: str = "",
     variables: Optional[List[str]] = None,
     no_format_columns: Optional[List[str]] = None,
+    expansions: Optional[List[Dict[str, Any]]] = None,
+    row_colors: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     group_id = group_id.strip()
     name = name.strip()
@@ -627,6 +831,7 @@ def create_report(
             raise ValueError("A report with this name already exists in this group")
 
     now = _iso_now()
+    new_report_id = str(uuid.uuid4())
     report_by_id = {
         str(r.get("id")): r
         for r in store["reports"]
@@ -641,10 +846,16 @@ def create_report(
         report_by_id,
         source_report_vars=report_vars,
     )
+    normalized_expansions = _validate_and_normalize_expansions_from_input(
+        expansions or [],
+        new_report_id,
+        report_by_id,
+        source_report_vars=report_vars,
+    )
     filter_col = _normalize_filter_column(filter_column)
     normalized_no_fmt = _normalize_no_format_columns(no_format_columns or [])
     report: Dict[str, Any] = {
-        "id": str(uuid.uuid4()),
+        "id": new_report_id,
         "groupId": group_id,
         "name": name,
         "queryTemplate": query_template,
@@ -660,6 +871,13 @@ def create_report(
         report["filterColumn"] = filter_col
     if normalized_no_fmt:
         report["noFormatColumns"] = normalized_no_fmt
+    if normalized_expansions:
+        report["expansions"] = normalized_expansions
+    
+    normalized_row_colors = _validate_and_normalize_row_colors(row_colors or [])
+    if normalized_row_colors:
+        report["rowColors"] = normalized_row_colors
+
     store["reports"].append(report)
     _write_store(store)
     return report
@@ -673,6 +891,8 @@ def update_report(
     pinned: Optional[bool] = None,
     filter_column: Optional[str] = None,
     no_format_columns: Optional[List[str]] = None,
+    expansions: Optional[List[Dict[str, Any]]] = None,
+    row_colors: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     name = name.strip()
     query_template = query_template.strip()
@@ -731,6 +951,17 @@ def update_report(
         "drilldowns": normalized_drilldowns,
         "updatedAt": _iso_now(),
     }
+    if expansions is not None:
+        normalized_expansions = _validate_and_normalize_expansions_from_input(
+            expansions,
+            report_id,
+            report_by_id,
+            source_report_vars=report_vars,
+        )
+        if normalized_expansions:
+            updated["expansions"] = normalized_expansions
+        else:
+            updated.pop("expansions", None)
     if filter_column is not None:
         filter_col = _normalize_filter_column(filter_column)
         if filter_col:
@@ -743,6 +974,14 @@ def update_report(
             updated["noFormatColumns"] = normalized_no_fmt
         else:
             updated.pop("noFormatColumns", None)
+            
+    if row_colors is not None:
+        normalized_row_colors = _validate_and_normalize_row_colors(row_colors)
+        if normalized_row_colors:
+            updated["rowColors"] = normalized_row_colors
+        else:
+            updated.pop("rowColors", None)
+            
     store["reports"][idx] = updated
     _write_store(store)
     return updated
@@ -863,6 +1102,11 @@ def _catalog_report_entry(
         report_by_id,
         source_report_vars=report_vars,
     )
+    normalized_expansions = _normalize_expansions(
+        report,
+        report_by_id,
+        source_report_vars=report_vars,
+    )
     now = _iso_now()
     entry: Dict[str, Any] = {
         "id": str(report["id"]),
@@ -884,6 +1128,8 @@ def _catalog_report_entry(
         entry["noFormatColumns"] = no_fmt
     if normalized_drilldowns:
         entry["drilldowns"] = normalized_drilldowns
+    if normalized_expansions:
+        entry["expansions"] = normalized_expansions
     return entry
 
 

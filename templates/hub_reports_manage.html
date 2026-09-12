@@ -67,6 +67,28 @@
 
       <div style="margin-top:8px;border:1px solid var(--ti-border);border-radius:10px;padding:10px">
         <div class="ti-flex-between" style="align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px;color:var(--ti-text-bright)">Row Expansion</strong>
+          <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptConfigureExpansionBtn">+ Configure</button>
+        </div>
+        <div id="rptExpansionRule" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="font-size:11px;color:var(--ti-text-dim);margin-top:6px">
+          Clicking a row in the viewer will expand it inline to show this child report’s data. Recursion occurs if the child report also has an expansion configured.
+        </div>
+      </div>
+
+      <div style="margin-top:8px;border:1px solid var(--ti-border);border-radius:10px;padding:10px">
+        <div class="ti-flex-between" style="align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px;color:var(--ti-text-bright)">Row Coloring</strong>
+          <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptAddRowColorBtn">+ Add Rule</button>
+        </div>
+        <div id="rptRowColorRules" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="font-size:11px;color:var(--ti-text-dim);margin-top:6px">
+          Set row background color based on conditions. e.g. Qty(Kg) &lt; 100 ➔ light blue
+        </div>
+      </div>
+
+      <div style="margin-top:8px;border:1px solid var(--ti-border);border-radius:10px;padding:10px">
+        <div class="ti-flex-between" style="align-items:center;margin-bottom:8px">
           <strong style="font-size:13px;color:var(--ti-text-bright)">Column Formatting</strong>
           <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptAddNoFormatBtn">+ Add Column</button>
         </div>
@@ -100,6 +122,8 @@
   let groups = [], reports = [], allReports = [], selectedGroupId = null, editingReportId = null, deleteAction = null;
   let drilldownDraft = [];
   let noFormatDraft = []; // column names that bypass number formatting
+  let expansionDraft = null; // single expansion rule object or null
+  let rowColorsDraft = []; // row coloring rules
 
   function readStoredGroupId() {
     try {
@@ -201,7 +225,8 @@
       div.className = 'ti-card';
       div.style.marginBottom = '10px';
       const ddCount = Array.isArray(r.drilldowns) ? r.drilldowns.length : 0;
-      div.innerHTML = `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="ti-flex ti-gap-8" style="align-items:center;min-width:0;flex:1"><strong style="font-size:13px;color:var(--ti-text-bright)">📄 ${r.name}</strong><span class="ti-chip ti-chip-neutral">${r.variables.length > 0 ? r.variables.length + ' inputs' : 'No inputs'}</span>${r.pinned ? '<span class="ti-chip ti-chip-primary">Pinned</span>' : ''}${ddCount > 0 ? `<span class="ti-chip ti-chip-neutral">${ddCount} drilldown${ddCount > 1 ? 's' : ''}</span>` : ''}</div><div class="ti-flex ti-gap-8" style="flex-shrink:0"><button class="ti-btn ti-btn-outline ti-btn-xs" data-edit="${r.id}">✏️ Edit</button><button class="ti-btn ti-btn-primary ti-btn-xs" data-open="${r.id}">▶ Run</button><button class="ti-btn ${r.pinned ? 'ti-btn-primary' : 'ti-btn-outline'} ti-btn-xs" data-pin="${r.id}" title="${r.pinned ? 'Unpin report' : 'Pin report'}">${r.pinned ? '📌' : '📍'}</button><button class="ti-btn ti-btn-danger ti-btn-xs" data-del="${r.id}">🗑️</button></div></div>`;
+      const hasExpansion = Array.isArray(r.expansions) && r.expansions.length > 0;
+      div.innerHTML = `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="ti-flex ti-gap-8" style="align-items:center;min-width:0;flex:1"><strong style="font-size:13px;color:var(--ti-text-bright)">📄 ${r.name}</strong><span class="ti-chip ti-chip-neutral">${r.variables.length > 0 ? r.variables.length + ' inputs' : 'No inputs'}</span>${r.pinned ? '<span class="ti-chip ti-chip-primary">Pinned</span>' : ''}${ddCount > 0 ? `<span class="ti-chip ti-chip-neutral">${ddCount} drilldown${ddCount > 1 ? 's' : ''}</span>` : ''}${hasExpansion ? '<span class="ti-chip ti-chip-neutral">▶ expansion</span>' : ''}</div><div class="ti-flex ti-gap-8" style="flex-shrink:0"><button class="ti-btn ti-btn-outline ti-btn-xs" data-edit="${r.id}">✏️ Edit</button><button class="ti-btn ti-btn-primary ti-btn-xs" data-open="${r.id}">▶ Run</button><button class="ti-btn ${r.pinned ? 'ti-btn-primary' : 'ti-btn-outline'} ti-btn-xs" data-pin="${r.id}" title="${r.pinned ? 'Unpin report' : 'Pin report'}">${r.pinned ? '📌' : '📍'}</button><button class="ti-btn ti-btn-danger ti-btn-xs" data-del="${r.id}">🗑️</button></div></div>`;
       el.appendChild(div);
 
       div.querySelector('[data-edit]').addEventListener('click', () => {
@@ -232,6 +257,32 @@
         renderDrilldownRules();
         noFormatDraft = Array.isArray(r.noFormatColumns) ? [...r.noFormatColumns] : [];
         renderNoFormatColumns();
+        // Populate expansion draft
+        if (Array.isArray(r.expansions) && r.expansions.length > 0) {
+          const exp = r.expansions[0];
+          expansionDraft = {
+            targetReportId: exp.targetReportId || '',
+            label: exp.label || '',
+            mappings: [],
+          };
+          const mapping = exp.variables || {};
+          Object.entries(mapping).forEach(([childVar, sourceSpec]) => {
+            let source = '';
+            if (sourceSpec && typeof sourceSpec === 'object') {
+              source = String(sourceSpec.value || '').trim();
+            } else {
+              source = String(sourceSpec || '').trim();
+            }
+            expansionDraft.mappings.push({ childVariable: childVar, source });
+          });
+        } else {
+          expansionDraft = null;
+        }
+        renderExpansionRule();
+        
+        rowColorsDraft = Array.isArray(r.rowColors) ? JSON.parse(JSON.stringify(r.rowColors)) : [];
+        renderRowColors();
+        
         openModal('rptReportModal');
       });
       div.querySelector('[data-open]').addEventListener('click', () => { goToReportViewer(r.id); });
@@ -304,6 +355,135 @@
         renderNoFormatColumns();
       });
     });
+  }
+
+  // ── Row Expansion ────────────────────────────────────────────────────────
+
+  function expansionChildVarOptions(reportId, selectedVar) {
+    const report = childReportById(reportId);
+    const vars = (report && report.variables) ? report.variables : [];
+    if (!vars.length) return '<option value="">No variables in child report</option>';
+    return ['<option value="">Choose child variable</option>']
+      .concat(vars.map(v => `<option value="${v}" ${v === selectedVar ? 'selected' : ''}>${v}</option>`))
+      .join('');
+  }
+
+  function expansionSourceInputControl(mapping, idx) {
+    const vars = detectVars(document.getElementById('rptReportQuery').value || '');
+    const options = vars.map(v => `<option value="${v}"></option>`).join('');
+    const listId = `rptExpSourceVars_${idx}`;
+    return `
+      <input
+        type="text"
+        class="ti-input"
+        data-exp-source="${idx}"
+        list="${listId}"
+        placeholder="Parent input or row column"
+        value="${String(mapping.source || '').replace(/"/g,'&quot;')}"
+        style="width:100%;min-width:0"
+      >
+      <datalist id="${listId}">${options}</datalist>
+    `;
+  }
+
+  function renderExpansionRule() {
+    const host = document.getElementById('rptExpansionRule');
+    const configBtn = document.getElementById('rptConfigureExpansionBtn');
+    if (!expansionDraft) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--ti-text-dim)">No expansion configured — rows will not be expandable.</div>';
+      if (configBtn) { configBtn.textContent = '+ Configure'; configBtn.style.display = ''; }
+      return;
+    }
+    if (configBtn) { configBtn.textContent = '+ Configure'; configBtn.style.display = 'none'; }
+
+    let html = '';
+    // Child report + label row
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center">';
+    html += `<select class="ti-select" id="rptExpChildReport">${reportOptions(expansionDraft.targetReportId)}</select>`;
+    html += `<input type="text" class="ti-input" id="rptExpLabel" placeholder="Label (e.g. Products Produced)" value="${String(expansionDraft.label || '').replace(/"/g,'&quot;')}">`;
+    html += '<button type="button" class="ti-btn ti-btn-danger ti-btn-xs" id="rptExpRemoveBtn">🗑️ Remove</button>';
+    html += '</div>';
+
+    // Variable mappings
+    html += '<div style="margin-top:6px;font-size:12px;font-weight:600;color:var(--ti-text-bright);display:flex;align-items:center;gap:8px">Variable Mappings <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" id="rptExpAddMappingBtn">+ Add Map</button></div>';
+    if (expansionDraft.mappings.length === 0) {
+      html += '<div style="font-size:11px;color:var(--ti-text-dim)">No variable mappings — add one if the child report has inputs.</div>';
+    } else {
+      expansionDraft.mappings.forEach((m, idx) => {
+        html += `<div style="display:grid;grid-template-columns:1fr 1.5fr auto;gap:6px;align-items:center">`;
+        html += `<select class="ti-select" data-exp-var="${idx}">${expansionChildVarOptions(expansionDraft.targetReportId, m.childVariable)}</select>`;
+        html += expansionSourceInputControl(m, idx);
+        html += `<button type="button" class="ti-btn ti-btn-danger ti-btn-xs" data-exp-map-del="${idx}">✕</button>`;
+        html += '</div>';
+      });
+    }
+
+    host.innerHTML = html;
+
+    // Bind events
+    const childSelect = document.getElementById('rptExpChildReport');
+    if (childSelect) {
+      childSelect.addEventListener('change', (e) => {
+        expansionDraft.targetReportId = e.target.value;
+        expansionDraft.mappings = [];
+        renderExpansionRule();
+      });
+    }
+    const labelInput = document.getElementById('rptExpLabel');
+    if (labelInput) {
+      labelInput.addEventListener('input', (e) => { expansionDraft.label = e.target.value; });
+    }
+    const removeBtn = document.getElementById('rptExpRemoveBtn');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => { expansionDraft = null; renderExpansionRule(); });
+    }
+    const addMapBtn = document.getElementById('rptExpAddMappingBtn');
+    if (addMapBtn) {
+      addMapBtn.addEventListener('click', () => {
+        expansionDraft.mappings.push({ childVariable: '', source: '' });
+        renderExpansionRule();
+      });
+    }
+    host.querySelectorAll('[data-exp-var]').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const i = Number(e.target.getAttribute('data-exp-var'));
+        expansionDraft.mappings[i].childVariable = e.target.value;
+      });
+    });
+    host.querySelectorAll('[data-exp-source]').forEach(el => {
+      const handler = (e) => {
+        const i = Number(e.target.getAttribute('data-exp-source'));
+        expansionDraft.mappings[i].source = e.target.value;
+      };
+      el.addEventListener('input', handler);
+      el.addEventListener('change', handler);
+    });
+    host.querySelectorAll('[data-exp-map-del]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const i = Number(e.target.getAttribute('data-exp-map-del'));
+        expansionDraft.mappings.splice(i, 1);
+        renderExpansionRule();
+      });
+    });
+  }
+
+  function buildExpansionPayload() {
+    if (!expansionDraft) return [];
+    const target = String(expansionDraft.targetReportId || '').trim();
+    if (!target) return [];
+    const parentVars = new Set(detectVars(document.getElementById('rptReportQuery').value || ''));
+    const variables = {};
+    (expansionDraft.mappings || []).forEach((m) => {
+      const childVar = String(m.childVariable || '').trim();
+      const sourceValue = String(m.source || '').trim();
+      if (!childVar || !sourceValue) return;
+      const sourceType = parentVars.has(sourceValue) ? 'parentVariable' : 'column';
+      variables[childVar] = { type: sourceType, value: sourceValue };
+    });
+    const rule = { targetReportId: target, variables };
+    const label = String(expansionDraft.label || '').trim();
+    if (label) rule.label = label;
+    return [rule];
   }
 
   function childReportById(reportId) {
@@ -410,6 +590,53 @@
     });
   }
 
+  function renderRowColors() {
+    const host = document.getElementById('rptRowColorRules');
+    if (!rowColorsDraft.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--ti-text-dim)">No row coloring rules configured.</div>';
+      return;
+    }
+    host.innerHTML = '';
+    rowColorsDraft.forEach((rule, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto 1fr auto auto;gap:6px;align-items:center;width:100%';
+      const ops = ['<', '<=', '==', '!=', '>', '>='];
+      const opHtml = ops.map(op => `<option value="${op}" ${op === rule.operator ? 'selected' : ''}>${op}</option>`).join('');
+      row.innerHTML = `
+        <input type="text" class="ti-input" data-rc-col="${idx}" placeholder="Column" value="${String(rule.column || '').replace(/"/g,'&quot;')}" style="min-width:0">
+        <select class="ti-select" data-rc-op="${idx}">${opHtml}</select>
+        <select class="ti-select" data-rc-type="${idx}">
+          <option value="static" ${rule.targetType === 'static' ? 'selected' : ''}>Static</option>
+          <option value="column" ${rule.targetType === 'column' ? 'selected' : ''}>Column</option>
+        </select>
+        <input type="text" class="ti-input" data-rc-val="${idx}" placeholder="Target value" value="${String(rule.targetValue || '').replace(/"/g,'&quot;')}" style="min-width:0">
+        <input type="color" class="ti-input" data-rc-color="${idx}" value="${rule.color || '#e3f2fd'}" style="width:40px;padding:0;height:24px;border:none;background:transparent;cursor:pointer">
+        <button type="button" class="ti-btn ti-btn-danger ti-btn-xs" data-rc-del="${idx}">✕</button>
+      `;
+      host.appendChild(row);
+    });
+
+    host.querySelectorAll('[data-rc-col]').forEach(el => el.addEventListener('input', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-col'))].column = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-op]').forEach(el => el.addEventListener('change', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-op'))].operator = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-type]').forEach(el => el.addEventListener('change', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-type'))].targetType = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-val]').forEach(el => el.addEventListener('input', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-val'))].targetValue = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-color]').forEach(el => el.addEventListener('input', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-color'))].color = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-del]').forEach(el => el.addEventListener('click', e => {
+      rowColorsDraft.splice(Number(e.target.getAttribute('data-rc-del')), 1);
+      renderRowColors();
+    }));
+  }
+
   function buildDrilldownsPayload() {
     const byKey = {};
     const parentVars = new Set(detectVars(document.getElementById('rptReportQuery').value || ''));
@@ -454,6 +681,10 @@
     renderDrilldownRules();
     noFormatDraft = [];
     renderNoFormatColumns();
+    expansionDraft = null;
+    renderExpansionRule();
+    rowColorsDraft = [];
+    renderRowColors();
     openModal('rptReportModal');
   });
 
@@ -467,9 +698,23 @@
     renderDrilldownRules();
   });
 
+  document.getElementById('rptConfigureExpansionBtn').addEventListener('click', () => {
+    if (!expansionDraft) {
+      expansionDraft = { targetReportId: '', label: '', mappings: [] };
+      renderExpansionRule();
+    }
+  });
+
   document.getElementById('rptAddNoFormatBtn').addEventListener('click', () => {
     noFormatDraft.push('');
     renderNoFormatColumns();
+  });
+
+  document.getElementById('rptAddRowColorBtn').addEventListener('click', () => {
+    rowColorsDraft.push({
+      column: '', operator: '<', targetType: 'static', targetValue: '', color: '#e3f2fd'
+    });
+    renderRowColors();
   });
 
   document.getElementById('rptReportSubmit').addEventListener('click', async () => {
@@ -477,12 +722,25 @@
     const query = document.getElementById('rptReportQuery').value.trim();
     const drilldowns = buildDrilldownsPayload();
     const noFormatColumns = noFormatDraft.map(c => String(c || '').trim()).filter(Boolean);
+    const expansions = buildExpansionPayload();
+    
+    // Clean up rowColorsDraft
+    const rowColors = rowColorsDraft
+      .map(r => ({
+        column: r.column.trim(),
+        operator: r.operator,
+        targetType: r.targetType,
+        targetValue: r.targetValue.trim(),
+        color: r.color.trim()
+      }))
+      .filter(r => r.column && r.targetValue && r.color);
+
     if (!name || !query) return;
     try {
       if (editingReportId) {
-        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, drilldowns, noFormatColumns });
+        await apiPatch('/api/reports/reports/' + editingReportId, { name, queryTemplate: query, drilldowns, noFormatColumns, expansions, rowColors });
       } else {
-        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, drilldowns, noFormatColumns });
+        const r = await apiPost('/api/reports/reports', { groupId: selectedGroupId, name, queryTemplate: query, drilldowns, noFormatColumns, expansions, rowColors });
         closeModal('rptReportModal');
         if (window.HubRefreshReportsNav) window.HubRefreshReportsNav();
         goToReportViewer(r.id);
@@ -515,6 +773,7 @@
 
   renderDrilldownRules();
   renderNoFormatColumns();
+  renderExpansionRule();
   loadGroups();
 })();
 </script>

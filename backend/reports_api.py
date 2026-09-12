@@ -130,6 +130,8 @@ def create_report():
             drilldowns=data.get("drilldowns", []),
             pinned=bool(data.get("pinned", False)),
             no_format_columns=data.get("noFormatColumns", []),
+            expansions=data.get("expansions", []),
+            row_colors=data.get("rowColors", []),
         )
         return jsonify(report), 201
     except ValueError as e:
@@ -152,6 +154,8 @@ def update_report(report_id):
                 else None
             ),
             no_format_columns=data.get("noFormatColumns") if isinstance(data, dict) and "noFormatColumns" in data else None,
+            expansions=data.get("expansions") if isinstance(data, dict) and "expansions" in data else None,
+            row_colors=data.get("rowColors") if isinstance(data, dict) and "rowColors" in data else None,
         )
         return jsonify(report)
     except ValueError as e:
@@ -265,6 +269,8 @@ def run_report(report_id):
         "executedAt": datetime.utcnow().isoformat(),
         "drilldowns": report.get("drilldowns", []),
         "noFormatColumns": report.get("noFormatColumns", []),
+        "expansions": report.get("expansions", []),
+        "rowColors": report.get("rowColors", []),
     })
 
 
