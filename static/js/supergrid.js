@@ -484,8 +484,8 @@ const SuperGrid = (() => {
         const stickyTopCls = row && row.__sgStickyTop ? ' sg-sticky-top-row' : '';
         const stickyBottomCls = row && row.__sgStickyBottom ? ' sg-sticky-bottom-row' : '';
         const stickyTopAttr = row && row.__sgStickyTop ? ' data-sg-sticky-top="1"' : '';
-        const rowStyleAttr = rowStyle ? ` style="${rowStyle(row, globalOffset + i) || ''}"` : '';
-        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}${stickyBottomCls}"${stickyTopAttr}${rowStyleAttr}>`;
+        const rowStyleStr = rowStyle ? (rowStyle(row, globalOffset + i) || '') : '';
+        html += `<tr data-idx="${i}" class="${clickCls}${stickyTopCls}${stickyBottomCls}"${stickyTopAttr}>`;
         cols.forEach(col => {
           const raw = row[col.key];
           let display;
@@ -508,8 +508,9 @@ const SuperGrid = (() => {
             ? ` ${typeof col.className === 'function' ? col.className(raw, row) : col.className}`
             : '';
           const w = colWidths[col.key];
-          const style = w ? ` style="width:${w}px;min-width:${w}px;max-width:${w}px"` : '';
-          html += `<td data-key="${col.key}" class="${pinCls}${alignCls}${extraCls}"${style}>${display}</td>`;
+          const baseStyle = w ? `width:${w}px;min-width:${w}px;max-width:${w}px` : '';
+          const cellStyle = (baseStyle || rowStyleStr) ? ` style="${baseStyle}${baseStyle && rowStyleStr ? ';' : ''}${rowStyleStr}"` : '';
+          html += `<td data-key="${col.key}" class="${pinCls}${alignCls}${extraCls}"${cellStyle}>${display}</td>`;
         });
         html += '</tr>';
         if (detailRowExpanded && detailRowHtml && detailRowExpanded(row, globalOffset + i)) {
