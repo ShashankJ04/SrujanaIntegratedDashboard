@@ -281,6 +281,7 @@ def run_report(report_id):
 def export_report(report_id):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
 
     report = reports_store.get_report_by_id(report_id)
     if not report:
@@ -348,7 +349,80 @@ def export_report(report_id):
         cell.fill = header_fill
         cell.border = thin_border
 
+    row_colors = report.get("rowColors", [])
+
+    def _hex_to_openpyxl(color_str: str) -> str:
+        """Normalise a CSS hex colour to the 6-char RRGGBB format openpyxl needs."""
+        c = str(color_str or "").strip().lstrip("#")
+        if len(c) == 3:
+            c = "".join(ch * 2 for ch in c)  # #abc → aabbcc
+        return c.upper() if len(c) == 6 else "FFFFFF"
+
+    def _match_row_color(row_dict: dict) -> str | None:
+        """Return the first matching CSS colour string, or None."""
+
+        def _eval_condition(col_val, operator: str, target_type: str, target_value: str) -> bool:
+            t_val = row_dict.get(target_value) if target_type == "column" else target_value
+            if t_val is None:
+                return False
+            try:
+                c = float(str(col_val))
+                t = float(str(t_val))
+            except (ValueError, TypeError):
+                c = str(col_val).strip().lower()
+                t = str(t_val).strip().lower()
+            if operator == "<":
+                return c < t
+            elif operator == "<=":
+                return c <= t
+            elif operator == ">":
+                return c > t
+            elif operator == ">=":
+                return c >= t
+            elif operator == "==":
+                return c == t
+            elif operator == "!=":
+                return c != t
+            return False
+
+        for rule in row_colors:
+            col_name = rule.get("column", "")
+            color = rule.get("color", "")
+
+            col_val = row_dict.get(col_name)
+            if col_val is None:
+                continue
+
+            # First condition (required)
+            match = _eval_condition(
+                col_val,
+                rule.get("operator", ""),
+                rule.get("targetType", "static"),
+                rule.get("targetValue", ""),
+            )
+
+            # Second condition (optional — AND logic)
+            if match and rule.get("operator2"):
+                match = _eval_condition(
+                    col_val,
+                    rule.get("operator2", ""),
+                    rule.get("targetType2", "static"),
+                    rule.get("targetValue2", ""),
+                )
+
+            if match:
+                return color
+        return None
+
+
     for ri, row in enumerate(rows, header_row + 1):
+        matched_color = _match_row_color(row)
+        row_fill = (
+            PatternFill(start_color=_hex_to_openpyxl(matched_color),
+                        end_color=_hex_to_openpyxl(matched_color),
+                        fill_type="solid")
+            if matched_color else None
+        )
         for ci, col in enumerate(columns, 1):
             val = row.get(col)
             cell = ws.cell(row=ri, column=ci)
@@ -357,6 +431,8 @@ def export_report(report_id):
             if number_format:
                 cell.number_format = number_format
             cell.border = thin_border
+            if row_fill:
+                cell.fill = row_fill
 
     output = BytesIO()
     wb.save(output)

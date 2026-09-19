@@ -598,24 +598,51 @@
     }
     host.innerHTML = '';
     rowColorsDraft.forEach((rule, idx) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto 1fr auto auto;gap:6px;align-items:center;width:100%';
       const ops = ['<', '<=', '==', '!=', '>', '>='];
-      const opHtml = ops.map(op => `<option value="${op}" ${op === rule.operator ? 'selected' : ''}>${op}</option>`).join('');
-      row.innerHTML = `
+      const opHtml1 = ops.map(op => `<option value="${op}" ${op === rule.operator ? 'selected' : ''}>${op}</option>`).join('');
+      const hasSecond = !!(rule.operator2);
+
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--ti-border);border-radius:8px;background:var(--ti-surface)';
+
+      // ── First condition row ──
+      const row1 = document.createElement('div');
+      row1.style.cssText = 'display:grid;grid-template-columns:1fr auto auto 1fr auto auto auto;gap:6px;align-items:center';
+      row1.innerHTML = `
         <input type="text" class="ti-input" data-rc-col="${idx}" placeholder="Column" value="${String(rule.column || '').replace(/"/g,'&quot;')}" style="min-width:0">
-        <select class="ti-select" data-rc-op="${idx}">${opHtml}</select>
+        <select class="ti-select" data-rc-op="${idx}">${opHtml1}</select>
         <select class="ti-select" data-rc-type="${idx}">
           <option value="static" ${rule.targetType === 'static' ? 'selected' : ''}>Static</option>
           <option value="column" ${rule.targetType === 'column' ? 'selected' : ''}>Column</option>
         </select>
-        <input type="text" class="ti-input" data-rc-val="${idx}" placeholder="Target value" value="${String(rule.targetValue || '').replace(/"/g,'&quot;')}" style="min-width:0">
-        <input type="color" class="ti-input" data-rc-color="${idx}" value="${rule.color || '#e3f2fd'}" style="width:40px;padding:0;height:24px;border:none;background:transparent;cursor:pointer">
+        <input type="text" class="ti-input" data-rc-val="${idx}" placeholder="Value" value="${String(rule.targetValue || '').replace(/"/g,'&quot;')}" style="min-width:0">
+        <input type="color" data-rc-color="${idx}" value="${rule.color || '#e3f2fd'}" style="width:32px;height:28px;padding:2px;border:1px solid var(--ti-border);border-radius:6px;cursor:pointer">
+        <button type="button" class="ti-btn ti-btn-outline ti-btn-xs" data-rc-toggle2="${idx}" title="${hasSecond ? 'Remove second condition' : 'Add a second AND condition'}">${hasSecond ? '− Range' : '+ Range'}</button>
         <button type="button" class="ti-btn ti-btn-danger ti-btn-xs" data-rc-del="${idx}">✕</button>
       `;
-      host.appendChild(row);
+      wrap.appendChild(row1);
+
+      // ── Second condition row (AND) ──
+      if (hasSecond) {
+        const opHtml2 = ops.map(op => `<option value="${op}" ${op === rule.operator2 ? 'selected' : ''}>${op}</option>`).join('');
+        const row2 = document.createElement('div');
+        row2.style.cssText = 'display:grid;grid-template-columns:auto auto auto 1fr;gap:6px;align-items:center;margin-left:8px';
+        row2.innerHTML = `
+          <span style="font-size:11px;font-weight:600;color:var(--ti-text-dim);padding:0 4px">AND</span>
+          <select class="ti-select" data-rc-op2="${idx}">${opHtml2}</select>
+          <select class="ti-select" data-rc-type2="${idx}">
+            <option value="static" ${(rule.targetType2 || 'static') === 'static' ? 'selected' : ''}>Static</option>
+            <option value="column" ${rule.targetType2 === 'column' ? 'selected' : ''}>Column</option>
+          </select>
+          <input type="text" class="ti-input" data-rc-val2="${idx}" placeholder="Value" value="${String(rule.targetValue2 || '').replace(/"/g,'&quot;')}" style="min-width:0">
+        `;
+        wrap.appendChild(row2);
+      }
+
+      host.appendChild(wrap);
     });
 
+    // ── Bind events ──
     host.querySelectorAll('[data-rc-col]').forEach(el => el.addEventListener('input', e => {
       rowColorsDraft[Number(e.target.getAttribute('data-rc-col'))].column = e.target.value;
     }));
@@ -630,6 +657,31 @@
     }));
     host.querySelectorAll('[data-rc-color]').forEach(el => el.addEventListener('input', e => {
       rowColorsDraft[Number(e.target.getAttribute('data-rc-color'))].color = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-op2]').forEach(el => el.addEventListener('change', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-op2'))].operator2 = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-type2]').forEach(el => el.addEventListener('change', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-type2'))].targetType2 = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-val2]').forEach(el => el.addEventListener('input', e => {
+      rowColorsDraft[Number(e.target.getAttribute('data-rc-val2'))].targetValue2 = e.target.value;
+    }));
+    host.querySelectorAll('[data-rc-toggle2]').forEach(el => el.addEventListener('click', e => {
+      const i = Number(e.target.getAttribute('data-rc-toggle2'));
+      const rule = rowColorsDraft[i];
+      if (rule.operator2) {
+        // Remove second condition
+        delete rule.operator2;
+        delete rule.targetType2;
+        delete rule.targetValue2;
+      } else {
+        // Add second condition with defaults
+        rule.operator2 = '<';
+        rule.targetType2 = 'static';
+        rule.targetValue2 = '';
+      }
+      renderRowColors();
     }));
     host.querySelectorAll('[data-rc-del]').forEach(el => el.addEventListener('click', e => {
       rowColorsDraft.splice(Number(e.target.getAttribute('data-rc-del')), 1);
@@ -712,7 +764,8 @@
 
   document.getElementById('rptAddRowColorBtn').addEventListener('click', () => {
     rowColorsDraft.push({
-      column: '', operator: '<', targetType: 'static', targetValue: '', color: '#e3f2fd'
+      column: '', operator: '<', targetType: 'static', targetValue: '', color: '#e3f2fd',
+      operator2: null, targetType2: null, targetValue2: null,
     });
     renderRowColors();
   });
@@ -726,13 +779,22 @@
     
     // Clean up rowColorsDraft
     const rowColors = rowColorsDraft
-      .map(r => ({
-        column: r.column.trim(),
-        operator: r.operator,
-        targetType: r.targetType,
-        targetValue: r.targetValue.trim(),
-        color: r.color.trim()
-      }))
+      .map(r => {
+        const rule = {
+          column: r.column.trim(),
+          operator: r.operator,
+          targetType: r.targetType,
+          targetValue: r.targetValue.trim(),
+          color: r.color.trim(),
+        };
+        // Include second condition (range bound) only when all three fields are present
+        if (r.operator2 && r.targetValue2 && String(r.targetValue2).trim()) {
+          rule.operator2 = r.operator2;
+          rule.targetType2 = r.targetType2 || 'static';
+          rule.targetValue2 = String(r.targetValue2).trim();
+        }
+        return rule;
+      })
       .filter(r => r.column && r.targetValue && r.color);
 
     if (!name || !query) return;

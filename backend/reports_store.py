@@ -784,14 +784,24 @@ def _validate_and_normalize_row_colors(row_colors: List[Dict[str, Any]]) -> List
         color = str(rc.get("color") or "").strip()
         if not col or not op or not target_type or not target_val or not color:
             continue
-        normalized.append({
+        rule: Dict[str, Any] = {
             "column": col,
             "operator": op,
             "targetType": target_type,
             "targetValue": target_val,
             "color": color,
-        })
+        }
+        # Optional second bound (AND condition on the same column)
+        op2 = str(rc.get("operator2") or "").strip()
+        target_type2 = str(rc.get("targetType2") or "").strip()
+        target_val2 = str(rc.get("targetValue2") or "").strip()
+        if op2 and target_type2 and target_val2:
+            rule["operator2"] = op2
+            rule["targetType2"] = target_type2
+            rule["targetValue2"] = target_val2
+        normalized.append(rule)
     return normalized
+
 
 
 def create_report(

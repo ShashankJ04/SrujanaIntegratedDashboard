@@ -22,6 +22,9 @@
     <button type="button" class="rr-btn rr-btn--export" id="runExportBtn" disabled title="Export to Excel">⬇ Export</button>
   </div>
 
+  <!-- ═══ COLOR FILTER BAR (shown when report has row-color rules) ═══ -->
+  <div id="rrColorFilterBar" style="display:none"></div>
+
   <!-- ═══ LOADING ═══ -->
   <div id="runLoading" class="rr-loading" style="display:none"><div class="rr-loading__bar"></div></div>
 
@@ -56,8 +59,9 @@
   let runGrid = null;
   const runViewStack = [];
   let pickerIgnoreChange = false;
-  let _prevSidebarState = null; // remember sidebar state before auto-collapse
-  let _activeNoFormatColumns = new Set(); // columns that should not receive number grouping
+  let _prevSidebarState = null;
+  let _activeNoFormatColumns = new Set();
+  let activeColorFilter = null; // null = show all, string = CSS color to filter to
 
   /* ── Expansion Manager ─────────────────────────────────────────────── */
   const ExpansionMgr = {
@@ -223,6 +227,76 @@
     if (s) {
       s.style.display = show ? '' : 'none';
       if (!show) s.value = '';
+    }
+    if (!show) {
+      activeColorFilter = null;
+      const bar = document.getElementById('rrColorFilterBar');
+      if (bar) bar.style.display = 'none';
+    }
+  }
+
+  function renderColorFilterBar(rowColors) {
+    const bar = document.getElementById('rrColorFilterBar');
+    if (!bar) return;
+    if (!rowColors || !rowColors.length) {
+      bar.style.display = 'none';
+      activeColorFilter = null;
+      return;
+    }
+
+    // Build unique colours from rules preserving rule order
+    const seen = new Set();
+    const colorRules = [];
+    rowColors.forEach(rule => {
+      if (!seen.has(rule.color)) {
+        seen.add(rule.color);
+        // Build a human-readable label from the rule
+        let label = rule.column + ' ' + rule.operator + ' ' + rule.targetValue;
+        if (rule.operator2) label += ' & ' + rule.operator2 + ' ' + rule.targetValue2;
+        colorRules.push({ color: rule.color, label });
+      }
+    });
+
+    bar.innerHTML = '';
+    bar.style.display = 'flex';
+    bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 14px;flex-wrap:wrap;border-bottom:1px solid var(--ti-border);background:var(--ti-bg-subtle);';
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = 'Filter by colour:';
+    labelEl.style.cssText = 'font-size:11px;font-weight:600;color:var(--ti-text-dim);white-space:nowrap;';
+    bar.appendChild(labelEl);
+
+    // "All" pill
+    const allPill = document.createElement('button');
+    allPill.type = 'button';
+    allPill.textContent = 'All';
+    allPill.dataset.colorFilter = '';
+    allPill.style.cssText = 'padding:3px 10px;border-radius:999px;border:1.5px solid var(--ti-border);font-size:11px;cursor:pointer;font-weight:600;transition:all .15s;background:' + (activeColorFilter === null ? 'var(--ti-blue)' : 'var(--ti-surface)') + ';color:' + (activeColorFilter === null ? '#fff' : 'var(--ti-text)') + ';';
+    bar.appendChild(allPill);
+
+    colorRules.forEach(({ color, label }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.title = label;
+      btn.dataset.colorFilter = color;
+      const isActive = activeColorFilter === color;
+      btn.style.cssText = 'display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;border:1.5px solid ' + (isActive ? 'var(--ti-blue)' : 'var(--ti-border)') + ';font-size:11px;cursor:pointer;font-weight:500;background:var(--ti-surface);color:var(--ti-text);box-shadow:' + (isActive ? '0 0 0 2px var(--ti-blue-soft)' : 'none') + ';';
+      btn.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};border:1px solid rgba(0,0,0,.15);flex-shrink:0"></span>${label}`;
+      bar.appendChild(btn);
+    });
+
+    if (!bar.dataset.listenerBound) {
+      bar.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-color-filter]');
+        if (!btn) return;
+        const val = btn.dataset.colorFilter;
+        activeColorFilter = val === '' ? null : val;
+        if (lastRunResult && currentRunReport) {
+          const search = document.getElementById('reportsGridSearch');
+          renderResultGrid(currentRunReport, lastRunResult, search ? search.value : '');
+        }
+      });
+      bar.dataset.listenerBound = '1';
     }
   }
 
@@ -719,44 +793,63 @@
 
   function evaluateRowColorRules(row, rules) {
     if (!rules || !rules.length) return '';
+
+    function evalCond(colVal, operator, targetType, targetValue) {
+      const tVal = targetType === 'column' ? row[targetValue] : targetValue;
+      if (tVal == null || tVal === '') return false;
+      const nC = Number(colVal), nT = Number(tVal);
+      const isNum = !isNaN(nC) && !isNaN(nT) && colVal !== '' && tVal !== '';
+      const c = isNum ? nC : String(colVal).trim().toLowerCase();
+      const t = isNum ? nT : String(tVal).trim().toLowerCase();
+      switch (operator) {
+        case '<':  return c < t;
+        case '<=': return c <= t;
+        case '>':  return c > t;
+        case '>=': return c >= t;
+        case '==': return c == t;
+        case '!=': return c != t;
+      }
+      return false;
+    }
+
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
       const colVal = row[rule.column];
-      let targetVal = rule.targetType === 'column' ? row[rule.targetValue] : rule.targetValue;
+      if (colVal == null) continue;
 
-      if (colVal == null || targetVal == null) continue;
+      // First condition (required)
+      let match = evalCond(colVal, rule.operator, rule.targetType, rule.targetValue);
 
-      let nCol = Number(colVal);
-      let nTarget = Number(targetVal);
-      let isNum = !isNaN(nCol) && !isNaN(nTarget) && colVal !== '' && targetVal !== '';
-
-      let c = isNum ? nCol : String(colVal).trim().toLowerCase();
-      let t = isNum ? nTarget : String(targetVal).trim().toLowerCase();
-
-      let match = false;
-      switch (rule.operator) {
-        case '<': match = c < t; break;
-        case '<=': match = c <= t; break;
-        case '>': match = c > t; break;
-        case '>=': match = c >= t; break;
-        case '==': match = c == t; break;
-        case '!=': match = c != t; break;
+      // Second condition (optional AND bound)
+      if (match && rule.operator2) {
+        match = evalCond(colVal, rule.operator2, rule.targetType2 || 'static', rule.targetValue2 || '');
       }
+
       if (match) {
-        // use !important to override zebra striping or hover if needed, 
-        // though row level inline style usually takes precedence
         return `background-color: ${rule.color} !important;`;
       }
     }
     return '';
   }
 
+
   function renderResultGrid(report, result, restoreSearchValue) {
     const runTableEl = document.getElementById('runTable');
     if (runGrid && runGrid.destroy) runGrid.destroy();
     ExpansionMgr.reset();
     const cols = result.columns || (result.rows && result.rows[0] ? Object.keys(result.rows[0]) : []);
-    const filteredRows = applyReportsRowFilter(result.rows || []);
+    let filteredRows = applyReportsRowFilter(result.rows || []);
+
+    // Apply active color filter
+    const rowColors = result.rowColors || report.rowColors || [];
+    renderColorFilterBar(rowColors);
+    if (activeColorFilter !== null && rowColors.length) {
+      filteredRows = filteredRows.filter(row => {
+        const style = evaluateRowColorRules(row, rowColors);
+        // evaluateRowColorRules returns e.g. "background-color: #e3f2fd !important;"
+        return style.includes(activeColorFilter);
+      });
+    }
     updateReportsRowFilterHint();
     if (!filteredRows.length) {
       const msg = (result.rows || []).length && reportsRowFilter() === 'balance'
@@ -1049,6 +1142,7 @@
       lastRunResult = result;
       currentRunReport = report;
       currentRunVariables = { ...vars };
+      activeColorFilter = null; // reset color filter on fresh run
 
       if (!result.rows || !result.rows.length) {
         document.getElementById('runTable').innerHTML = '<div class="rr-no-data">No rows returned</div>';
