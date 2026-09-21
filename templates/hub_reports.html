@@ -45,6 +45,11 @@
     {% include 'hub_component_stock.html' %}
   </div>
 
+  <!-- NR DC Stock widget (handler report only; hidden by default) -->
+  <div id="runNrDcStockHost" class="rr-component-stock-host" style="display:none">
+    {% include 'hub_nr_dc_stock.html' %}
+  </div>
+
   <!-- Hidden picker kept for sidebar-collapsed fallback -->
   <select id="reportsRunnerPicker" class="rr-hidden-picker" style="display:none" aria-hidden="true">
     <option value="">Choose a report…</option>
@@ -1016,12 +1021,22 @@
     return String(report?.handler || '').trim() === 'component_stock';
   }
 
+  function isNrDcStockReport(report) {
+    return String(report?.handler || '').trim() === 'nr_dc_stock';
+  }
+
+  function isHandlerReport(report) {
+    return isComponentStockReport(report) || isNrDcStockReport(report);
+  }
+
   function setComponentStockViewerVisible(show) {
     const host = document.getElementById('runComponentStockHost');
+    const nrdcHost = document.getElementById('runNrDcStockHost');
     const gridHost = document.querySelector('.rr-grid-host');
     const runBtn = document.getElementById('runExecuteBtn');
     const exportBtn = document.getElementById('runExportBtn');
-    if (host) host.style.display = show ? 'block' : 'none';
+    if (host) host.style.display = show === 'component_stock' ? 'block' : 'none';
+    if (nrdcHost) nrdcHost.style.display = show === 'nr_dc_stock' ? 'block' : 'none';
     if (gridHost) gridHost.style.display = show ? 'none' : '';
     if (runBtn) runBtn.style.display = show ? 'none' : '';
     if (exportBtn) exportBtn.style.display = show ? 'none' : '';
@@ -1059,6 +1074,7 @@
 
   function canAutoRunReport(report) {
     if (String(report?.handler || '').trim() === 'component_stock') return false;
+    if (String(report?.handler || '').trim() === 'nr_dc_stock') return false;
     const vars = report?.variables || [];
     if (!vars.length) return true;
     return vars.every(v => {
@@ -1087,7 +1103,7 @@
     lastRunResult = null;
 
     if (isComponentStockReport(report)) {
-      setComponentStockViewerVisible(true);
+      setComponentStockViewerVisible('component_stock');
       const varsPanel = document.getElementById('runVarsPanel');
       varsPanel.style.display = 'none';
       varsPanel.innerHTML = '';
@@ -1098,6 +1114,22 @@
       syncReportsPicker(report.id);
       if (typeof window.ComponentStockPage?.init === 'function') {
         window.ComponentStockPage.init();
+      }
+      return;
+    }
+
+    if (isNrDcStockReport(report)) {
+      setComponentStockViewerVisible('nr_dc_stock');
+      const varsPanel = document.getElementById('runVarsPanel');
+      varsPanel.style.display = 'none';
+      varsPanel.innerHTML = '';
+      document.getElementById('runEmpty').style.display = 'none';
+      document.getElementById('runClearBtn').style.display = 'none';
+      document.getElementById('runExecuteBtn').disabled = true;
+      updateBackButtonState();
+      syncReportsPicker(report.id);
+      if (typeof window.NrDcStockPage?.init === 'function') {
+        window.NrDcStockPage.init();
       }
       return;
     }

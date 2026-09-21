@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 COMPONENT_STOCK_REPORT_ID = "e6f7a8b9-0c1d-4e2f-9a3b-4c5d6e7f8a9b"
 COMPONENT_STOCK_GROUP_NAME = "Component Stock"
 
+# NR DC Stock interactive viewer (same group as Component Stock).
+NR_DC_STOCK_REPORT_ID = "f7a8b9c0-1d2e-4f3a-ab4c-5d6e7f8a9b0c"
+
 OVERVIEW_LINKED_REPORT_IDS: tuple[str, ...] = (
     "88a9ed8d-8131-44cb-8fef-fc2782449986",  # Tool BreakDowns
     "5749a7ed-e4be-4b41-a73b-78bd416f46b2",  # Distinct Component Details - With Tools
@@ -223,5 +226,61 @@ def ensure_component_stock_report() -> Dict[str, Any]:
         "createdReport": created_report,
         "groupId": group_id,
         "reportId": COMPONENT_STOCK_REPORT_ID,
+        "skipped": False,
+    }
+
+
+def ensure_nr_dc_stock_report() -> Dict[str, Any]:
+    """Insert NR DC Stock report into the existing Component Stock group."""
+    group_id = reports_store.find_group_id_by_name(COMPONENT_STOCK_GROUP_NAME)
+    if not group_id:
+        logger.warning(
+            "NR DC Stock report bootstrap: group %r not found — skipping",
+            COMPONENT_STOCK_GROUP_NAME,
+        )
+        return {
+            "createdReport": False,
+            "groupId": "",
+            "reportId": NR_DC_STOCK_REPORT_ID,
+            "skipped": True,
+        }
+
+    catalog_report = {
+        "id": NR_DC_STOCK_REPORT_ID,
+        "groupId": group_id,
+        "name": "NR DC Stock",
+        "queryTemplate": "",
+        "handler": "nr_dc_stock",
+        "variables": [],
+        "pinned": True,
+        "drilldowns": [],
+    }
+    runtime_reports = reports_store.get_reports()
+    report_by_id = {
+        str(r.get("id")): r
+        for r in runtime_reports
+        if isinstance(r, dict) and r.get("id")
+    }
+    created_report = False
+    try:
+        created_report = reports_store.upsert_catalog_report(
+            catalog_report,
+            report_by_id,
+        )
+        if created_report:
+            logger.info(
+                "NR DC Stock report bootstrap: created report %s in group %s",
+                NR_DC_STOCK_REPORT_ID,
+                group_id,
+            )
+    except Exception as exc:
+        logger.warning(
+            "NR DC Stock report bootstrap failed: %s",
+            exc,
+        )
+    return {
+        "createdReport": created_report,
+        "groupId": group_id,
+        "reportId": NR_DC_STOCK_REPORT_ID,
         "skipped": False,
     }

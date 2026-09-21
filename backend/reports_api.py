@@ -234,11 +234,11 @@ def run_report(report_id):
         return jsonify({"message": "Report not found"}), 404
 
     handler_key = str(report.get("handler") or "").strip()
-    if handler_key == "component_stock":
+    if handler_key in ("component_stock", "nr_dc_stock"):
         return jsonify(
             {
                 "message": (
-                    "Component Stock Sections uses the interactive viewer; "
+                    f"{report.get('name', handler_key)} uses the interactive viewer; "
                     "SQL run is not available."
                 )
             }
@@ -288,11 +288,11 @@ def export_report(report_id):
         return jsonify({"message": "Report not found"}), 404
 
     handler_key = str(report.get("handler") or "").strip()
-    if handler_key == "component_stock":
+    if handler_key in ("component_stock", "nr_dc_stock"):
         return jsonify(
             {
                 "message": (
-                    "Component Stock Sections cannot be exported as Excel; "
+                    f"{report.get('name', handler_key)} cannot be exported as Excel; "
                     "use the interactive viewer."
                 )
             }

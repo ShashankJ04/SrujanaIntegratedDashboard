@@ -10,6 +10,7 @@ from .auth import api_login_required, is_dpr_editor
 from .dispatch_calendar import build_dispatch_calendar_payload
 from .production_calendar import build_production_calendar_payload
 from .component_stock import build_component_stock_payload, get_plant_options, search_parts
+from .nr_dc_stock import build_nr_dc_payload, search_nr_parts
 from .rbac import require_access
 from .export import generate_excel_response
 from .db import execute, fetch_one
@@ -813,6 +814,33 @@ def api_component_stock() -> Any:
         return jsonify({"message": "partNo is required"}), 400
     try:
         payload = build_component_stock_payload(plant_id, part_no)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    return jsonify(payload)
+
+
+# ── NR DC Stock ─────────────────────────────────────────────────────
+
+@api_bp.get("/nr-dc-stock/parts")
+@require_access("rept")
+def api_nr_dc_stock_parts() -> Any:
+    q = str(request.args.get("q") or "").strip()
+    limit = _parse_int("limit", 30)
+    if limit < 1:
+        limit = 30
+    if limit > 100:
+        limit = 100
+    return jsonify({"parts": search_nr_parts(q, limit=limit)})
+
+
+@api_bp.get("/nr-dc-stock")
+@require_access("rept")
+def api_nr_dc_stock() -> Any:
+    part_no = str(request.args.get("partNo") or "").strip()
+    if not part_no:
+        return jsonify({"message": "partNo is required"}), 400
+    try:
+        payload = build_nr_dc_payload(part_no)
     except ValueError as e:
         return jsonify({"message": str(e)}), 400
     return jsonify(payload)

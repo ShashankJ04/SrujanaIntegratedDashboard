@@ -1,0 +1,68 @@
+<!-- NR DC Stock — non-returnable DC tracking (transit + supplier stock) -->
+<div class="ti-nrdc-page" id="nr-dc-stock-block">
+  <header class="ti-cs-header">
+    <h2 class="ti-cs-title">NR DC Stock</h2>
+  </header>
+
+  <div class="ti-cs-filters">
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="nrdc-partno">PART NUMBER</label>
+      <input type="text" id="nrdc-partno" class="ti-input ti-cs-filter-input" list="nrdc-parts-datalist" placeholder="Select part…" autocomplete="off" />
+      <datalist id="nrdc-parts-datalist"></datalist>
+    </div>
+    <div class="ti-cs-filter">
+      <label class="ti-cs-filter-label" for="nrdc-partname">PART NAME</label>
+      <input type="text" id="nrdc-partname" class="ti-input ti-cs-filter-input" disabled />
+    </div>
+    <div class="ti-nrdc-badge" id="nrdc-srujana-badge" hidden>
+      In Srujana: <span id="nrdc-srujana-qty" class="ti-nrdc-badge-value">0</span>
+    </div>
+  </div>
+
+  <div id="nrdc-loading" class="ti-cs-loading" hidden>
+    <div class="ti-spinner"></div><span>Loading…</span>
+  </div>
+  <p id="nrdc-empty" class="ti-cs-empty">Select a part number to view NR DC stock.</p>
+  <p id="nrdc-error" class="ti-cs-error" hidden></p>
+
+  <div id="nrdc-panels" class="ti-nrdc-panels" hidden>
+    <div class="ti-cs-panel">
+      <div class="ti-cs-panel-head">
+        <span class="ti-cs-panel-title">Transit</span>
+        <span class="ti-cs-panel-total">Total: <span id="nrdc-transit-total">0</span></span>
+      </div>
+      <div class="ti-cs-table-wrap">
+        <table class="ti-cs-table" id="nrdc-transit-table">
+          <thead>
+            <tr>
+              <th>FROM</th>
+              <th>TO</th>
+              <th class="ti-cs-num">QTY</th>
+              <th>PURPOSE</th>
+            </tr>
+          </thead>
+          <tbody id="nrdc-transit-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ti-cs-panel">
+      <div class="ti-cs-panel-head">
+        <span class="ti-cs-panel-title">Supplier</span>
+        <span class="ti-cs-panel-total">Total: <span id="nrdc-supplier-total">0</span></span>
+      </div>
+      <div class="ti-cs-table-wrap">
+        <table class="ti-cs-table" id="nrdc-supplier-table">
+          <thead>
+            <tr>
+              <th>SUPPLIER</th>
+              <th class="ti-cs-num">QTY</th>
+              <th>READY FOR STAGE</th>
+            </tr>
+          </thead>
+          <tbody id="nrdc-supplier-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

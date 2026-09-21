@@ -34,6 +34,7 @@ def create_app() -> Flask:
 
     from .overview_report_bootstrap import (
         ensure_component_stock_report,
+        ensure_nr_dc_stock_report,
         ensure_overview_reports,
     )
 
@@ -53,6 +54,15 @@ def create_app() -> Flask:
 
         logging.getLogger(__name__).warning(
             "Component Stock report bootstrap failed: %s", exc
+        )
+
+    try:
+        ensure_nr_dc_stock_report()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "NR DC Stock report bootstrap failed: %s", exc
         )
 
     try:

@@ -123,6 +123,7 @@ BUILTIN_REPORT_HANDLERS: Tuple[str, ...] = (
     "lw_qa",
     "lw_scrap",
     "component_stock",
+    "nr_dc_stock",
 )
 
 
@@ -145,7 +146,7 @@ def _normalize_filter_column(value: Any) -> str:
 
 
 def _default_variables_for_handler(handler: str) -> List[str]:
-    if handler in ("lw_stock", "component_stock"):
+    if handler in ("lw_stock", "component_stock", "nr_dc_stock"):
         return []
     return ["from_date", "to_date"]
 

@@ -12340,3 +12340,65 @@ body.lw-track-drawer-open .lw-track-drawer {
     text-align: right;
   }
 }
+
+/* ── NR DC Stock ────────────────────────────────────────────────────── */
+
+.ti-nrdc-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 4px 0;
+}
+
+.ti-nrdc-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 1px solid #a5d6a7;
+  font-size: 15px;
+  font-weight: 700;
+  color: #2e7d32;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.ti-nrdc-badge[hidden] {
+  display: none !important;
+}
+
+.ti-nrdc-badge-value {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-nrdc-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.ti-nrdc-panels[hidden] {
+  display: none !important;
+}
+
+.ti-nrdc-panels .ti-cs-panel {
+  min-height: 280px;
+}
+
+.ti-nrdc-panels .ti-cs-table-wrap {
+  max-height: 400px;
+}
+
+@media (max-width: 900px) {
+  .ti-nrdc-panels {
+    grid-template-columns: 1fr;
+  }
+}
