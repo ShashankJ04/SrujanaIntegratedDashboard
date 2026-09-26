@@ -45,13 +45,17 @@ _PULSE_CACHE_LOCK = threading.Lock()
 _PULSE_CACHE: Dict[str, Any] = {"ts": 0.0, "items": []}
 _PULSE_SCHEMA_CACHE: Dict[str, Tuple[float, set]] = {}
 _REPORT_SUMMARY_CACHE_LOCK = threading.Lock()
-_REPORT_SUMMARY_CACHE: Dict[str, Any] = {"ts": 0.0, "summary": None}
+# period_key ("YYYY-MM") -> {"ts": float, "summary": dict}
+_REPORT_SUMMARY_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def _clear_reports_summary_cache() -> None:
     with _REPORT_SUMMARY_CACHE_LOCK:
-        _REPORT_SUMMARY_CACHE["ts"] = 0.0
-        _REPORT_SUMMARY_CACHE["summary"] = None
+        _REPORT_SUMMARY_CACHE.clear()
+
+
+def _report_summary_period_key(year: int, month: int) -> str:
+    return f"{int(year):04d}-{int(month):02d}"
 
 
 def get_dashboard_columns() -> List[ColumnMeta]:
@@ -262,8 +266,8 @@ def _build_inventory_rows_for_dispatch_period(month: int, year: int) -> List[Dic
         for pk, info in schedule.items()
         if float(info.get("scheduledQty") or 0) > 0
     ]
-    base_rows = _fetch_inventory_metrics_for_parts(part_nos)
-    return _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule)
+    base_rows = _fetch_inventory_metrics_for_parts(part_nos, month, year)
+    return _merge_dispatch_schedule_into_inventory_rows(base_rows, schedule, month, year)
 
 
 def _normalize_inventory_part_key(part_no: Any) -> str:
@@ -287,8 +291,16 @@ def _empty_inventory_base_row(part_no: str, part_name: str = "") -> Dict[str, An
     }
 
 
-def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str, Any]]:
-    """Stock, production, and RM metrics for the given component part numbers."""
+def _fetch_inventory_metrics_for_parts(
+    part_nos: Sequence[str],
+    month: int,
+    year: int,
+) -> List[Dict[str, Any]]:
+    """Stock, production, and RM metrics for the given component part numbers.
+
+    Produced qty is attributed to the schedule month (SM_MONTH/SM_YEAR) rather than
+    the production booking date, matching the Yearly Production report.
+    """
     cleaned = [str(p or "").strip() for p in part_nos if str(p or "").strip()]
     if not cleaned:
         return []
@@ -344,10 +356,10 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
             INNER JOIN production_details ON PS_ID = PD_PSID
             INNER JOIN schedule_master ON SM_Id = PS_SMID
             INNER JOIN components ON CO_Id = PS_ParentCompId
-            WHERE PD_DATE BETWEEN DATE_SUB(current_date, INTERVAL DAYOFMONTH(current_date)-1 DAY)
-                              AND last_day(current_date)
+            WHERE SM_MONTH = %s
+              AND SM_YEAR = %s
               AND SM_Status = 'S'
-              AND pd_ecsid != 6
+              AND pd_ecsid = 8
             GROUP BY TRIM(CO_partNo)
         ) z ON TRIM(c.CO_PARTNO) = z.PART_NO
         LEFT JOIN (
@@ -418,13 +430,15 @@ def _fetch_inventory_metrics_for_parts(part_nos: Sequence[str]) -> List[Dict[str
         WHERE c.CO_ACTIVEYN = 'Y'
           AND TRIM(c.CO_PARTNO) IN ({placeholders})
     """
-    params = tuple(cleaned + cleaned)
+    params = (int(month), int(year)) + tuple(cleaned + cleaned)
     return list(fetch_all(sql, params))
 
 
 def _merge_dispatch_schedule_into_inventory_rows(
     base_rows: List[Dict[str, Any]],
     schedule: Dict[str, Dict[str, Any]],
+    month: int,
+    year: int,
 ) -> List[Dict[str, Any]]:
     """Keep dispatch-scheduled parts with non-zero requirement; drop zero-requirement parts."""
     base_by_pk: Dict[str, Dict[str, Any]] = {}
@@ -442,7 +456,7 @@ def _merge_dispatch_schedule_into_inventory_rows(
             missing_part_nos.append(str(info.get("partNo") or pk).strip())
 
     supplemental_by_pk: Dict[str, Dict[str, Any]] = {}
-    for row in _fetch_inventory_metrics_for_parts(missing_part_nos):
+    for row in _fetch_inventory_metrics_for_parts(missing_part_nos, month, year):
         pk = _normalize_inventory_part_key(row.get("part_no"))
         if pk:
             supplemental_by_pk[pk] = row
@@ -932,6 +946,100 @@ BOM_DISPATCH_REPORT_ID = "44f78950-7e3e-46f2-a278-ba88e0c7d8c9"
 BOM_DISPATCH_PIVOT_REPORT_ID = "97e39414-c6d7-4392-aa6f-1972c41cfc1e"
 
 
+def get_yearly_production_month_kpi(month: int, year: int) -> Dict[str, Any]:
+    """Month totals using the same SQL shape as the Yearly Production report.
+
+    Planned / ValidActual / Excess come from ``inventory_report_rows``;
+    Produced from ``production_details`` (pd_ecsid = 8) via schedule month;
+    Scheduled / Dispatched from customer schedule + completed dispatches.
+    """
+    row = fetch_one(
+        """
+        SELECT
+            COALESCE(SUM(GREATEST(COALESCE(irr.production_pending, 0), 0)), 0) AS planned,
+            COALESCE(SUM(COALESCE(cust.scheduled_qty, 0)), 0) AS scheduled,
+            COALESCE(SUM(COALESCE(pr.prodqty, 0)), 0) AS produced,
+            COALESCE(SUM(
+                GREATEST(COALESCE(irr.production_pending, 0), 0)
+                - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)
+            ), 0) AS valid_actual,
+            COALESCE(SUM(
+                COALESCE(pr.prodqty, 0)
+                - (
+                    GREATEST(COALESCE(irr.production_pending, 0), 0)
+                    - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)
+                )
+            ), 0) AS excess,
+            COALESCE(SUM(GREATEST(COALESCE(irr.balance_production_qty, 0), 0)), 0) AS balance,
+            COALESCE(SUM(COALESCE(disp.dispqty, 0)), 0) AS dispatched
+        FROM schedule_master sm
+        JOIN (
+            SELECT DISTINCT sc_smid, CO_PARENTID AS parent_compid
+            FROM schedule_details sd
+            LEFT JOIN components c ON sd.sc_compid = c.co_id
+        ) sd ON sd.sc_smid = sm.SM_ID
+        LEFT JOIN (
+            SELECT cp.CO_PARENTID AS comp, sc_smid AS smid, SUM(SD_LOTSIZE) AS dispqty
+            FROM scheduled_customerdispatch
+            LEFT JOIN scheduled_customer ON SD_CSID = CS_Id
+            LEFT JOIN schedule_details ON SC_Id = CS_SCID
+            LEFT JOIN components cp ON cp.co_id = SC_COMPID
+            WHERE SD_Status = 7
+            GROUP BY cp.CO_PARENTID, sc_smid
+        ) disp ON disp.smid = sm.SM_ID AND sd.parent_compid = disp.comp
+        LEFT JOIN (
+            SELECT
+                sp.PS_PARENTCOMPID AS comp,
+                sp.PS_SMID AS smid,
+                SUM(pd.PD_PRODQTY) AS prodqty
+            FROM scheduled_production sp
+            JOIN production_details pd ON pd.PD_PSID = sp.PS_ID AND pd.pd_ecsid = 8
+            GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID
+        ) pr ON pr.smid = sm.SM_ID AND sd.parent_compid = pr.comp
+        LEFT JOIN inventory_report_rows irr
+            ON irr.part_id = sd.parent_compid
+            AND irr.report_month = sm.SM_MONTH
+            AND irr.report_year = sm.SM_YEAR
+        LEFT JOIN (
+            SELECT
+                sm2.SM_ID AS smid,
+                c2.CO_PARENTID AS comp,
+                SUM(sc.CS_QTY) AS scheduled_qty
+            FROM schedule_master sm2
+            JOIN schedule_details sd2 ON sm2.SM_ID = sd2.SC_SMID
+            JOIN scheduled_customer sc ON sd2.SC_ID = sc.CS_SCID
+            JOIN components c2 ON sd2.SC_COMPID = c2.CO_ID
+            WHERE sc.CS_SCHEDULESTATE IN (1, 2, 3)
+            GROUP BY sm2.SM_ID, c2.CO_PARENTID
+        ) cust ON cust.smid = sm.SM_ID AND cust.comp = sd.parent_compid
+        WHERE sm.SM_MONTH = %s
+          AND sm.SM_YEAR = %s
+        """,
+        (int(month), int(year)),
+    )
+    planned = float((row or {}).get("planned") or 0.0)
+    produced = float((row or {}).get("produced") or 0.0)
+    balance = float((row or {}).get("balance") or 0.0)
+    valid_actual = float((row or {}).get("valid_actual") or 0.0)
+    excess = float((row or {}).get("excess") or 0.0)
+    scheduled = float((row or {}).get("scheduled") or 0.0)
+    dispatched = float((row or {}).get("dispatched") or 0.0)
+    pct: Optional[float] = (
+        round((100.0 * produced / planned), 2) if planned > 0 else None
+    )
+    return {
+        "planned": planned,
+        "produced": produced,
+        "balance": balance,
+        "validActual": valid_actual,
+        "excess": excess,
+        "scheduled": scheduled,
+        "dispatched": dispatched,
+        "pct": pct,
+        "openingStock": 0.0,
+    }
+
+
 def get_bom_delivery_kpi(month: int, year: int) -> Dict[str, Any]:
     """Month-to-date BOM delivery totals (BOM Dispatch Details report query)."""
     scheduled = 0.0
@@ -969,20 +1077,49 @@ def get_bom_delivery_kpi(month: int, year: int) -> Dict[str, Any]:
     }
 
 
-def get_report_summary() -> Dict[str, Any]:
-    """High-level KPI metrics for the reports page using balance production qty."""
+def _get_enriched_rows_for_period(month: int, year: int) -> List[Dict[str, Any]]:
+    """Inventory-enriched rows for a calendar month (live cache or snapshot/rebuild)."""
+    from .inventory_snapshot import is_current_inventory_period, load_snapshot_rows
+
+    if is_current_inventory_period(year, month):
+        return _get_enriched_rows_for_reports()
+    loaded = load_snapshot_rows(year, month)
+    if loaded is not None:
+        return list(loaded)
+    return build_enriched_inventory_rows_for_period(month, year)
+
+
+def get_report_summary(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+) -> Dict[str, Any]:
+    """High-level KPI metrics for Overview / reports using balance production qty.
+
+    Quantity Progress, Dispatch, Parts Progress, and BOM Delivery are scoped to
+    the given calendar month (defaults to the current month). YTD KPIs are always
+    financial-year-to-date and ignore the month filter.
+    """
+    today = date.today()
+    period_month = int(month) if month is not None else today.month
+    period_year = int(year) if year is not None else today.year
+    if period_month < 1 or period_month > 12:
+        period_month = today.month
+        period_year = today.year
+
     cache_seconds = int(
         current_app.config.get("REPORTS_SUMMARY_CACHE_SECONDS", 30) or 30
     )
+    period_key = _report_summary_period_key(period_year, period_month)
     now = time.monotonic()
     if cache_seconds > 0:
         with _REPORT_SUMMARY_CACHE_LOCK:
-            cached_ts = float(_REPORT_SUMMARY_CACHE.get("ts") or 0.0)
-            cached_summary = _REPORT_SUMMARY_CACHE.get("summary")
+            entry = _REPORT_SUMMARY_CACHE.get(period_key) or {}
+            cached_ts = float(entry.get("ts") or 0.0)
+            cached_summary = entry.get("summary")
             if cached_summary is not None and (now - cached_ts) < cache_seconds:
                 return dict(cached_summary)
 
-    rows = _get_enriched_rows_for_reports()
+    rows = _get_enriched_rows_for_period(period_month, period_year)
 
     total_so = 0.0
     total_produced_qty = 0.0
@@ -1005,7 +1142,7 @@ def get_report_summary() -> Dict[str, Any]:
         total_produced_qty += max(0.0, produced)
         total_production_requirement += max(0.0, req + buffer_qty)
         total_production_pending += max(0.0, production_pending)
-        
+
         if balance > 0:
             total_pending += balance
             parts_pending += 1
@@ -1017,12 +1154,11 @@ def get_report_summary() -> Dict[str, Any]:
     dispatch_qty_mtd = 0.0
     dispatch_invoice_count_mtd = 0
     try:
-        today = date.today()
-        month_start = today.replace(day=1)
-        if month_start.month == 12:
-            next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+        month_start = date(period_year, period_month, 1)
+        if period_month == 12:
+            next_month_start = date(period_year + 1, 1, 1)
         else:
-            next_month_start = month_start.replace(month=month_start.month + 1)
+            next_month_start = date(period_year, period_month + 1, 1)
         month_end = next_month_start - timedelta(days=1)
         dispatch_row = fetch_one(
             """
@@ -1053,13 +1189,19 @@ def get_report_summary() -> Dict[str, Any]:
         "openingStock": 0.0,
         "balance": 0.0,
         "produced": 0.0,
+        "validActual": 0.0,
+        "excess": 0.0,
+        "scheduled": 0.0,
+        "dispatched": 0.0,
         "pct": None,
     }
     try:
-        from .production_calendar import get_production_kpi
-
-        today = date.today()
-        production_kpi = get_production_kpi(today.month, today.year)
+        production_kpi = get_yearly_production_month_kpi(period_month, period_year)
+        # Quantity Progress Balance Qty / Actual / Excess align with Yearly Production.
+        total_pending = float(production_kpi.get("balance") or 0.0)
+        total_produced_qty = float(production_kpi.get("produced") or 0.0)
+        total_production_pending = float(production_kpi.get("planned") or 0.0)
+        total_excess = max(0.0, float(production_kpi.get("excess") or 0.0))
     except Exception:
         pass
 
@@ -1069,10 +1211,24 @@ def get_report_summary() -> Dict[str, Any]:
         "pct": None,
     }
     try:
-        from .dispatch_calendar import get_dispatch_kpi
+        # Prefer Yearly Production scheduled/dispatched so Overview matches that report.
+        yp_scheduled = float(production_kpi.get("scheduled") or 0.0)
+        yp_dispatched = float(production_kpi.get("dispatched") or 0.0)
+        if yp_scheduled > 0 or yp_dispatched > 0:
+            dispatch_kpi = {
+                "scheduled": yp_scheduled,
+                "dispatched": yp_dispatched,
+                "pct": (
+                    round((100.0 * yp_dispatched / yp_scheduled), 2)
+                    if yp_scheduled > 0
+                    else None
+                ),
+            }
+            dispatch_qty_mtd = yp_dispatched
+        else:
+            from .dispatch_calendar import get_dispatch_kpi
 
-        today = date.today()
-        dispatch_kpi = get_dispatch_kpi(today.month, today.year)
+            dispatch_kpi = get_dispatch_kpi(period_month, period_year)
     except Exception:
         pass
 
@@ -1085,8 +1241,7 @@ def get_report_summary() -> Dict[str, Any]:
         "pivotReportId": BOM_DISPATCH_PIVOT_REPORT_ID,
     }
     try:
-        today = date.today()
-        bom_delivery_kpi = get_bom_delivery_kpi(today.month, today.year)
+        bom_delivery_kpi = get_bom_delivery_kpi(period_month, period_year)
     except Exception:
         pass
 
@@ -1094,11 +1249,13 @@ def get_report_summary() -> Dict[str, Any]:
     try:
         from .ytd_kpi import get_ytd_kpi
 
-        ytd_kpi = get_ytd_kpi(date.today())
+        ytd_kpi = get_ytd_kpi(today)
     except Exception:
         pass
 
     summary = {
+        "month": period_month,
+        "year": period_year,
         "total_so_qty": total_so,
         "total_produced_qty": total_produced_qty,
         "total_production_requirement": total_production_requirement,
@@ -1118,8 +1275,10 @@ def get_report_summary() -> Dict[str, Any]:
     }
     if cache_seconds > 0:
         with _REPORT_SUMMARY_CACHE_LOCK:
-            _REPORT_SUMMARY_CACHE["ts"] = now
-            _REPORT_SUMMARY_CACHE["summary"] = dict(summary)
+            _REPORT_SUMMARY_CACHE[period_key] = {
+                "ts": now,
+                "summary": dict(summary),
+            }
     return summary
 
 

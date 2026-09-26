@@ -71,7 +71,7 @@ def get_ytd_kpi(for_date: date | None = None) -> Dict[str, Any]:
             FROM schedule_master sm
             INNER JOIN schedule_details sd ON sm.SM_ID = sd.SC_SMID
             INNER JOIN scheduled_customer sc ON sd.SC_ID = sc.CS_SCID
-            WHERE sc.CS_SCHEDULESTATE IN (1, 2)
+            WHERE sc.CS_SCHEDULESTATE IN (1, 2, 3)
               AND {_month_period_clause("sm")}
             """,
             (start_ym, end_ym),
@@ -97,14 +97,16 @@ def get_ytd_kpi(for_date: date | None = None) -> Dict[str, Any]:
 
     try:
         row = fetch_one(
-            """
+            f"""
             SELECT COALESCE(SUM(pd.PD_PRODQTY), 0) AS total_produced
             FROM production_details pd
+            INNER JOIN scheduled_production sp ON pd.PD_PSID = sp.PS_ID
+            INNER JOIN schedule_master sm ON sm.SM_Id = sp.PS_SMID
             WHERE pd.pd_ecsid = 8
-              AND pd.PD_DATE >= %s
-              AND pd.PD_DATE <= %s
+              AND sm.SM_Status = 'S'
+              AND {_month_period_clause("sm")}
             """,
-            (fy_start.isoformat(), d.isoformat()),
+            (start_ym, end_ym),
         )
         if row:
             produced = float(row.get("total_produced") or 0.0)

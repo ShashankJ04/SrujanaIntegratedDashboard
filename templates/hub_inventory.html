@@ -97,6 +97,18 @@
     return { year, month };
   }
 
+  function applyInventoryPeriodFromLocation() {
+    const params = new URLSearchParams(window.location.search);
+    const month = Number(params.get('month'));
+    const year = Number(params.get('year'));
+    if (month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
+      setInventoryPeriodValue('inventory-month', month);
+      setInventoryPeriodValue('inventory-year', year);
+      return true;
+    }
+    return false;
+  }
+
   function isFutureInventoryPeriod(year, month) {
     const now = new Date();
     if (year > now.getFullYear()) return true;
@@ -191,9 +203,11 @@
     }
 
     if (!inventoryPeriodDefaultsSet) {
-      const now = new Date();
-      setInventoryPeriodValue('inventory-month', now.getMonth() + 1);
-      setInventoryPeriodValue('inventory-year', now.getFullYear());
+      if (!applyInventoryPeriodFromLocation()) {
+        const now = new Date();
+        setInventoryPeriodValue('inventory-month', now.getMonth() + 1);
+        setInventoryPeriodValue('inventory-year', now.getFullYear());
+      }
       inventoryPeriodDefaultsSet = true;
     }
   }

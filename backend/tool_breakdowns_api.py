@@ -339,7 +339,7 @@ def list_breakdown_operators_dpr():
             COALESCE(OP_ECNO, '') AS ecno,
             COALESCE(OP_NAME, '') AS name
         FROM operators
-        WHERE OP_ACTIVEYN = 'Y'
+        WHERE OP_ACTIVEYN = 'Y' AND  OP_OTID=2
         ORDER BY OP_NAME, OP_ECNO
         """
     )

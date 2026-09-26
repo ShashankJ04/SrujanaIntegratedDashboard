@@ -498,7 +498,7 @@ const HubCharts = (() => {
       return;
     }
 
-    const scheduledTotal = Number(data.scheduledTotal) || 0;
+    const plannedTotal = Number(data.plannedTotal ?? data.scheduledTotal) || 0;
     const avgDaily = Number(data.avgDailyTarget) || 0;
     const daysInMonth = Number(data.daysInMonth) || days.length;
     const asOfDay = Math.max(0, Math.min(Number(data.asOfDay) || 0, days.length));
@@ -507,12 +507,12 @@ const HubCharts = (() => {
     const subtitle = document.getElementById('chart-daily-prod-subtitle');
     if (subtitle) {
       subtitle.textContent =
-        `Schedule ${fmtQty(scheduledTotal)} (${fmtCr(scheduledTotal)} Cr) ÷ ${daysInMonth} days · target ${fmtCr(avgDaily)} Cr/day`;
+        `Planned ${fmtQty(plannedTotal)} (${fmtCr(plannedTotal)} Cr) ÷ ${daysInMonth} days · target ${fmtCr(avgDaily)} Cr/day`;
     }
 
     const labels = days.map(d => Number(d.day));
     const targetCum = days.map((d) =>
-      Math.min(avgDaily * Number(d.day), scheduledTotal) / CR
+      Math.min(avgDaily * Number(d.day), plannedTotal) / CR
     );
 
     let cumProduced = 0;
@@ -525,7 +525,7 @@ const HubCharts = (() => {
     }
 
     const yMax = Math.max(
-      scheduledTotal / CR,
+      plannedTotal / CR,
       ...(producedCum.length ? producedCum : [0]),
       0.1
     ) * 1.08;
@@ -540,7 +540,7 @@ const HubCharts = (() => {
         line: { color: 'rgba(245,158,11,0.95)', width: 2.5, dash: 'dot' },
         hovertemplate: '<b>Required</b><br>Day %{x}<br>%{customdata}<extra></extra>',
         customdata: days.map((d) => {
-          const v = Math.min(avgDaily * Number(d.day), scheduledTotal);
+          const v = Math.min(avgDaily * Number(d.day), plannedTotal);
           return `${fmtQty(v)} (${fmtCr(v)} Cr)`;
         }),
       },
@@ -600,17 +600,17 @@ const HubCharts = (() => {
       },
       height: 380,
       hovermode: 'x unified',
-      shapes: scheduledTotal > 0 ? [{
+      shapes: plannedTotal > 0 ? [{
         type: 'line',
         xref: 'paper', x0: 0, x1: 1,
-        yref: 'y', y0: scheduledTotal / CR, y1: scheduledTotal / CR,
+        yref: 'y', y0: plannedTotal / CR, y1: plannedTotal / CR,
         line: { color: 'rgba(148,163,184,0.35)', width: 1, dash: 'dash' },
       }] : [],
-      annotations: scheduledTotal > 0 ? [{
+      annotations: plannedTotal > 0 ? [{
         xref: 'paper', x: 1, xanchor: 'right',
-        y: scheduledTotal / CR,
+        y: plannedTotal / CR,
         yanchor: 'bottom',
-        text: `Schedule ${fmtCr(scheduledTotal)} Cr`,
+        text: `Planned ${fmtCr(plannedTotal)} Cr`,
         showarrow: false,
         font: { size: 10, color: chartTextColor() },
         bgcolor: (typeof Hub !== 'undefined' && Hub.getTheme && Hub.getTheme() === 'light')

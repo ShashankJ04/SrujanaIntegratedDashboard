@@ -1893,6 +1893,7 @@ def _session_row_from_cd_group(
         row["isAssembly"] = True
         row["lines"] = _enrich_packing_product_lines(line_dicts)
     if batch_mode == "qa":
+        _attach_qa_production_origin(line_dicts)
         row["lines"] = _enrich_packing_product_lines(line_dicts)
     if batch_mode == "packing":
         material_codes = _all_packing_material_codes()
@@ -3046,13 +3047,150 @@ def _qa_row_from_operator_session(
     }
 
 
+_QA_WELD_LINE_TYPES = (
+    LINE_WELDING_CONSUME,
+    LINE_WELDING_REWORK,
+    LINE_SUB_ASSEMBLY_CONSUME,
+    LINE_SUB_ASSEMBLY_REWORK,
+)
+_QA_PRODUCING_LINE_TYPES = _QA_WELD_LINE_TYPES + (
+    LINE_PART_INSPECTION,
+    LINE_ASSEMBLY_INSPECTION,
+    LINE_ASSEMBLY_CLEANING,
+)
+
+
+def _empty_qa_production_info() -> Dict[str, Any]:
+    return {
+        "machineId": None,
+        "machineName": "",
+        "operatorIds": [],
+        "operatorNames": "",
+        "producedDate": "",
+        "producedDates": [],
+    }
+
+
+def _iso_work_date(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    return _parse_date(value) or ""
+
+
+def _qa_production_info_by_lot(lot_ids: Sequence[int]) -> Dict[int, Dict[str, Any]]:
+    """Machine, operators, and production dates from the lines that produced each lot."""
+    ids = [int(x) for x in lot_ids if x]
+    if not ids:
+        return {}
+    lot_ph = ",".join(["%s"] * len(ids))
+    type_ph = ",".join(["%s"] * len(_QA_PRODUCING_LINE_TYPES))
+    lines = fetch_all(
+        f"""
+        SELECT lot_id, line_type, operator_ids, machine_id, production_date
+        FROM laser_welding_line
+        WHERE lot_id IN ({lot_ph})
+          AND line_type IN ({type_ph})
+        ORDER BY line_id
+        """,
+        tuple(ids) + _QA_PRODUCING_LINE_TYPES,
+    )
+    by_lot: Dict[int, List[Dict[str, Any]]] = {lid: [] for lid in ids}
+    for ln in lines:
+        lid = ln.get("lot_id")
+        if lid is None:
+            continue
+        by_lot.setdefault(int(lid), []).append(ln)
+
+    weld_types = set(_QA_WELD_LINE_TYPES)
+    chosen: Dict[int, List[Dict[str, Any]]] = {}
+    all_op_ids: List[int] = []
+    all_machine_ids: List[int] = []
+    for lid, lot_lines in by_lot.items():
+        preferred = [
+            ln for ln in lot_lines
+            if str(ln.get("line_type") or "") in weld_types
+        ]
+        use = preferred or lot_lines
+        chosen[lid] = use
+        for ln in use:
+            all_op_ids.extend(
+                int(x) for x in _operator_ids_csv(ln.get("operator_ids")).split(",") if x.strip()
+            )
+            mid = ln.get("machine_id")
+            if mid is not None:
+                all_machine_ids.append(int(mid))
+
+    op_detail = _fetch_operators_detail(_operator_ids_csv(all_op_ids)) if all_op_ids else []
+    op_by_id = {int(r["id"]): r for r in op_detail}
+    machine_by_id: Dict[int, str] = {}
+    for mid in dict.fromkeys(all_machine_ids):
+        row = _fetch_lw_machine(mid)
+        if row:
+            machine_by_id[mid] = _machine_label(row)
+
+    result: Dict[int, Dict[str, Any]] = {}
+    for lid in ids:
+        use = chosen.get(lid) or []
+        op_ids: List[int] = []
+        machine_ids: List[int] = []
+        dates: List[str] = []
+        for ln in use:
+            for part in _operator_ids_csv(ln.get("operator_ids")).split(","):
+                if not part.strip():
+                    continue
+                oid = int(part)
+                if oid not in op_ids:
+                    op_ids.append(oid)
+            mid = ln.get("machine_id")
+            if mid is not None:
+                mid_i = int(mid)
+                if mid_i not in machine_ids:
+                    machine_ids.append(mid_i)
+            iso = _iso_work_date(ln.get("production_date"))
+            if iso and iso not in dates:
+                dates.append(iso)
+        dates.sort()
+        names = ", ".join(
+            _operator_label(op_by_id[oid]) for oid in op_ids if oid in op_by_id
+        )
+        machine_names = ", ".join(
+            machine_by_id[mid] for mid in machine_ids if machine_by_id.get(mid)
+        )
+        result[lid] = {
+            "machineId": machine_ids[0] if machine_ids else None,
+            "machineName": machine_names,
+            "operatorIds": op_ids,
+            "operatorNames": names,
+            "producedDate": dates[-1] if dates else "",
+            "producedDates": dates,
+        }
+    return result
+
+
+def _attach_qa_production_origin(line_dicts: List[Dict[str, Any]]) -> None:
+    """Stamp each QA lot line with the machine, operators, and date that produced it."""
+    lot_ids = [int(ln["lotId"]) for ln in line_dicts if ln.get("lotId")]
+    production = _qa_production_info_by_lot(lot_ids)
+    for ln in line_dicts:
+        lid = ln.get("lotId")
+        info = production.get(int(lid)) if lid else None
+        if not info:
+            info = _empty_qa_production_info()
+        ln["producedMachineName"] = info["machineName"]
+        ln["producedOperatorNames"] = info["operatorNames"]
+        ln["producedDate"] = info["producedDate"]
+        ln["producedDates"] = info["producedDates"]
+
+
 def get_qa_source_lots(part_number: str) -> List[Dict[str, Any]]:
     part = str(part_number or "").strip()
     if not part:
         return []
     rows = fetch_all(
         """
-        SELECT lot_id, new_lot_no, total_qa, part_number, plant_id
+        SELECT lot_id, new_lot_no, total_qa, part_number, plant_id, work_date
         FROM laser_welding_lot
         WHERE TRIM(part_number) = %s AND total_qa > 0 AND new_lot_no IS NOT NULL
           AND new_lot_no NOT LIKE %s
@@ -3060,15 +3198,30 @@ def get_qa_source_lots(part_number: str) -> List[Dict[str, Any]]:
         """,
         (part, "PCK/%"),
     )
+    lot_ids = [int(r["lot_id"]) for r in rows if r.get("lot_id") is not None]
+    production = _qa_production_info_by_lot(lot_ids)
     out: List[Dict[str, Any]] = []
     for r in rows:
         if str(r.get("new_lot_no") or "").startswith("PCK/"):
             continue
+        lid = int(r["lot_id"])
+        info = production.get(lid) or _empty_qa_production_info()
+        fallback_date = _iso_work_date(r.get("work_date"))
+        if not info["producedDate"] and fallback_date:
+            info = dict(info)
+            info["producedDate"] = fallback_date
+            info["producedDates"] = [fallback_date]
         entry = {
-            "lotId": int(r["lot_id"]),
+            "lotId": lid,
             "newLotNo": r["new_lot_no"],
             "totalQa": int(r["total_qa"] or 0),
             "noOfComp": int(r["total_qa"] or 0),
+            "machineId": info["machineId"],
+            "machineName": info["machineName"],
+            "operatorIds": info["operatorIds"],
+            "operatorNames": info["operatorNames"],
+            "producedDate": info["producedDate"],
+            "producedDates": info["producedDates"],
         }
         plant = _lot_plant_id_value(r)
         if plant is not None:

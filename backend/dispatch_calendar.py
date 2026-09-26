@@ -104,7 +104,7 @@ FROM (
   JOIN components c ON sd.SC_COMPID = c.CO_ID
   WHERE sm.SM_MONTH = {month}
     AND sm.SM_YEAR = {year}
-    AND sc.CS_SCHEDULESTATE IN (1, 2)
+    AND sc.CS_SCHEDULESTATE IN (1, 2, 3)
 
   UNION ALL
 
@@ -150,7 +150,7 @@ FROM (
   JOIN components c ON sd.SC_COMPID = c.CO_ID
   WHERE sm.SM_MONTH = {month}
     AND sm.SM_YEAR = {year}
-    AND sc.CS_SCHEDULESTATE IN (1, 2)
+    AND sc.CS_SCHEDULESTATE IN (1, 2, 3)
   GROUP BY c.CO_PARTNO
 ) t
 ORDER BY t.sort_order, t.partno;"""

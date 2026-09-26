@@ -77,24 +77,24 @@
     {
       "id": "7832c81c-80a6-45f8-b7ee-eb2e525cf68d",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "Inwarded Raw Material after Inspection",
-      "queryTemplate": "select DATE_FORMAT(RI_DATE, '%d-%m-%Y') as GrnDate, RI_REPORTNO as GrnNumber, concat(\":\",RI_INVOICE) 'Invoice No',RD_BATCHNO as BatchNo, MM_RawMtPartNo as RawMaterial, MT_Name as MaterialType, RD_ACCEPTEDQTY as 'Qty(Kg)', ss_Name as Supplier\n from rm_inwarddetails left join rm_inwardmaster on RI_ID = RD_RIID\n left join materialmaster on RD_RMID = MM_Id\n left join supplier on RI_SUPPLIERID = ss_Id\n left join materialtypemaster on MM_mtId=mt_id\n where month(RI_DATE) = {month} and year(RI_DATE) = {year} and RI_REPORTNO like 'INV%' and RI_INSPECTIONYN = 'Y'  and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1;",
+      "name": "Inwarded Raw Material after Inspection (Old. In later added additional column and rearranged columns)",
+      "queryTemplate": "select DATE_FORMAT(RI_DATE, '%d-%m-%Y') as GrnDate, RI_REPORTNO as GrnNumber, ri_invoice AS'Invoice No',RD_BATCHNO as BatchNo, MM_RawMtPartNo as RawMaterial, MT_Name as MaterialType, RD_ACCEPTEDQTY as 'Qty(Kg)', ss_Name as Supplier\n from rm_inwarddetails left join rm_inwardmaster on RI_ID = RD_RIID\n left join materialmaster on RD_RMID = MM_Id\n left join supplier on RI_SUPPLIERID = ss_Id\n left join materialtypemaster on MM_mtId=mt_id\n where month(RI_DATE) = {month} and year(RI_DATE) = {year} and RI_REPORTNO like 'INV%' and RI_INSPECTIONYN = 'Y'  and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-22T07:19:31.112Z",
-      "updatedAt": "2026-06-23T09:55:52.805068+00:00",
-      "pinned": true
+      "updatedAt": "2026-09-09T06:06:47.977788+00:00",
+      "pinned": false
     },
     {
       "id": "7f5963a2-b6ee-404f-8116-f20a53969f18",
       "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "Current Raw Material Stock in Stores",
+      "name": "Current Raw Material Stock in Stores(Batchwise)",
       "queryTemplate": "select * from (SELECT RD_BATCHNO as 'Batch No',\n\t\tMM_RawMtPartNo as 'Raw Material',\n        MT_Name as 'Material Type',\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 ) AS 'Qty(Kg)'\n\tFROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster\n    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id\n    group by RD_BATCHNO, RD_RMID order by `Qty(Kg)`) t where `Qty(Kg)` != 0;",
       "variables": [],
       "createdAt": "2026-03-22T07:40:13.037Z",
-      "updatedAt": "2026-05-17T16:02:06.708624+00:00",
+      "updatedAt": "2026-08-10T10:17:01.293854+00:00",
       "pinned": true
     },
     {
@@ -173,27 +173,27 @@
     {
       "id": "c2bafa9d-9dfe-41df-8ac2-ebd37ddc1917",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Production between dates",
+      "name": "Production between dates (date production entry is made and not ref to schedule",
       "queryTemplate": "select DATE_FORMAT(pd_date, '%d-%m-%Y') 'ProductionDate', CO_PARTNO 'Part No', PD_LotNo 'Lot No',MCM_Name Machine, OP_NAME'Operator', CT_TOOLNO Tool, MM_RawMtPartNo 'Raw Material', pd_batchno 'Batch No', pd_prodqty  'No Of Comp', PD_SFREJECT 'SF Rej(Nos)',PD_SWQTY 'SU Wastage(Nos)',PD_SCRAPQTY 'Scrap(Kg)',PD_QTYKG 'Part Wt(Kg)', round(pd_prodqty/conVal,4) 'Theo RM(Kg)', round(pd_prodqty*co_weight/1000,4) 'Theo Part Wt', \nround( (pd_prodqty/conVal -pd_prodqty*co_weight/1000),4) as 'Theo Scrap'\nfrom production_details \nleft join machinemaster on MCM_Id= PD_MCID\nleft join materialmaster on mm_id = pd_rmid\nleft join components_tool on ct_id =pd_toolid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join operators on PD_OPID = OP_ID \nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere Date(pd_date) between {fromDate} and {toDate} \n  and pd_ecsid = 8\norder by pd_date desc",
       "variables": [
         "fromDate",
         "toDate"
       ],
       "createdAt": "2026-03-23T11:09:55.340Z",
-      "updatedAt": "2026-07-09T17:35:47.017971+00:00",
+      "updatedAt": "2026-09-03T03:57:48.390601+00:00",
       "pinned": true
     },
     {
       "id": "b300ec06-7fda-4b71-bb9a-71c1383b9e2a",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Consolidated-Component Month-wise Production",
+      "name": "Consolidated-Component Month-wise Production(date production entry is made and not ref to schedule)",
       "queryTemplate": "select  CO_PARTNO 'Part No', MM_RawMtPartNo 'Raw Material',\n sum(pd_prodqty)  'No Of Comp', sum(PD_SFREJECT) 'SF Rej(Nos)',sum(PD_SWQTY) 'SU Wastage(Nos)',round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)',round(sum(PD_QTYKG),2) 'Part Wt(Kg)', round(sum(pd_prodqty/conVal),2) 'Theo RM(Kg)', round(sum(pd_prodqty*co_weight/1000),2) 'Theo Part Wt', round( (sum(pd_prodqty/conVal) -sum(pd_prodqty*co_weight/1000)),2) as 'Theo Scrap'\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) = {year}  and pd_ecsid = 8\ngroup by CO_PARTNO,MM_RawMtPartNo\norder by  CO_PARTNO;",
       "variables": [
         "month",
         "year"
       ],
       "createdAt": "2026-03-23T11:28:49.238Z",
-      "updatedAt": "2026-06-22T03:03:36.420131+00:00",
+      "updatedAt": "2026-09-03T03:57:40.020346+00:00",
       "pinned": true,
       "drilldowns": [
         {
@@ -229,14 +229,14 @@
     {
       "id": "a491c9dc-b8a5-4d9c-92f2-073926e837e0",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
-      "name": "Dispatch between dates",
-      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  CS_PLANTID AS 'Dispatch Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  SD_LOTSIZE AS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\nDS_NAME as 'Status'\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nINNER JOIN dispatch_status ON DS_Id = SD_Status\nWHERE SD_Status = 7\n AND CS_DATE BETWEEN {fromDate}\nAND {toDate};",
+      "name": "Dispatch between dates (with ref to schedule and not atual dispatch date)",
+      "queryTemplate": "SELECT\n  CU_Name AS Customer,\n  CO_partNo AS 'Part No',\n  CO_partName AS 'Part Name',\n  DISPATCH_PLANT_ID AS 'Dispatch Unit',\n  DATE_FORMAT(CS_DATE, '%d-%m-%Y') AS 'Requested Date',\n  CS_QTY AS 'Requested Qty(Nos)',\n  case when SD_STATUS=7 then\nCOALESCE(SD_LOTSIZE,0) \nelse 0 end\nAS 'Dispatched Qty(Nos)',\n  SD_INVOICE AS 'Invoice Number',\n  DATE_FORMAT(SD_DISPATCHDATE, '%d-%m-%Y') AS 'Invoice Date',\n  COALESCE(DS_NAME,'Not Dispatched') as 'Status'\nFROM scheduled_customer\nLEFT join (select sd_csid,SD_INVOICE,SD_DISPATCHDATE,SD_Status, sum(coalesce(sd_lotsize,0)) sd_lotsize  from scheduled_customerdispatch group by sd_csid,SD_INVOICE,SD_DISPATCHDATE,SD_Status) disp\n\t\ton disp.sd_csid = cs_id \nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nLEFT JOIN dispatch_status ON DS_Id = SD_Status\nWHERE CS_SCHEDULESTATE in ( 1,2,3)\n AND CS_DATE BETWEEN {fromDate}\nAND {toDate};",
       "variables": [
         "fromDate",
         "toDate"
       ],
       "createdAt": "2026-03-30T13:26:07.878Z",
-      "updatedAt": "2026-07-03T15:44:45.971068+00:00",
+      "updatedAt": "2026-09-14T13:44:27.589494+00:00",
       "pinned": true
     },
     {
@@ -272,32 +272,6 @@
       "createdAt": "2026-03-31T09:43:10.406Z",
       "updatedAt": "2026-05-17T16:01:01.163015+00:00",
       "pinned": true
-    },
-    {
-      "id": "e695d045-de3f-4fe0-b03f-d8b658e41a4e",
-      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "SalesOrder vs CustSchedule vs plan vs Produced",
-      "queryTemplate": "SELECT\n  c.CO_PARTNO    AS 'Part No',\n  c.CO_PARTNAME  AS 'Part Name',\n  COALESCE(so.soQty ,0) AS 'SalesOrder Qty',\n  COALESCE(cs.custSchd, 0) AS 'Customer Scheduled',\n  COALESCE(pl.planqty, 0)  AS 'Planned Qty',\n  COALESCE(pr.prodqty, 0)  AS 'Produced Qty'\nFROM schedule_master sm\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd\n    ON pd.PD_PSID = sp.PS_ID\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr\n  ON pr.smid = sm.SM_ID\nJOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(sp.PS_QTY)     AS planqty\n  FROM scheduled_production sp\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pl\n  ON pl.smid = pr.smid\n AND pl.comp = pr.comp\nJOIN components c\n  ON c.CO_ID = pr.comp\nLEFT JOIN (\n  SELECT\n    sd.SC_SMID          AS smid,\n    c2.CO_PARENTID      AS comp,\n    SUM(sd.SC_CUSTQTY)  AS custSchd\n  FROM schedule_details sd\n  LEFT JOIN components c2\n    ON c2.CO_ID = sd.SC_COMPID\n  GROUP BY sd.SC_SMID, c2.CO_PARENTID\n) cs\n  ON cs.smid = sm.SM_ID\n AND cs.comp = pr.comp\nLEFT JOIN (\n  SELECT\n    cc.CO_PARENTID      AS pocomp,\n    SUM(so.QTY)         AS soQty,\n    MONTH(so.DLV_DATE )   AS pomonth,\n    YEAR(so.DLV_DATE )    AS poyear\n  FROM sales_order so    \n  LEFT JOIN components cc\n    ON TRIM(cc.CO_PARTNO) = TRIM(so.PART_NO)\n   AND cc.CO_CUSTID = so.CUST_ID and CATEGORY_ID = 1\n                  AND SO_TYPE_ID IN (1, 2)\n                  AND STATUS_ID IN (1, 7)\n  GROUP BY cc.CO_PARENTID, MONTH(so.DLV_DATE), YEAR(so.DLV_DATE)\n) so\n  ON so.pocomp = pr.comp\n AND so.pomonth = sm.SM_MONTH\n AND so.poyear  = sm.SM_YEAR\nWHERE sm.SM_MONTH = {month}\n  AND sm.SM_YEAR  = {year}\nORDER BY c.CO_PARTNO;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "createdAt": "2026-04-06T12:08:39.377Z",
-      "updatedAt": "2026-05-04T05:02:54.049188+00:00",
-      "pinned": false
-    },
-    {
-      "id": "e6c7ea68-9038-4fae-9762-314f8616a59e",
-      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "RM Consumption",
-      "queryTemplate": "select inQ.*, remq.RemQty as `RemQty(kg)` ,partnos as 'Produced Parts', RMForProduction from \n(select  MM_RawMtPartNo RawMaterial,RD_BATCHNO batch,date_format( ri_date, '%d-%m-%Y')  'InwardDt', RD_acceptedQTY 'inwardQty(kg)' \nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id and month(ri_date)= {month} and year(RI_DATE)= {year} and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     -- left join supplier on RI_SUPPLIERID= ss_id\n     left join materialmaster on mm_id = rd_rmid\nwhere RD_acceptedQTY>0\n     group by  MM_RawMtPartNo,RD_BATCHNO, RD_qty,ri_date,rd_id)inQ\n  left join\n     (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END) ,2) AS 'RemQty'\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     group by RD_BATCHNO)remQ on  inQ.batch =remQ.batch\nleft join (  select pd_batchno batch,group_concat( distinct CO_PARTNO order by CO_PARTNO separator ' , ') partnos, round(sum(PD_PRODQTY/conVal),2)  RMForProduction from production_details\nleft join scheduled_production plan on pd_psid = plan.ps_id \nleft join components on  plan.PS_PARENTCOMPID= co_id\nleft join \n(SELECT ct_id, CT_COMPID ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n inner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n and CT_NO_OF_CAVITY > 0)t on CT_COMPID= plan.PS_PARENTCOMPID and ct_id = PD_TOOLID\ngroup by  pd_batchno)prodQ on prodQ.batch=inQ.batch\n     order by inwarddt, inQ.batch;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "createdAt": "2026-04-11T05:42:55.294157+00:00",
-      "updatedAt": "2026-05-06T03:48:23.475978+00:00",
-      "pinned": false
     },
     {
       "id": "b2ca4bab-cc7c-4757-b01e-aea978aba232",
@@ -386,50 +360,14 @@
     {
       "id": "bb4eb8a4-95a3-4afe-9a1c-699ffcd96aae",
       "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
-      "name": "Consolidated Stock Report Unitwise",
+      "name": "Consolidated Stock Unitwise",
       "queryTemplate": "SELECT \n    AP.co_partno AS 'Part No',AP.CO_PARTNAME PartName,AP.CO_WEIGHT Weight,AP.MT_Name Material,\n    \n    -- Stock Values (Q1)\n    COALESCE(S.stk_1st_Forming, 0) AS '1st Forming (Stock)',\n    COALESCE(S.stk_Electroplating, 0) AS 'Electroplating (Stock)',\n    COALESCE(S.stk_Soapwash, 0) AS 'Soapwash (Stock)',\n    COALESCE(S.stk_Tapping, 0) AS 'Tapping (Stock)',\n    COALESCE(S.stk_FG, 0) AS 'FG (Stock)',\n    COALESCE(S.stk_2nd_Forming, 0) AS '2nd Forming (Stock)',\n    COALESCE(S.stk_3rd_Forming, 0) AS '3rd Forming (Stock)',\n    COALESCE(S.stk_Etching, 0) AS 'Etching (Stock)',\n    COALESCE(S.stk_Deburring, 0) AS 'Deburring (Stock)',\n    COALESCE(S.stk_Laser_Welding, 0) AS 'Laser Welding (Stock)',\n    COALESCE(S.stk_Ultrasonic_Cleaning, 0) AS 'Ultrasonic Cleaning (Stock)',\n    COALESCE(S.stk_Arcor_Coating, 0) AS 'Arcor Coating (Stock)',\n    COALESCE(S.stk_Riveting, 0) AS 'Riveting (Stock)',\n    COALESCE(S.stk_Brazing, 0) AS 'Brazing (Stock)',\n    COALESCE(S.stk_Heat_Sealing, 0) AS 'Heat Sealing (Stock)',\n    COALESCE(S.stk_Dimpling, 0) AS 'Dimpling (Stock)',\n    COALESCE(S.stk_CPInspection, 0) AS 'CP Inspection(Stock)',\n\n    -- Balance Values (Q3)\n\tcase when {plantid}=2 then COALESCE(B.bal_1st_Forming, 0) ELSE 0 END AS '1st Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Electroplating, 0) ELSE 0 END AS 'Electroplating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Soapwash, 0) ELSE 0 END  AS 'Soapwash (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Tapping, 0)  ELSE 0 END AS 'Tapping (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_FG, 0)  ELSE 0 END AS 'FG (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_2nd_Forming, 0)  ELSE 0 END AS '2nd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_3rd_Forming, 0)  ELSE 0 END AS '3rd Forming (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Etching, 0) ELSE 0 END  AS 'Etching (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Deburring, 0)  ELSE 0 END AS 'Deburring (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Laser_Welding, 0) ELSE 0 END  AS 'Laser Welding (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Ultrasonic_Cleaning, 0) ELSE 0 END  AS 'Ultrasonic Cleaning (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Arcor_Coating, 0)  ELSE 0 END AS 'Arcor Coating (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Riveting, 0)  ELSE 0 END AS 'Riveting (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Brazing, 0)  ELSE 0 END AS 'Brazing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Heat_Sealing, 0)  ELSE 0 END AS 'Heat Sealing (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_Dimpling, 0) ELSE 0 END  AS 'Dimpling (With Supplier)',\n    case when {plantid}=2 then COALESCE(B.bal_CPInspection, 0) ELSE 0 END  AS 'CP Inspection (With Supplier)',\n    -- QA and Rework (Q2)\n    COALESCE(Q.qa_supplier, 0) AS 'QA Pending from Supplier',\n    COALESCE(Q.qa_production, 0) AS 'QA Pending from Production',\n    COALESCE(Q.qa_disposition, 0) AS 'QA Disposition',\n    COALESCE(Q.rework_pending, 0) AS 'Rework Pending'\n\n-- FIX 1: Drive the query off a purely distinct list of Part Numbers\nFROM (\n    SELECT DISTINCT co_partno ,CO_PARTNAME,CO_WEIGHT,MT_Name\n    FROM components inner join materialtypemaster on MT_Id = CO_MATERIALTYPEID\n    WHERE co_partno IS NOT NULL and CO_ACTIVEYN ='Y' and co_id=CO_PARENTID\n) AP\n\n-- Stock Values logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME as CO_PARTNAME,\n        MAX(CASE WHEN os_id = 2  THEN cs_qty END) AS stk_1st_Forming,\n        MAX(CASE WHEN os_id = 3  THEN cs_qty END) AS stk_Electroplating,\n        MAX(CASE WHEN os_id = 4  THEN cs_qty END) AS stk_Soapwash,\n        MAX(CASE WHEN os_id = 5  THEN cs_qty END) AS stk_Tapping,\n        MAX(CASE WHEN os_id = 6  THEN cs_qty END) AS stk_FG,\n        MAX(CASE WHEN os_id = 7  THEN cs_qty END) AS stk_2nd_Forming,\n        MAX(CASE WHEN os_id = 8  THEN cs_qty END) AS stk_3rd_Forming,\n        MAX(CASE WHEN os_id = 9  THEN cs_qty END) AS stk_Etching,\n        MAX(CASE WHEN os_id = 10 THEN cs_qty END) AS stk_Deburring,\n        MAX(CASE WHEN os_id = 12 THEN cs_qty END) AS stk_Laser_Welding,\n        MAX(CASE WHEN os_id = 13 THEN cs_qty END) AS stk_Ultrasonic_Cleaning,\n        MAX(CASE WHEN os_id = 14 THEN cs_qty END) AS stk_Arcor_Coating,\n        MAX(CASE WHEN os_id = 15 THEN cs_qty END) AS stk_Riveting,\n        MAX(CASE WHEN os_id = 16 THEN cs_qty END) AS stk_Brazing,\n        MAX(CASE WHEN os_id = 17 THEN cs_qty END) AS stk_Heat_Sealing,\n        MAX(CASE WHEN os_id = 18 THEN cs_qty END) AS stk_Dimpling,\n        MAX(CASE WHEN os_id = 19 THEN cs_qty END) AS stk_CPInspection\n    FROM (\n        SELECT co_partno,CO_PARTNAME, os_id, cs_qty \n        FROM comp_stock \n        LEFT JOIN comp_opstages ON CS_STAGEID = os_id \n        LEFT JOIN components ON CS_COMPID = co_id\n        WHERE cs_plantid = {plantid}\n    ) t1\n    GROUP BY co_partno,CO_PARTNAME\n) S ON AP.co_partno = S.PartNo and AP.CO_PARTNAME = S.CO_PARTNAME\n\n-- QA & Rework logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT\n        co_partno AS PartNo,CO_PARTNAME,\n        SUM(QAFromSup_pending) AS qa_supplier,\n        SUM(ProdQA_pending)    AS qa_production,\n        SUM(qa_disp_pending)   AS qa_disposition,\n        SUM(rw_pending)        AS rework_pending\n    FROM (\n        SELECT CD_COMPID AS comp_id, COALESCE(SUM(QD_OFFEREDQTY), 0) AS QAFromSup_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON CM_ID = CD_CMID\n        INNER JOIN qa_details ON QD_CMID = CM_ID\n        WHERE CM_PLANT = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY CD_COMPID\n        UNION ALL\n        SELECT PS_PARENTCOMPID AS comp_id, 0 as QASup_pending, COALESCE(SUM(QD_OFFEREDQTY), 0) AS ProdQA_pending, 0 AS qa_disp_pending, 0 AS rw_pending\n        FROM scheduled_production\n        INNER JOIN production_details ON ps_id = pd_psid\n        INNER JOIN qa_details ON pd_id = qd_pdid\n        WHERE pd_plantid = {plantid} AND QD_STATUS = 'P' AND QD_CRID = 0\n        GROUP BY PS_PARENTCOMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, COALESCE(SUM(CR_QTY), 0) AS qa_disp_pending, 0 AS rw_pending\n        FROM comp_rejectdetails\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'P'\n        GROUP BY CR_COMPID\n        UNION ALL\n        SELECT CR_COMPID AS comp_id, 0 AS qa_pending, 0 as ProdQA_pending, 0 AS qa_disp_pending, COALESCE(SUM(CR_QTY) - COALESCE(sum(t2.rdQty), 0), 0) AS rw_pending\n        FROM comp_rejectdetails\n        LEFT JOIN (\n            SELECT RD_CRID AS crId, SUM(RD_QTY) AS rdQty\n            FROM comp_rejinvdetails\n            INNER JOIN comp_rejinvmaster ON RD_RJID = RJ_ID\n            INNER JOIN comp_rejectdetails ON CR_ID = RD_CRID\n            WHERE RJ_MOVEMENT = 'O' AND CR_PLANT = {plantid} AND CR_STATUS = 'R'\n            GROUP BY RD_CRID\n        ) t2 ON t2.crId = CR_ID\n        WHERE CR_PLANT = {plantid} AND CR_STATUS = 'R'\n        GROUP BY CR_COMPID    \n    ) combined \n    LEFT JOIN components ON co_id = comp_id\n    -- FIX 2: Group strictly by Part Number, omitting comp_id \n    GROUP BY co_partno ,CO_PARTNAME\n) Q ON AP.co_partno = Q.PartNo and AP.CO_PARTNAME=Q.CO_PARTNAME\n\n-- Balance Data logic inside a LEFT JOIN\nLEFT JOIN (\n    SELECT \n        co_partno AS PartNo, CO_PARTNAME,\n        MAX(CASE WHEN cd_opstage = 2  THEN compbalance END) AS bal_1st_Forming,\n        MAX(CASE WHEN cd_opstage = 3  THEN compbalance END) AS bal_Electroplating,\n        MAX(CASE WHEN cd_opstage = 4  THEN compbalance END) AS bal_Soapwash,\n        MAX(CASE WHEN cd_opstage = 5  THEN compbalance END) AS bal_Tapping,\n        MAX(CASE WHEN cd_opstage = 6  THEN compbalance END) AS bal_FG,\n        MAX(CASE WHEN cd_opstage = 7  THEN compbalance END) AS bal_2nd_Forming,\n        MAX(CASE WHEN cd_opstage = 8  THEN compbalance END) AS bal_3rd_Forming,\n        MAX(CASE WHEN cd_opstage = 9  THEN compbalance END) AS bal_Etching,\n        MAX(CASE WHEN cd_opstage = 10 THEN compbalance END) AS bal_Deburring,\n        MAX(CASE WHEN cd_opstage = 12 THEN compbalance END) AS bal_Laser_Welding,\n        MAX(CASE WHEN cd_opstage = 13 THEN compbalance END) AS bal_Ultrasonic_Cleaning,\n        MAX(CASE WHEN cd_opstage = 14 THEN compbalance END) AS bal_Arcor_Coating,\n        MAX(CASE WHEN cd_opstage = 15 THEN compbalance END) AS bal_Riveting,\n        MAX(CASE WHEN cd_opstage = 16 THEN compbalance END) AS bal_Brazing,\n        MAX(CASE WHEN cd_opstage = 17 THEN compbalance END) AS bal_Heat_Sealing,\n        MAX(CASE WHEN cd_opstage = 18 THEN compbalance END) AS bal_Dimpling,\n        MAX(CASE WHEN cd_opstage = 19 THEN compbalance END) AS bal_CPInspection\n    FROM (\n        SELECT co_id, CO_PARTNO,CO_PARTNAME, cd_opstage, \n               COALESCE(SUM(CASE WHEN cm_movement = 'O' THEN cd_qty WHEN cm_movement = 'I' THEN -cd_qty ELSE 0 END), 0) - COALESCE(sum(sd_qty), 0) AS compbalance\n        FROM comp_inwardmaster\n        INNER JOIN comp_inwarddetails ON cm_id = cd_cmid\n        LEFT JOIN comp_opstages ON cd_opstage = os_id \n        LEFT JOIN components ON CD_COMPID = co_id AND CO_ACTIVEYN = 'Y'\n        LEFT JOIN comp_scrapdetails ON sd_source='S' AND sd_src=3 AND sd_refno=CD_CMID AND sd_compid = cd_compid AND SD_OPSTAGE = cd_opstage\n        WHERE cm_id = cd_cmid and co_id is not null and CD_SOURCE='C'\n        GROUP BY cd_compid, cd_opstage, co_id, CO_PARTNO,CO_PARTNAME\n    ) t3\n    WHERE compbalance > 0\n    GROUP BY co_partno,CO_PARTNAME\n) B ON AP.co_partno = B.PartNo and Ap.CO_PARTNAME = B.CO_PARTNAME\n\n-- Exclude blank rows \nWHERE S.PartNo IS NOT NULL \n   OR Q.PartNo IS NOT NULL \n   OR B.PartNo IS NOT NULL\n\nORDER BY AP.co_partno;",
       "variables": [
         "plantid"
       ],
       "pinned": true,
       "createdAt": "2026-05-02T06:41:25.157667+00:00",
-      "updatedAt": "2026-07-03T15:39:37.547598+00:00"
-    },
-    {
-      "id": "b7b03e78-c351-4cd1-a3aa-e323cf54148d",
-      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Distinct Component Details",
-      "queryTemplate": "select distinct cu_name as 'Parent Customer', CO_PARTNO as 'Part_No', CO_PARTNAME as 'Part Name',CO_NoOfOp 'No of Operations', mt_name as 'Material', \nround((1/t.conVal)*1000,2) as 'Total Wt',\nCO_WEIGHT as 'Component Weight',round(round((1/t.conVal)*1000,2)-CO_WEIGHT,3) as 'Comp Scrap',round((CO_WEIGHT/round((1/t.conVal)*1000,2))*100,2) as 'Comp Yield (%)', CO_WIDTH as Width, CO_LENGTH as Thickness, CO_REVISION as Revision, gm_name as Grade ,\npl_name as Plating ,ft_name as 'Finish Type', CO_MICRON as Micron \nfrom components c\n\tleft join customer on CO_CUSTID=cu_id\n    left join materialtypemaster on co_materialtypeid= mt_id\n    left join grademaster on CO_GRADEID=gm_id\n    left join plating on CO_ELECTROPLATING=pl_id\n    left join finishtype on CO_FINISH=ft_id\n\tleft join \n\t\t(SELECT CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0 ) t on CT_COMPID= CO_ID\n    where co_id in (select distinct(CO_PARENTID) from components where CO_ACTIVEYN= 'Y' )\norder by cu_name,CO_PARTNO",
-      "variables": [],
-      "pinned": false,
-      "createdAt": "2026-05-02T06:48:58.562404+00:00",
-      "updatedAt": "2026-07-24T04:03:53.260356+00:00"
-    },
-    {
-      "id": "e55b426d-2d1a-4dba-84eb-54ab01158ef2",
-      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
-      "name": "Monthly Customer Schedule(Not SO)",
-      "queryTemplate": "SELECT\n  t.partno    AS 'Part No',\n  t.total_qty AS 'Total Qty',\n  t.day_1     AS 'day 1',\n  t.day_2     AS 'day 2',\n  t.day_3     AS 'day 3',\n  t.day_4     AS 'day 4',\n  t.day_5     AS 'day 5',\n  t.day_6     AS 'day 6',\n  t.day_7     AS 'day 7',\n  t.day_8     AS 'day 8',\n  t.day_9     AS 'day 9',\n  t.day_10    AS 'day 10',\n  t.day_11    AS 'day 11',\n  t.day_12    AS 'day 12',\n  t.day_13    AS 'day 13',\n  t.day_14    AS 'day 14',\n  t.day_15    AS 'day 15',\n  t.day_16    AS 'day 16',\n  t.day_17    AS 'day 17',\n  t.day_18    AS 'day 18',\n  t.day_19    AS 'day 19',\n  t.day_20    AS 'day 20',\n  t.day_21    AS 'day 21',\n  t.day_22    AS 'day 22',\n  t.day_23    AS 'day 23',\n  t.day_24    AS 'day 24',\n  t.day_25    AS 'day 25',\n  t.day_26    AS 'day 26',\n  t.day_27    AS 'day 27',\n  t.day_28    AS 'day 28',\n  t.day_29    AS 'day 29',\n  t.day_30    AS 'day 30',\n  t.day_31    AS 'day 31'\nFROM (\n  SELECT\n    0 AS sort_order,\n    'Grand Total' AS partno,\n    SUM(sc.CS_QTY) AS total_qty,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 3 THEN sc.CS_QTY ELSE 0 END) AS day_3,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 4 THEN sc.CS_QTY ELSE 0 END) AS day_4,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 5 THEN sc.CS_QTY ELSE 0 END) AS day_5,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 6 THEN sc.CS_QTY ELSE 0 END) AS day_6,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 7 THEN sc.CS_QTY ELSE 0 END) AS day_7,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 8 THEN sc.CS_QTY ELSE 0 END) AS day_8,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 9 THEN sc.CS_QTY ELSE 0 END) AS day_9,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 10 THEN sc.CS_QTY ELSE 0 END) AS day_10,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 11 THEN sc.CS_QTY ELSE 0 END) AS day_11,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 12 THEN sc.CS_QTY ELSE 0 END) AS day_12,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 13 THEN sc.CS_QTY ELSE 0 END) AS day_13,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 14 THEN sc.CS_QTY ELSE 0 END) AS day_14,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 15 THEN sc.CS_QTY ELSE 0 END) AS day_15,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 16 THEN sc.CS_QTY ELSE 0 END) AS day_16,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 17 THEN sc.CS_QTY ELSE 0 END) AS day_17,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 18 THEN sc.CS_QTY ELSE 0 END) AS day_18,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 19 THEN sc.CS_QTY ELSE 0 END) AS day_19,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 20 THEN sc.CS_QTY ELSE 0 END) AS day_20,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 21 THEN sc.CS_QTY ELSE 0 END) AS day_21,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 22 THEN sc.CS_QTY ELSE 0 END) AS day_22,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 23 THEN sc.CS_QTY ELSE 0 END) AS day_23,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 24 THEN sc.CS_QTY ELSE 0 END) AS day_24,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 25 THEN sc.CS_QTY ELSE 0 END) AS day_25,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 26 THEN sc.CS_QTY ELSE 0 END) AS day_26,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 27 THEN sc.CS_QTY ELSE 0 END) AS day_27,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 28 THEN sc.CS_QTY ELSE 0 END) AS day_28,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 29 THEN sc.CS_QTY ELSE 0 END) AS day_29,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 30 THEN sc.CS_QTY ELSE 0 END) AS day_30,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 31 THEN sc.CS_QTY ELSE 0 END) AS day_31\n  FROM schedule_master sm\n  JOIN schedule_details sd ON sm.SM_ID = sd.SC_SMID\n  JOIN scheduled_customer sc ON sd.SC_ID = sc.CS_SCID\n  JOIN components c ON sd.SC_COMPID = c.CO_ID\n  WHERE sm.SM_MONTH = {month}\n    AND sm.SM_YEAR = {year}\n    AND sc.CS_SCHEDULESTATE IN (1, 2)\n\n  UNION ALL\n\n  SELECT\n    1 AS sort_order,\n    c.CO_PARTNO AS partno,\n    SUM(sc.CS_QTY) AS total_qty,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 1 THEN sc.CS_QTY ELSE 0 END) AS day_1,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 2 THEN sc.CS_QTY ELSE 0 END) AS day_2,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 3 THEN sc.CS_QTY ELSE 0 END) AS day_3,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 4 THEN sc.CS_QTY ELSE 0 END) AS day_4,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 5 THEN sc.CS_QTY ELSE 0 END) AS day_5,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 6 THEN sc.CS_QTY ELSE 0 END) AS day_6,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 7 THEN sc.CS_QTY ELSE 0 END) AS day_7,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 8 THEN sc.CS_QTY ELSE 0 END) AS day_8,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 9 THEN sc.CS_QTY ELSE 0 END) AS day_9,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 10 THEN sc.CS_QTY ELSE 0 END) AS day_10,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 11 THEN sc.CS_QTY ELSE 0 END) AS day_11,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 12 THEN sc.CS_QTY ELSE 0 END) AS day_12,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 13 THEN sc.CS_QTY ELSE 0 END) AS day_13,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 14 THEN sc.CS_QTY ELSE 0 END) AS day_14,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 15 THEN sc.CS_QTY ELSE 0 END) AS day_15,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 16 THEN sc.CS_QTY ELSE 0 END) AS day_16,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 17 THEN sc.CS_QTY ELSE 0 END) AS day_17,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 18 THEN sc.CS_QTY ELSE 0 END) AS day_18,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 19 THEN sc.CS_QTY ELSE 0 END) AS day_19,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 20 THEN sc.CS_QTY ELSE 0 END) AS day_20,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 21 THEN sc.CS_QTY ELSE 0 END) AS day_21,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 22 THEN sc.CS_QTY ELSE 0 END) AS day_22,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 23 THEN sc.CS_QTY ELSE 0 END) AS day_23,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 24 THEN sc.CS_QTY ELSE 0 END) AS day_24,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 25 THEN sc.CS_QTY ELSE 0 END) AS day_25,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 26 THEN sc.CS_QTY ELSE 0 END) AS day_26,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 27 THEN sc.CS_QTY ELSE 0 END) AS day_27,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 28 THEN sc.CS_QTY ELSE 0 END) AS day_28,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 29 THEN sc.CS_QTY ELSE 0 END) AS day_29,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 30 THEN sc.CS_QTY ELSE 0 END) AS day_30,\n    SUM(CASE WHEN DAY(sc.CS_DATE) = 31 THEN sc.CS_QTY ELSE 0 END) AS day_31\n  FROM schedule_master sm\n  JOIN schedule_details sd ON sm.SM_ID = sd.SC_SMID\n  JOIN scheduled_customer sc ON sd.SC_ID = sc.CS_SCID\n  JOIN components c ON sd.SC_COMPID = c.CO_ID\n  WHERE sm.SM_MONTH = {month}\n    AND sm.SM_YEAR = {year}\n    AND sc.CS_SCHEDULESTATE IN (1, 2)\n  GROUP BY c.CO_PARTNO\n) t\nORDER BY t.sort_order, t.partno;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-05-04T05:07:11.194765+00:00",
-      "updatedAt": "2026-05-04T05:07:11.194765+00:00"
-    },
-    {
-      "id": "cfdc9588-72e8-4732-a5ff-cb181b93cdd8",
-      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Correction Report",
-      "queryTemplate": "select dt AS   'EnteredDate',MM_RawMtPartNo RawMaterial,\n rc_batchno Batch, QtyBefore, QtyAfter, CorrectionType,rc_remarks 'Remarks',  us_login 'CorrectedBy'\n from (\nSELECT rc_createddt dt,MM_RawMtPartNo , rc_batchno ,rc_theo QtyBefore, round((rc_theo-rc_correction),2) as 'QtyAfter', \n'Production RM' as CorrectionType,rc_remarks ,  us_login \n FROM rm_prodcorrection\nleft join materialmaster on rc_rmid = mm_id\nleft join users on us_id = rc_userid\nunion\nSELECT rc_createddt dt,MM_RawMtPartNo,   rc_batchno,rc_QtyBefore, round((rc_QtyBefore-rc_correction),2) as 'QtyAfter', \n'Scrap from Production' as CorrectionType, rc_remarks, us_login \n FROM rm_scrapcorrection\nleft join materialmaster on rc_rmid = mm_id\nleft join users on us_id = rc_userid) t\nwhere month(dt)= {month} and year(dt)= {year}\norder by dt,CorrectionType ;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-05-04T05:08:09.827802+00:00",
-      "updatedAt": "2026-07-03T13:03:46.804182+00:00"
+      "updatedAt": "2026-09-08T05:14:33.943977+00:00"
     },
     {
       "id": "69ab879f-39aa-439f-9fd9-0046376d2a4f",
@@ -440,26 +378,6 @@
       "pinned": false,
       "createdAt": "2026-05-04T05:08:43.425280+00:00",
       "updatedAt": "2026-05-04T05:08:43.425280+00:00"
-    },
-    {
-      "id": "42e45ad0-3935-4a18-9b78-cd41ad27774b",
-      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "RM Stock Batch-Wise",
-      "queryTemplate": "select  inQ.batch,date_format(inQ.ri_date, '%d-%m-%Y')  'InwardDt', \ninQ.RD_ACCEPTEDQTY 'InwardQty', rmStore.Qty as 'RM In Store',\nround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\nround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\nround(COALESCE(GREATEST((ProdQty-ThRMForProduction),0),0),2) as 'RM with Prod(Theo)' ,\nround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\nround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Splitting' ,\nround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\nround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \nround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\nround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\nround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor'\nFROM \n(select  RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n     left join materialmaster on mm_id = rd_rmid\n     where RD_ACCEPTEDQTY>0\n     group by RD_BATCHNO,ri_date)inQ\n     left join (SELECT RD_BATCHNO batch,\t\t\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\tFROM rm_inwarddetails , rm_inwardmaster\n    where rd_riid=ri_id \n    group by RD_BATCHNO) rmStore on rmStore.batch= inQ.batch\n     left join (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     where RI_MOVEMENTTYPE = 3\n     group by RD_BATCHNO\n     ) prod on prod.batch = inQ.batch\n     left join (select RD_BATCHNO batch,\nround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END) ,2)AS SplitQty\nfrom rm_inwarddetails\n\t join rm_inwardmaster on rd_riid= ri_id \n     where RI_MOVEMENTTYPE = 2\n     group by RD_BATCHNO\n     ) Splitting on Splitting.batch = inQ.batch\nleft join (  select pd_batchno batch, round(sum(PD_PRODQTY/conVal),2)  ThRMForProduction , sum(PD_SCRAPQTY) pdscrap from production_details\n\tleft join scheduled_production on pd_psid = ps_id \n\t-- left join components on  plan.PS_PARENTCOMPID= co_id\n\tleft join \n\t(SELECT CT_COMPID ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where  CT_ActiveYN='Y' and CT_PPC='Y' and CT_PITCH > 0 \n\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID\n\t\t\tgroup by  pd_batchno)prodQ on prodQ.batch=inQ.batch \n\tleft join(select RD_BATCHNO batch, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp,\n        round((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))+sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (\n\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty\n\t\tfrom rm_inwarddetails rd\n\t\tjoin\n\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\tleft join  (select rd_id,RD_OUTWARDID, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails group by RD_OUTWARDID, rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid from comp_inwarddetails where cd_src=4  group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id ) t\n\t\tgroup by rd_batchno) jwQty on jwQty.batch = inQ.batch         \n        where rmStore.Qty >0 or ProdQty-ThRMForProduction>0 or jwRemQty>0 or splitQty>0      ;",
-      "variables": [],
-      "pinned": false,
-      "createdAt": "2026-05-04T05:12:03.676726+00:00",
-      "updatedAt": "2026-05-04T05:12:03.676726+00:00"
-    },
-    {
-      "id": "2e891054-0e91-46a4-bd35-53158b52386c",
-      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "RM Stock Location-wise( Includes NPD)",
-      "queryTemplate": "select  MM_RawMtPartNo 'RawMaterial',mt_name 'Material',\n\tBatch ,date_format(ri_date, '%d-%m-%Y')  'InwardDt', \n\tRD_ACCEPTEDQTY 'inwardQty', storeQty as 'RM In Store',\n\tround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\n\tround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\n\tround(COALESCE(GREATEST((rmwithprod),0),0),2) as 'RM with Prod(Theo)' ,\n\tround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\n\tround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Slitting' ,\n\tround(COALESCE(GREATEST(SlitingScrap,0),0),2) 'SlitingScrap' ,\n\tround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\n\tround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \n\tround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\n\tround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\n\tround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor' from \n\t(select inQ.rd_rmid rm, inQ.batch Batch,inQ.ri_date ri_date, \n\tinQ.RD_ACCEPTEDQTY , rmStore.Qty storeQty,\n\tProdQty,coalesce(ThRMForProduction,0)ThRMForProduction ,ProdQty-coalesce(ThRMForProduction,0)  rmwithprod ,  \n\tpdscrap -coalesce(PScrapCorrection,0) pdscrap,SplitQty,SlitingScrap-coalesce(SScrapCorrection,0) SlitingScrap,JWRMGiven,JWretqty, JWcompkg,JWscarp -coalesce(JWScrapCorrection,0) JWscarp ,jwRemQty\n\tFROM \n\t(select rd_rmid , RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n\t\t left join materialmaster on mm_id = rd_rmid\n\t\t where RD_ACCEPTEDQTY>0\n\t\t group by RD_BATCHNO,ri_date,rd_rmid\n\t\t   union\n\t\tselect rmin.rd_rmid , rmin.RD_BATCHNO batch ,rmin.ri_date, rmin.RD_ACCEPTEDQTY   RD_ACCEPTEDQTY from \n\t\t(SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and rd_outwardid <>0 and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=2) rmin,\n\t\t (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=2) rmout\n\t\t where rmin.rd_rmid <>rmout.rd_rmid and rmin.RD_BATCHNO = rmout.RD_BATCHNO     \n\t\t )inQ\n\t\t left join (SELECT RD_BATCHNO batch, RD_RMID\t,\t\n\t\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\t\tFROM rm_inwarddetails , rm_inwardmaster\n\t\twhere rd_riid=ri_id \n\t\tgroup by RD_BATCHNO,rd_rmid) rmStore on rmStore.batch= inQ.batch and rmStore.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch,rd_rmid,\n\tround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t where RI_MOVEMENTTYPE = 3\n\t\t group by RD_BATCHNO,rd_rmid\n\t\t ) prod on prod.batch = inQ.batch and prod.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch, rd_rmid,coalesce(rd_qty,0) - coalesce(retqty,0) -coalesce(SlitingScrap,0) SplitQty, coalesce(SlitingScrap,0) SlitingScrap\n\t\t from rm_inwarddetails rd\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t left join ( select RD_OUTWARDID, sum(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) retqty\n\t\t\tfrom rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id \n\t\t\tand RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'I' group by RD_OUTWARDID\n\t\t )SplitRet on SplitRet.RD_OUTWARDID = rd.rd_id\n\t\t left join ( select RS_OUTWARDID,sum(rs_qty) SlitingScrap from rm_scrapdetails group by RS_OUTWARDID     \n\t\t )scrap on scrap.RS_OUTWARDID = rd.rd_id \n\t\t where RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'O'\n\t\t ) Splitting on Splitting.batch = inQ.batch and Splitting.rd_rmid = inQ.rd_rmid\n\tleft join (  select pd_batchno batch, mm_id,round(coalesce(sum((PD_PRODQTY)/conVal),0),2)  ThRMForProduction ,  coalesce(sum(PD_SCRAPQTY),0) pdscrap from production_details\n\t\tleft join scheduled_production on pd_psid = ps_id \n\t\tleft join comp_scrapdetails on sd_refno =pd_id and sd_src=1\n\t\tleft join \n\t\t(SELECT ct_id,CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where   CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID  and ct_id = PD_TOOLID\n\t\t\t\tgroup by  pd_batchno,mm_id)prodQ on prodQ.batch=inQ.batch and prodQ.mm_id = inQ.rd_rmid\n\t\tleft join(select RD_BATCHNO batch,rd_rmid, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0))+ sum(COALESCE(sfRej,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp, -- + sum(COALESCE(setupW,0))\n\t\t\tround((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))  +sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (   -- + sum(COALESCE(sfRej,0)) + sum(COALESCE(setupW,0))\n\t\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty,sfRej,setupW,RI_MOVEMENTTYPE,ri.ri_id , rd.rd_riid\n\t\t\tfrom rm_inwardmaster ri,rm_inwarddetails rd\n\t\t\tjoin\n\t\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\t\tleft join  (select rd_id,RD_OUTWARDid, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='I' and ri_movementtype=4 group by RD_OUTWARDID, rd_batchno,rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid, sum(cr_qtykg) sfRej, sum(SD_QTYKG) setupW from comp_inwarddetails\n\t\t\t\tleft join comp_rejectdetails on cr_cmid= cd_cmid\n\t\t\t\tleft join comp_scrapdetails on sd_refno =cd_cmid and sd_src=4\n\t\t\t\t where cd_src=4   group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id \n\t\t\twhere ri_id = rd_riid and RI_MOVEMENTTYPE=4\n\t\t\t) t\n\t\t\tgroup by rd_batchno,rd_rmid) jwQty on jwQty.batch = inQ.batch   and jwQty.rd_rmid = inQ.rd_rmid    \n\t\tLEFT JOIN (\n\t\t\tSELECT\n\t\t\t  TRIM(rc_batchno) AS rc_batchno,   rc_rmid,\n\t\t\t  case when  rc_movementtype='P' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS PScrapCorrection,\n\t\t\t  case when  rc_movementtype='S' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS SScrapCorrection,\n\t\t\t  case when  rc_movementtype='J' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS JWScrapCorrection\n\t\t\tFROM rm_scrapcorrection       \n\t\t\tGROUP BY rc_batchno, rc_rmid,rc_movementtype\n\t\t   ) scrapCorrections ON scrapCorrections.rc_batchno = inQ.batch  AND scrapCorrections.rc_rmid = inQ.rd_rmid\n\t\t\t)t1 left join materialmaster on mm_id = t1.rm\n\t\t\tleft join materialtypemaster on MM_MTID = MT_Id\n\t\t\twhere storeQty >0 or rmwithprod >0 or jwRemQty>0 or splitQty>0 \norder by MM_RawMtPartNo;",
-      "variables": [],
-      "pinned": true,
-      "createdAt": "2026-05-04T05:12:45.505127+00:00",
-      "updatedAt": "2026-07-24T14:27:45.099125+00:00"
     },
     {
       "id": "32175985-fe7d-4b17-8bcf-8d2035f0c20e",
@@ -527,19 +445,6 @@
       "updatedAt": "2026-05-04T05:20:40.747128+00:00"
     },
     {
-      "id": "8bf62f00-e306-453f-abe2-fa1908e207ae",
-      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Planned vs Produced Qty",
-      "queryTemplate": "select  co_partno 'Part No', CO_PARTNAME 'Part Name',plan.planqty 'Planned Qty' ,prod.prodqty 'Produced Qty'  from schedule_master, \n(select sp.PS_PARENTCOMPID comp,sp.PS_SMID smid,  sum(pd.PD_PRODQTY)  prodqty\nfrom production_details pd, scheduled_production sp  \nwhere ps_id= PD_PSID -- and sp.PS_PARENTCOMPID in (1668)\ngroup by sp.PS_PARENTCOMPID,sp.PS_SMID) prod,\n(select PS_PARENTCOMPID comp, ps_smid smid, sum(ps_qty) planqty from scheduled_production sp \ngroup by PS_PARENTCOMPID,PS_SMID) plan, components\nwhere  SM_MONTH= {month} and sm_year = {year}\nand prod.smid=plan.smid\nand prod.smid =  sm_id\nand prod.comp = plan.comp\nand prod.comp = co_id\norder by co_partno;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "createdAt": "2026-04-05T17:46:15.160Z",
-      "updatedAt": "2026-05-02T07:36:09.690911+00:00",
-      "pinned": false
-    },
-    {
       "id": "e3c76a79-903c-426d-8e9b-c339df6af805",
       "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
       "name": "Consolidated Scrap Report",
@@ -547,7 +452,7 @@
       "variables": [],
       "pinned": false,
       "createdAt": "2026-05-04T16:31:02.993782+00:00",
-      "updatedAt": "2026-05-05T02:36:38.994625+00:00"
+      "updatedAt": "2026-08-28T03:58:12.594235+00:00"
     },
     {
       "id": "9ea8726e-49f7-4028-a67a-2273806524a1",
@@ -697,16 +602,6 @@
       "updatedAt": "2026-05-09T11:02:15.764835+00:00"
     },
     {
-      "id": "752865a8-4a3f-4021-afc2-46c1ec4ab012",
-      "groupId": "7c1483f0-5d23-4243-83cd-595edb469808",
-      "name": "Distinct Tools with PartNos - OLD",
-      "queryTemplate": "SELECT \n    ct_toolno AS Tool,ANY_VALUE(t.createdDt) as 'Created Date',group_concat( DISTINCT CT_PITCH ORDER BY CT_PITCH SEPARATOR ' ,') as 'Pitch',group_concat( distinct CT_NO_OF_CAVITY order by CT_NO_OF_CAVITY SEPARATOR  '  ,') as 'Cavity', \n    COUNT(*) AS 'Component Count',\n        COALESCE(MAX(CASE WHEN rn = 1 THEN CO_PARTNO END), '') AS Component1,\n\t\tCOALESCE(MAX(CASE WHEN rn = 2 THEN CO_PARTNO END), '') AS Component2,\n\t\tCOALESCE(MAX(CASE WHEN rn = 3 THEN CO_PARTNO END), '') AS Component3,\n        COALESCE(MAX(CASE WHEN rn = 4 THEN CO_PARTNO END), '') AS Component4\nFROM (\n    SELECT \n        ct_toolno,\n        CO_PARTNO,CT_PITCH,CT_NO_OF_CAVITY,DATE_FORMAT(CT_DATE,'%d-%m-%Y') as createdDt,\n        ROW_NUMBER() OVER (PARTITION BY ct_toolno ORDER BY CO_PARTNO) AS rn\n    FROM components_tool \n    LEFT JOIN components ON CT_COMPID = CO_ID\n    WHERE ct_activeyn = 'Y'\n) t\nGROUP BY ct_toolno\nORDER BY ct_toolno;",
-      "variables": [],
-      "pinned": false,
-      "createdAt": "2026-05-19T04:09:48.777330+00:00",
-      "updatedAt": "2026-07-25T06:13:16.701645+00:00"
-    },
-    {
       "id": "b97af9c5-85a9-4571-a76b-b3771b541f2f",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
       "name": "Day wise RM Issue to Production",
@@ -734,30 +629,6 @@
       ]
     },
     {
-      "id": "5524a6b1-8561-4b78-a4f2-d881df5fb28e",
-      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Yearly Production OLD",
-      "queryTemplate": "SELECT \n    partno,partname,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN planned END),0) AS AprilPlanned,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN produced END),0) AS AprilProduced,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN dispatched END),0) AS AprilDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 5  THEN planned END),0) AS MayPlanned,\n    COALESCE(SUM(CASE WHEN mn = 5  THEN produced END),0) AS MayProduced,\n    COALESCE(SUM(CASE WHEN mn = 5  THEN dispatched END),0) AS MayDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 6  THEN planned END),0) AS JunePlanned,\n    COALESCE(SUM(CASE WHEN mn = 6  THEN produced END),0) AS JuneProduced,\n    COALESCE(SUM(CASE WHEN mn = 6  THEN dispatched END),0) AS JuneDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 7  THEN planned END),0) AS JulyPlanned,\n    COALESCE(SUM(CASE WHEN mn = 7  THEN produced END),0) AS JulyProduced,\n    COALESCE(SUM(CASE WHEN mn = 7  THEN dispatched END),0) AS JulyDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 8  THEN planned END),0) AS AugPlanned,\n    COALESCE(SUM(CASE WHEN mn = 8  THEN produced END),0) AS AugProduced,\n    COALESCE(SUM(CASE WHEN mn = 8  THEN dispatched END),0) AS AugDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 9  THEN planned END),0) AS SeptPlanned,\n    COALESCE(SUM(CASE WHEN mn = 9  THEN produced END),0) AS SeptProduced,\n    COALESCE(SUM(CASE WHEN mn = 9  THEN dispatched END),0) AS SeptDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 10  THEN planned END),0) AS OctPlanned,\n    COALESCE(SUM(CASE WHEN mn = 10  THEN produced END),0) AS OctProduced,\n    COALESCE(SUM(CASE WHEN mn = 10  THEN dispatched END),0) AS OctDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 11 THEN planned END),0) AS NovPlanned,\n    COALESCE(SUM(CASE WHEN mn = 11  THEN produced END),0) AS NovProduced,\n    COALESCE(SUM(CASE WHEN mn = 11  THEN dispatched END),0) AS NovDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 12  THEN planned END),0) AS DecPlanned,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN produced END),0) AS DecProduced,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN dispatched END),0) AS DecDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 1  THEN planned END),0) AS JanPlanned,\n    COALESCE(SUM(CASE WHEN mn = 1  THEN produced END),0) AS JanProduced,\n    COALESCE(SUM(CASE WHEN mn = 1  THEN dispatched END),0) AS JanDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 2  THEN planned END),0) AS FebPlanned,\n    COALESCE(SUM(CASE WHEN mn = 2  THEN produced END),0) AS FebProduced,\n    COALESCE(SUM(CASE WHEN mn = 2  THEN dispatched END),0) AS FebDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 3  THEN planned END),0) AS MarPlanned,\n    COALESCE(SUM(CASE WHEN mn = 3  THEN produced END),0) AS MarProduced,\n    COALESCE(SUM(CASE WHEN mn = 3  THEN dispatched END),0) AS MarDispatched\n\nFROM (\nSELECT\n  CO_PARTNO  partno ,\n  CO_PARTNAME partname,\n  sum(COALESCE(pl.planqty, 0))  planned,\n  sum(COALESCE(pr.prodqty, 0))  produced, \n  sum(coalesce(disp.dispqty,0)) dispatched,sm.SM_MONTH mn,sm.SM_YEAR yr\nFROM schedule_master sm\njoin (  select distinct sc_smid, CO_PARENTID compid  from schedule_details left join components on sc_compid = co_id )sd on sc_smid = sm_id\nleft join components on compid= co_id\nleft join \n(SELECT  cp.CO_PARENTID comp,sc_smid smid,sum(SD_LOTSIZE) dispqty FROM  scheduled_customerdispatch\nleft JOIN scheduled_customer ON SD_CSID = CS_Id\nleft JOIN schedule_details ON SC_Id = CS_SCID\nleft join components cp on cp.co_id = SC_COMPID\nwhere SD_Status = 7\nGROUP BY cp.CO_PARENTID, sc_smid \n) disp ON disp.smid = sm.SM_ID and compid = disp.comp\nleft JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd\n    ON pd.PD_PSID = sp.PS_ID  and pd_ecsid = 8\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr  ON pr.smid = sm.SM_ID  and compid = pr.comp\nleft JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(sp.PS_QTY)     AS planqty\n  FROM scheduled_production sp\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pl  ON pl.smid = pr.smid AND pl.comp = compid\ngroup by sm.SM_MONTH, sm.SM_YEAR ,CO_PARTNO , CO_PARTNAME,compid\nORDER BY CO_PARTNO\n) t\nwhere (CASE WHEN mn >= 4 THEN yr ELSE yr - 1 END) = {year}\nGROUP BY partno,partname;",
-      "variables": [
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-05-22T10:50:00.607090+00:00",
-      "updatedAt": "2026-07-25T07:21:07.117287+00:00"
-    },
-    {
-      "id": "31b36d89-22ce-479e-b27d-a4005424772f",
-      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
-      "name": "Tool History old",
-      "queryTemplate": "SELECT\n  DATE_FORMAT(x.event_at, '%d-%m-%Y %H:%i') AS 'Date',\n  x.tool_no AS 'Tool No',\n  x.event_type AS 'Event Type',\n  x.status AS 'Status',\n  x.part_no AS 'Part No',\n  x.part_name AS 'Part Name',\n  x.machine AS 'Machine',\n  x.issue AS 'Issue / Problem',\n  x.priority AS 'Priority',\n  x.root_cause AS 'Root Cause',\n  x.action_taken AS 'Action Taken',\n  x.remarks AS 'Remarks',\n  x.spare_consumed AS 'Spare Consumed',\n  x.current_stroke AS 'Current Stroke',\n  x.next_stroke AS 'Next Stroke',\n  x.done_by AS 'Done By',\n  DATE_FORMAT(x.completed_at, '%d-%m-%Y %H:%i') AS 'Completed At',\n  x.attachment AS 'Attachment'\nFROM (\n  SELECT\n    pm.PM_date AS event_at,\n    pm.PM_tool_number COLLATE utf8mb4_unicode_ci AS tool_no,\n    'Preventive Maintenance' COLLATE utf8mb4_unicode_ci AS event_type,\n    'Completed' COLLATE utf8mb4_unicode_ci AS status,\n    '' COLLATE utf8mb4_unicode_ci AS part_no,\n    '' COLLATE utf8mb4_unicode_ci AS part_name,\n    '' COLLATE utf8mb4_unicode_ci AS machine,\n    '' COLLATE utf8mb4_unicode_ci AS issue,\n    '' COLLATE utf8mb4_unicode_ci AS priority,\n    '' COLLATE utf8mb4_unicode_ci AS root_cause,\n    '' COLLATE utf8mb4_unicode_ci AS action_taken,\n    '' COLLATE utf8mb4_unicode_ci AS remarks,\n    '' COLLATE utf8mb4_unicode_ci AS spare_consumed,\n    pm.PM_current_stroke AS current_stroke,\n    pm.PM_next_stroke AS next_stroke,\n    '' COLLATE utf8mb4_unicode_ci AS done_by,\n    pm.PM_date AS completed_at,\n    COALESCE(pm.PM_maintenance_attachment, '') COLLATE utf8mb4_unicode_ci AS attachment\n  FROM preventive_maintenance pm\n  WHERE TRIM(pm.PM_tool_number) COLLATE utf8mb4_unicode_ci = TRIM({toolName}) COLLATE utf8mb4_unicode_ci\n\n  UNION ALL\n\n  SELECT\n    tb.downtime_at AS event_at,\n    tb.tool_no COLLATE utf8mb4_unicode_ci AS tool_no,\n    'Tool Breakdown' COLLATE utf8mb4_unicode_ci AS event_type,\n    CASE WHEN tb.completed_at IS NULL THEN 'Active' ELSE 'Completed' END COLLATE utf8mb4_unicode_ci AS status,\n    COALESCE(tb.part_no, '') COLLATE utf8mb4_unicode_ci AS part_no,\n    COALESCE(tb.part_name, '') COLLATE utf8mb4_unicode_ci AS part_name,\n    COALESCE(tb.machine_name, tb.machine_id, '') COLLATE utf8mb4_unicode_ci AS machine,\n    COALESCE(tb.issue, '') COLLATE utf8mb4_unicode_ci AS issue,\n    COALESCE(tb.priority, '') COLLATE utf8mb4_unicode_ci AS priority,\n    COALESCE(tb.root_cause, '') COLLATE utf8mb4_unicode_ci AS root_cause,\n    COALESCE(tb.action_taken, '') COLLATE utf8mb4_unicode_ci AS action_taken,\n    COALESCE(tb.remarks, '') COLLATE utf8mb4_unicode_ci AS remarks,\n    COALESCE(tb.spare_consumed, '') COLLATE utf8mb4_unicode_ci AS spare_consumed,\n    current_stroke AS current_stroke,\n    next_stroke AS next_stroke,\n    COALESCE(tb.completed_by_name, tb.completed_by_login, tb.operator_name, tb.operator_login, '') COLLATE utf8mb4_unicode_ci AS done_by,\n    tb.completed_at AS completed_at,\n    '' COLLATE utf8mb4_unicode_ci AS attachment\n  FROM tool_breakdowns tb\n  WHERE TRIM(tb.tool_no) COLLATE utf8mb4_unicode_ci = TRIM({toolName}) COLLATE utf8mb4_unicode_ci\n) x\nORDER BY x.event_at ASC;",
-      "variables": [
-        "toolName"
-      ],
-      "pinned": false,
-      "createdAt": "2026-05-23T15:25:46.921413+00:00",
-      "updatedAt": "2026-06-01T10:24:46.603416+00:00"
-    },
-    {
       "id": "fccf15af-2404-4ba7-a0b2-239389021393",
       "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
       "name": "Tool History",
@@ -768,45 +639,6 @@
       "pinned": true,
       "createdAt": "2026-05-28T07:27:48.600366+00:00",
       "updatedAt": "2026-07-04T11:06:28.586830+00:00"
-    },
-    {
-      "id": "502108c3-e012-40e5-8df1-8c28f4cfadc2",
-      "groupId": "4fe2cdec-5065-4c7b-856e-5936e3767b12",
-      "name": "NPD Production",
-      "queryTemplate": "select CO_PARTNO 'Part No', sum(pd_prodqty)   , MM_RawMtPartNo 'Raw Material',\n sum(pd_prodqty)  'No Of Comp', sum(PD_SFREJECT) 'SF Rej(Nos)',sum(PD_SWQTY) 'SU Wastage(Nos)',round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)',round(sum(PD_QTYKG),2) 'Part Wt(Kg)', round(sum(pd_prodqty/conVal),2) 'Theo RM(Kg)', round(sum(pd_prodqty*co_weight/1000),2) 'Theo Part Wt', round( (sum(pd_prodqty/conVal) -sum(pd_prodqty*co_weight/1000)),2) as 'Theo Scrap'\nfrom production_details \n left join materialmaster on mm_id = pd_rmid\n left join scheduled_production on pd_psid= ps_id\n left join components on PS_PARENTCOMPID = CO_ID\n left join components_tool on PD_TOOLID = ct_id\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere month(pd_date)= {month} and year(pd_date) ={year} and pd_ecsid = 6\ngroup by CO_PARTNO,MM_RawMtPartNo\norder by  CO_PARTNO;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-06-22T02:46:03.583486+00:00",
-      "updatedAt": "2026-07-23T13:09:43.195067+00:00"
-    },
-    {
-      "id": "15637a7e-2379-44ec-b47b-18bcc2b8ea55",
-      "groupId": "196dddff-9eb5-4490-b2f9-d13ce8bc5967",
-      "name": "Activity",
-      "queryTemplate": "select replace(line_type,'_',' ') Activity,DATE_FORMAT(production_date, '%d-%m-%Y') ProductionDate,part_number PartNo, sum(inspected_qty) Quantity,sum(qa_qty) QA,op_name Operator, \nCONCAT(FLOOR(max(time_taken_minutes)/60), 'h ', MOD(max(time_taken_minutes),60), 'm') AS TimeTaken,coalesce(mcm_name,'')machine, ot_flag OT\nfrom laser_welding_line\nleft join operators on operator_id= op_id\nleft join machinemaster on mcm_id=machine_id\nwhere month(production_date) = {month} and year(production_date)= {year} and child_lot_id is null \ngroup by line_type,production_date,part_number, cd_line_id,op_name,machine_id, ot_flag \nunion\nSELECT replace(line_type,'_',' ') Activity,DATE_FORMAT(production_date, '%d-%m-%Y') ProductionDate,\nwlot.part_number,inspection_pending , total_qa ,op_name Operator, \nCONCAT(FLOOR(max(time_taken_minutes)/60), 'h ', MOD(max(time_taken_minutes),60), 'm') AS TimeTaken,coalesce(mcm_name,'')machine, ot_flag OT\n FROM laser_welding_line wline\n left join laser_welding_lot wlot on wlot.lot_id=wline.lot_id\n left join operators on operator_id= op_id\nleft join machinemaster on mcm_id=machine_id\n where month(production_date) = {month} and year(production_date)= {year} and child_lot_id is not null \n group by line_type,production_date,wlot.part_number,inspection_pending, total_qa,cd_line_id,op_name,machine_id, ot_flag\n order by Activity,ProductionDate;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-06-25T14:19:30.340718+00:00",
-      "updatedAt": "2026-06-27T08:25:31.243244+00:00"
-    },
-    {
-      "id": "be7ac4d9-8723-4ffc-8152-ef739b1a8d67",
-      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
-      "name": "RM Issue-wise details",
-      "queryTemplate": "select tab.* , round((TheoRMRemaining-LossQty-SysLoss-ReturnQty),4) PendingRMClearance  from \n(select MM_RawMtPartNo RawMaterial , rd_batchno BatchNo, RI_REPORTNO IssueNo,DATE_FORMAT(ri_date, '%d-%m-%Y') IssueDate\n, co_partno PartNo,  round(coalesce(sum(PD_PRODQTY),0),4) as 'PartQty',coalesce(RD_QTY,0) IssueQty,  \nround(coalesce(sum(PD_PRODQTY/conVal),0),4) as 'TheoRM(kg)',round(coalesce(RD_QTY,0) - coalesce(sum(PD_PRODQTY/conVal),0) ,4) as 'TheoRMRemaining' ,\ncoalesce(max(lp.PL_kg),0) LossQty, coalesce(PLR_NAME,'') LossReason,coalesce(max(ls.PL_kg),0) SysLoss,coalesce(retQty,0) ReturnQty\n from schedule_details \nleft join schedule_master on sm_id = sc_smid\nleft join  (select * from rm_inwarddetails ,rm_inwardmaster where  rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE = 3 )r\n\ton rd_smid = sm_id and RD_COMPID= SC_COMPID\nleft join production_details on pd_rdid = rd_id\nleft join components on SC_COMPID = co_id\nleft join materialmaster on mm_id = rd_rmid\nleft join(SELECT     rd.RD_ID retrdid,    rd.RD_BATCHNO AS retbatch,    COALESCE(SUM(rdret.RD_QTY),0) AS retQty\n\t\tFROM rm_inwarddetails rd\n\t\tJOIN rm_inwardmaster ri     ON rd.RD_RIID = ri.RI_ID    AND ri.RI_MOVEMENT = 'O'    AND ri.RI_MOVEMENTTYPE = 3\n\t\tLEFT JOIN rm_inwarddetails rdret    ON rdret.RD_OUTWARDID = rd.RD_ID\n\t\tLEFT JOIN rm_inwardmaster riret     ON rdret.RD_RIID = riret.RI_ID    AND riret.RI_MOVEMENT = 'I'  AND riret.RI_MOVEMENTTYPE = 3\n\t\tGROUP BY rd.RD_ID, rd.RD_BATCHNO HAVING retQty > 0\n)rettable on rd_id=retrdid\nleft join rm_prodloss lp on lp.pl_rdid = rd_id and lp.pl_batch =RD_BATCHNO  and lp.PL_CATEGORY='P'\nleft join rm_prodloss ls on ls.pl_rdid = rd_id and ls.pl_batch =RD_BATCHNO  and ls.PL_CATEGORY='S'\nleft join rm_prodlossreason on PLR_ID= lp.PL_LOSSREASON\nleft join (\nSELECT CT_ID AS ctid,CT_COMPID,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE  CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = pd_toolid and CT_COMPID=SC_COMPID\nwhere  rd_qty>0\nand sm_month = {month}  and sm_year = {year}\ngroup by sm_month, sm_year,SC_COMPID, rd_id, RD_QTY,PLR_NAME) tab;",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": true,
-      "createdAt": "2026-06-29T03:07:30.300393+00:00",
-      "updatedAt": "2026-07-25T08:20:01.491313+00:00"
     },
     {
       "id": "eefdee93-a0a7-46e3-8ec3-b5c0f8e27edb",
@@ -828,11 +660,11 @@
       "variables": [],
       "pinned": true,
       "createdAt": "2026-07-04T10:28:52.791983+00:00",
-      "updatedAt": "2026-07-11T10:27:16.837572+00:00",
+      "updatedAt": "2026-08-12T11:15:40.416282+00:00",
       "drilldowns": [
         {
           "column": "Breakdown",
-          "targetReportId": "4fac67f2-929b-488c-910d-83c0dcb722cb",
+          "targetReportId": "84bc7a1f-31cf-4640-be40-641050dcd751",
           "variables": {
             "tool_number": {
               "type": "column",
@@ -841,30 +673,6 @@
           }
         }
       ]
-    },
-    {
-      "id": "53679789-b61e-4475-b784-28cf9af113ce",
-      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
-      "name": "Yearly Disptach -Production details",
-      "queryTemplate": "SELECT \n    partno,partname,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN planned END),0) AS AprilPlanned,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN produced END),0) AS AprilProduced,\n    COALESCE(SUM(CASE WHEN mn = 4  THEN dispatched END),0) AS AprilDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 5  THEN planned END),0) AS MayPlanned,\n    COALESCE(SUM(CASE WHEN mn = 5  THEN produced END),0) AS MayProduced,\n    COALESCE(SUM(CASE WHEN mn = 5  THEN dispatched END),0) AS MayDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 6  THEN planned END),0) AS JunePlanned,\n    COALESCE(SUM(CASE WHEN mn = 6  THEN produced END),0) AS JuneProduced,\n    COALESCE(SUM(CASE WHEN mn = 6  THEN dispatched END),0) AS JuneDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 7  THEN planned END),0) AS JulyPlanned,\n    COALESCE(SUM(CASE WHEN mn = 7  THEN produced END),0) AS JulyProduced,\n    COALESCE(SUM(CASE WHEN mn = 7  THEN dispatched END),0) AS JulyDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 8  THEN planned END),0) AS AugPlanned,\n    COALESCE(SUM(CASE WHEN mn = 8  THEN produced END),0) AS AugProduced,\n    COALESCE(SUM(CASE WHEN mn = 8  THEN dispatched END),0) AS AugDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 9  THEN planned END),0) AS SeptPlanned,\n    COALESCE(SUM(CASE WHEN mn = 9  THEN produced END),0) AS SeptProduced,\n    COALESCE(SUM(CASE WHEN mn = 9  THEN dispatched END),0) AS SeptDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 10  THEN planned END),0) AS OctPlanned,\n    COALESCE(SUM(CASE WHEN mn = 10  THEN produced END),0) AS OctProduced,\n    COALESCE(SUM(CASE WHEN mn = 10  THEN dispatched END),0) AS OctDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 11 THEN planned END),0) AS NovPlanned,\n    COALESCE(SUM(CASE WHEN mn = 11  THEN produced END),0) AS NovProduced,\n    COALESCE(SUM(CASE WHEN mn = 11  THEN dispatched END),0) AS NovDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 12  THEN planned END),0) AS DecPlanned,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN produced END),0) AS DecProduced,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN dispatched END),0) AS DecDispatched,\n    \n    COALESCE(SUM(CASE WHEN mn = 1  THEN planned END),0) AS JanPlanned,\n    COALESCE(SUM(CASE WHEN mn = 1  THEN produced END),0) AS JanProduced,\n    COALESCE(SUM(CASE WHEN mn = 1  THEN dispatched END),0) AS JanDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 2  THEN planned END),0) AS FebPlanned,\n    COALESCE(SUM(CASE WHEN mn = 2  THEN produced END),0) AS FebProduced,\n    COALESCE(SUM(CASE WHEN mn = 2  THEN dispatched END),0) AS FebDispatched,\n\n    COALESCE(SUM(CASE WHEN mn = 3  THEN planned END),0) AS MarPlanned,\n    COALESCE(SUM(CASE WHEN mn = 3  THEN produced END),0) AS MarProduced,\n    COALESCE(SUM(CASE WHEN mn = 3  THEN dispatched END),0) AS MarDispatched\n\nFROM (\nSELECT\n  CO_PARTNO  partno ,\n  CO_PARTNAME partname,\n  sum(COALESCE(pl.planqty, 0))  planned,\n  sum(COALESCE(pr.prodqty, 0))  produced, \n  sum(coalesce(disp.dispqty,0)) dispatched,sm.SM_MONTH mn,sm.SM_YEAR yr\nFROM schedule_master sm\njoin (  select distinct sc_smid, CO_PARENTID compid  from schedule_details left join components on sc_compid = co_id )sd on sc_smid = sm_id\nleft join components on compid= co_id\nleft join \n(SELECT  cp.CO_PARENTID comp,sc_smid smid,sum(SD_LOTSIZE) dispqty FROM  scheduled_customerdispatch\nleft JOIN scheduled_customer ON SD_CSID = CS_Id\nleft JOIN schedule_details ON SC_Id = CS_SCID\nleft join components cp on cp.co_id = SC_COMPID\nwhere SD_Status = 7\nGROUP BY cp.CO_PARENTID, sc_smid \n) disp ON disp.smid = sm.SM_ID and compid = disp.comp\nleft JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd\n    ON pd.PD_PSID = sp.PS_ID\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr  ON pr.smid = sm.SM_ID  and compid = pr.comp\nleft JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID         AS smid,\n    SUM(sp.PS_QTY)     AS planqty\n  FROM scheduled_production sp\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pl  ON pl.smid = pr.smid AND pl.comp = compid\ngroup by sm.SM_MONTH, sm.SM_YEAR ,CO_PARTNO , CO_PARTNAME,compid\nORDER BY CO_PARTNO\n) t\nwhere (CASE WHEN mn >= 4 THEN yr ELSE yr - 1 END) = {year}\nGROUP BY partno,partname;",
-      "variables": [
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-07-09T04:38:22.039662+00:00",
-      "updatedAt": "2026-07-09T04:38:22.039662+00:00"
-    },
-    {
-      "id": "4fac67f2-929b-488c-910d-83c0dcb722cb",
-      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
-      "name": "Tool Breakdown Details",
-      "queryTemplate": "SELECT\n    TOOL_NO AS `Tool No`,\n    PART_NO AS `Part No`,\n    PART_NAME AS `Part Name`,\n    MACHINE_NAME AS `Machine Name`,\n    DPR_PRODUCED_QTY AS `Produced Quantity`,\n    ISSUE AS `Issue`,\n    TOOL_DOWN AS `Tool Down`,\n    OPERATOR_NAME AS `Operator Name`,\n    DOWNTIME_AT AS `Downtime At`,\n    ROOT_CAUSE AS `Root Cause`,\n    ANALYSIS AS `Analysis`,\n    ACTION_TAKEN AS `Action Taken`,\n    REMARKS AS `Remarks`,\n    SPARE_CONSUMED AS `Spare Consumed`,\n    COMPLETED_AT AS `Completed At`,\n    HOURS_SPENT AS `Hours Spent`,\n    CURRENT_STROKE AS `Current Stroke`,\n    NEXT_STROKE AS `Next Stroke`\nFROM tool_breakdowns\nWHERE tool_no = {tool_number};",
-      "variables": [
-        "tool_number"
-      ],
-      "pinned": false,
-      "createdAt": "2026-07-11T10:22:40.582915+00:00",
-      "updatedAt": "2026-07-11T14:48:11.147693+00:00"
     },
     {
       "id": "7d705d89-3adb-484a-856d-f013e9798301",
@@ -994,33 +802,20 @@
     {
       "id": "3afbe581-d745-4a94-9a62-f6e9dd9fc54a",
       "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
-      "name": "Yearly Production",
-      "queryTemplate": "SELECT\n    partno,\n    partname,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN scheduled END), 0) AS AprilScheduled,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN planned END), 0) AS AprilPlanned,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN produced END), 0) AS AprilProduced,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN valid_actual END), 0) AS AprilValidActual,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN excess END), 0) AS AprilExcess,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN dispatched END), 0) AS AprilDispatched,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN scheduled END), 0) AS MayScheduled,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN planned END), 0) AS MayPlanned,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN produced END), 0) AS MayProduced,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN valid_actual END), 0) AS MayValidActual,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN excess END), 0) AS MayExcess,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN dispatched END), 0) AS MayDispatched,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN scheduled END), 0) AS JuneScheduled,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN planned END), 0) AS JunePlanned,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN produced END), 0) AS JuneProduced,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN valid_actual END), 0) AS JuneValidActual,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN excess END), 0) AS JuneExcess,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN dispatched END), 0) AS JuneDispatched,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN scheduled END), 0) AS JulyScheduled,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN planned END), 0) AS JulyPlanned,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN produced END), 0) AS JulyProduced,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN valid_actual END), 0) AS JulyValidActual,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN excess END), 0) AS JulyExcess,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN dispatched END), 0) AS JulyDispatched,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN scheduled END), 0) AS AugScheduled,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN planned END), 0) AS AugPlanned,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN produced END), 0) AS AugProduced,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN valid_actual END), 0) AS AugValidActual,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN excess END), 0) AS AugExcess,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN dispatched END), 0) AS AugDispatched,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN scheduled END), 0) AS SeptScheduled,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN planned END), 0) AS SeptPlanned,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN produced END), 0) AS SeptProduced,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN valid_actual END), 0) AS SeptValidActual,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN excess END), 0) AS SeptExcess,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN dispatched END), 0) AS SeptDispatched,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN scheduled END), 0) AS OctScheduled,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN planned END), 0) AS OctPlanned,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN produced END), 0) AS OctProduced,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN valid_actual END), 0) AS OctValidActual,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN excess END), 0) AS OctExcess,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN dispatched END), 0) AS OctDispatched,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN scheduled END), 0) AS NovScheduled,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN planned END), 0) AS NovPlanned,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN produced END), 0) AS NovProduced,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN valid_actual END), 0) AS NovValidActual,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN excess END), 0) AS NovExcess,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN dispatched END), 0) AS NovDispatched,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN scheduled END), 0) AS DecScheduled,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN planned END), 0) AS DecPlanned,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN produced END), 0) AS DecProduced,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN valid_actual END), 0) AS DecValidActual,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN excess END), 0) AS DecExcess,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN dispatched END), 0) AS DecDispatched,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN scheduled END), 0) AS JanScheduled,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN planned END), 0) AS JanPlanned,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN produced END), 0) AS JanProduced,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN valid_actual END), 0) AS JanValidActual,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN excess END), 0) AS JanExcess,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN dispatched END), 0) AS JanDispatched,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN scheduled END), 0) AS FebScheduled,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN planned END), 0) AS FebPlanned,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN produced END), 0) AS FebProduced,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN valid_actual END), 0) AS FebValidActual,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN excess END), 0) AS FebExcess,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN dispatched END), 0) AS FebDispatched,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN scheduled END), 0) AS MarScheduled,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN planned END), 0) AS MarPlanned,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN produced END), 0) AS MarProduced,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN valid_actual END), 0) AS MarValidActual,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN excess END), 0) AS MarExcess,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN dispatched END), 0) AS MarDispatched\nFROM (\nSELECT\n  CO_PARTNO partno,\n  CO_PARTNAME partname,\n  SUM(GREATEST(COALESCE(irr.production_pending, 0), 0)) planned,\n  SUM(COALESCE(cust.scheduled_qty, 0)) scheduled,\n  SUM(COALESCE(pr.prodqty, 0)) produced,\n  SUM(\n    GREATEST(COALESCE(irr.production_pending, 0), 0)\n    - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)\n  ) valid_actual,\n  SUM(\n    COALESCE(pr.prodqty, 0)\n    - (\n      GREATEST(COALESCE(irr.production_pending, 0), 0)\n      - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)\n    )\n  ) excess,\n  SUM(COALESCE(disp.dispqty, 0)) dispatched,\n  sm.SM_MONTH mn,\n  sm.SM_YEAR yr\nFROM schedule_master sm\nJOIN (\n  SELECT DISTINCT sc_smid, CO_PARENTID AS parent_compid\n  FROM schedule_details sd\n  LEFT JOIN components c ON sd.sc_compid = c.co_id\n) sd ON sd.sc_smid = sm_id\nLEFT JOIN components ON co_id = parent_compid\nLEFT JOIN (\n  SELECT cp.CO_PARENTID comp, sc_smid smid, SUM(SD_LOTSIZE) dispqty\n  FROM scheduled_customerdispatch\n  LEFT JOIN scheduled_customer ON SD_CSID = CS_Id\n  LEFT JOIN schedule_details ON SC_Id = CS_SCID\n  LEFT JOIN components cp ON cp.co_id = SC_COMPID\n  WHERE SD_Status = 7\n  GROUP BY cp.CO_PARENTID, sc_smid\n) disp ON disp.smid = sm.SM_ID AND parent_compid = disp.comp\nLEFT JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd ON pd.PD_PSID = sp.PS_ID AND pd_ecsid = 8\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr ON pr.smid = sm.SM_ID AND parent_compid = pr.comp\nLEFT JOIN inventory_report_rows irr\n  ON irr.part_id = parent_compid\n  AND irr.report_month = sm.SM_MONTH\n  AND irr.report_year = sm.SM_YEAR\nLEFT JOIN (\n  SELECT\n    sm2.SM_ID AS smid,\n    c2.CO_PARENTID AS comp,\n    SUM(sc.CS_QTY) AS scheduled_qty\n  FROM schedule_master sm2\n  JOIN schedule_details sd2 ON sm2.SM_ID = sd2.SC_SMID\n  JOIN scheduled_customer sc ON sd2.SC_ID = sc.CS_SCID\n  JOIN components c2 ON sd2.SC_COMPID = c2.CO_ID\n  WHERE sc.CS_SCHEDULESTATE IN (1, 2)\n  GROUP BY sm2.SM_ID, c2.CO_PARENTID\n) cust ON cust.smid = sm.SM_ID AND cust.comp = parent_compid\nGROUP BY sm.SM_MONTH, sm.SM_YEAR, CO_PARTNO, CO_PARTNAME, parent_compid\n) t\nWHERE (CASE WHEN mn >= 4 THEN yr ELSE yr - 1 END) = {year}\nGROUP BY partno, partname",
+      "name": "Yearly Production (All data with reference to schedule)",
+      "queryTemplate": "SELECT\n    partno,\n    partname,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN scheduled END), 0) AS AprilScheduled,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN planned END), 0) AS AprilPlanned,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN produced END), 0) AS AprilProduced,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN valid_actual END), 0) AS AprilValidActual,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN excess END), 0) AS AprilExcess,\n    COALESCE(SUM(CASE WHEN mn = 4 THEN dispatched END), 0) AS AprilDispatched,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN scheduled END), 0) AS MayScheduled,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN planned END), 0) AS MayPlanned,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN produced END), 0) AS MayProduced,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN valid_actual END), 0) AS MayValidActual,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN excess END), 0) AS MayExcess,\n    COALESCE(SUM(CASE WHEN mn = 5 THEN dispatched END), 0) AS MayDispatched,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN scheduled END), 0) AS JuneScheduled,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN planned END), 0) AS JunePlanned,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN produced END), 0) AS JuneProduced,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN valid_actual END), 0) AS JuneValidActual,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN excess END), 0) AS JuneExcess,\n    COALESCE(SUM(CASE WHEN mn = 6 THEN dispatched END), 0) AS JuneDispatched,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN scheduled END), 0) AS JulyScheduled,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN planned END), 0) AS JulyPlanned,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN produced END), 0) AS JulyProduced,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN valid_actual END), 0) AS JulyValidActual,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN excess END), 0) AS JulyExcess,\n    COALESCE(SUM(CASE WHEN mn = 7 THEN dispatched END), 0) AS JulyDispatched,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN scheduled END), 0) AS AugScheduled,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN planned END), 0) AS AugPlanned,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN produced END), 0) AS AugProduced,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN valid_actual END), 0) AS AugValidActual,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN excess END), 0) AS AugExcess,\n    COALESCE(SUM(CASE WHEN mn = 8 THEN dispatched END), 0) AS AugDispatched,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN scheduled END), 0) AS SeptScheduled,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN planned END), 0) AS SeptPlanned,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN produced END), 0) AS SeptProduced,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN valid_actual END), 0) AS SeptValidActual,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN excess END), 0) AS SeptExcess,\n    COALESCE(SUM(CASE WHEN mn = 9 THEN dispatched END), 0) AS SeptDispatched,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN scheduled END), 0) AS OctScheduled,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN planned END), 0) AS OctPlanned,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN produced END), 0) AS OctProduced,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN valid_actual END), 0) AS OctValidActual,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN excess END), 0) AS OctExcess,\n    COALESCE(SUM(CASE WHEN mn = 10 THEN dispatched END), 0) AS OctDispatched,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN scheduled END), 0) AS NovScheduled,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN planned END), 0) AS NovPlanned,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN produced END), 0) AS NovProduced,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN valid_actual END), 0) AS NovValidActual,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN excess END), 0) AS NovExcess,\n    COALESCE(SUM(CASE WHEN mn = 11 THEN dispatched END), 0) AS NovDispatched,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN scheduled END), 0) AS DecScheduled,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN planned END), 0) AS DecPlanned,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN produced END), 0) AS DecProduced,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN valid_actual END), 0) AS DecValidActual,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN excess END), 0) AS DecExcess,\n    COALESCE(SUM(CASE WHEN mn = 12 THEN dispatched END), 0) AS DecDispatched,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN scheduled END), 0) AS JanScheduled,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN planned END), 0) AS JanPlanned,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN produced END), 0) AS JanProduced,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN valid_actual END), 0) AS JanValidActual,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN excess END), 0) AS JanExcess,\n    COALESCE(SUM(CASE WHEN mn = 1 THEN dispatched END), 0) AS JanDispatched,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN scheduled END), 0) AS FebScheduled,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN planned END), 0) AS FebPlanned,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN produced END), 0) AS FebProduced,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN valid_actual END), 0) AS FebValidActual,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN excess END), 0) AS FebExcess,\n    COALESCE(SUM(CASE WHEN mn = 2 THEN dispatched END), 0) AS FebDispatched,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN scheduled END), 0) AS MarScheduled,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN planned END), 0) AS MarPlanned,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN produced END), 0) AS MarProduced,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN valid_actual END), 0) AS MarValidActual,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN excess END), 0) AS MarExcess,\n    COALESCE(SUM(CASE WHEN mn = 3 THEN dispatched END), 0) AS MarDispatched\nFROM (\nSELECT\n  CO_PARTNO partno,\n  CO_PARTNAME partname,\n  SUM(GREATEST(COALESCE(irr.production_pending, 0), 0)) planned,\n  SUM(COALESCE(cust.scheduled_qty, 0)) scheduled,\n  SUM(COALESCE(pr.prodqty, 0)) produced,\n  SUM(\n    GREATEST(COALESCE(irr.production_pending, 0), 0)\n    - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)\n  ) valid_actual,\n  SUM(\n    COALESCE(pr.prodqty, 0)\n    - (\n      GREATEST(COALESCE(irr.production_pending, 0), 0)\n      - GREATEST(COALESCE(irr.balance_production_qty, 0), 0)\n    )\n  ) excess,\n  SUM(COALESCE(disp.dispqty, 0)) dispatched,\n  sm.SM_MONTH mn,\n  sm.SM_YEAR yr\nFROM schedule_master sm\nJOIN (\n  SELECT DISTINCT sc_smid, CO_PARENTID AS parent_compid\n  FROM schedule_details sd\n  LEFT JOIN components c ON sd.sc_compid = c.co_id\n) sd ON sd.sc_smid = sm_id\nLEFT JOIN components ON co_id = parent_compid\nLEFT JOIN (\n  SELECT cp.CO_PARENTID comp, sc_smid smid, SUM(SD_LOTSIZE) dispqty\n  FROM scheduled_customerdispatch\n  LEFT JOIN scheduled_customer ON SD_CSID = CS_Id\n  LEFT JOIN schedule_details ON SC_Id = CS_SCID\n  LEFT JOIN components cp ON cp.co_id = SC_COMPID\n  WHERE SD_Status = 7\n  GROUP BY cp.CO_PARENTID, sc_smid\n) disp ON disp.smid = sm.SM_ID AND parent_compid = disp.comp\nLEFT JOIN (\n  SELECT\n    sp.PS_PARENTCOMPID AS comp,\n    sp.PS_SMID AS smid,\n    SUM(pd.PD_PRODQTY) AS prodqty\n  FROM scheduled_production sp\n  JOIN production_details pd ON pd.PD_PSID = sp.PS_ID AND pd_ecsid = 8\n  GROUP BY sp.PS_PARENTCOMPID, sp.PS_SMID\n) pr ON pr.smid = sm.SM_ID AND parent_compid = pr.comp\nLEFT JOIN inventory_report_rows irr\n  ON irr.part_id = parent_compid\n  AND irr.report_month = sm.SM_MONTH\n  AND irr.report_year = sm.SM_YEAR\nLEFT JOIN (\n  SELECT\n    sm2.SM_ID AS smid,\n    c2.CO_PARENTID AS comp,\n    SUM(sc.CS_QTY) AS scheduled_qty\n  FROM schedule_master sm2\n  JOIN schedule_details sd2 ON sm2.SM_ID = sd2.SC_SMID\n  JOIN scheduled_customer sc ON sd2.SC_ID = sc.CS_SCID\n  JOIN components c2 ON sd2.SC_COMPID = c2.CO_ID\n  WHERE sc.CS_SCHEDULESTATE IN (1, 2, 3)\n  GROUP BY sm2.SM_ID, c2.CO_PARENTID\n) cust ON cust.smid = sm.SM_ID AND cust.comp = parent_compid\nGROUP BY sm.SM_MONTH, sm.SM_YEAR, CO_PARTNO, CO_PARTNAME, parent_compid\n) t\nWHERE (CASE WHEN mn >= 4 THEN yr ELSE yr - 1 END) = {year}\nGROUP BY partno, partname",
       "variables": [
         "year"
       ],
-      "pinned": false,
+      "pinned": true,
       "createdAt": "2026-07-25T07:21:18.440230+00:00",
-      "updatedAt": "2026-07-25T07:21:18.440230+00:00"
-    },
-    {
-      "id": "44f78950-7e3e-46f2-a278-ba88e0c7d8c9",
-      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
-      "name": "BOM Dispatch Details",
-      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year}",
-      "variables": [
-        "month",
-        "year"
-      ],
-      "pinned": false,
-      "createdAt": "2026-07-25T08:26:28.558185+00:00",
-      "updatedAt": "2026-07-25T09:02:35.145137+00:00"
+      "updatedAt": "2026-09-07T04:37:30.718979+00:00"
     },
     {
       "id": "97e39414-c6d7-4392-aa6f-1972c41cfc1e",
       "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
       "name": "BOM Dispatch Pivot",
-      "queryTemplate": "SELECT C.CU_Name as 'Cumtomer Name',sum(QTY) as 'Schedule Qty',sum(INV_QTY) as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} group by C.CU_Name",
+      "queryTemplate": "SELECT C.CU_Name as 'Cumtomer Name',sum(QTY) as 'Schedule Qty',sum(INV_QTY) as 'Dispatched Qty'  \nFROM erp.sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} group by C.CU_Name",
       "variables": [
         "month",
         "year"
@@ -1053,7 +848,7 @@
       "id": "e6c36649-266d-4818-a25b-a3ec080f4744",
       "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
       "name": "BOM Dispatch CustomerWise",
-      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} and C.CU_Name = {cust_name}",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM erp.sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year} and C.CU_Name = {cust_name}",
       "variables": [
         "month",
         "year",
@@ -1064,15 +859,564 @@
       "updatedAt": "2026-07-25T09:03:19.439464+00:00"
     },
     {
+      "id": "7fe076e3-6565-478f-b517-a4dcd4f4f1d7",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM Stock Location-wise( Includes NPD)  OLD",
+      "queryTemplate": "select  MM_RawMtPartNo 'RawMaterial',mt_name 'Material',\n\tBatch ,date_format(ri_date, '%d-%m-%Y')  'InwardDt', \n\tRD_ACCEPTEDQTY 'inwardQty', storeQty as 'RM In Store',\n\tround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\n\tround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\n\tround(COALESCE(GREATEST((rmwithprod),0),0),2) as 'RM with Prod(Theo)' ,\n    round(COALESCE(GREATEST(RMPendingAtProd,0),0),2) RMPendingClearanceAtProd,\n\tround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\n\tround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Slitting' ,\n\tround(COALESCE(GREATEST(SlitingScrap,0),0),2) 'SlitingScrap' ,\n\tround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\n\tround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \n\tround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\n\tround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\n\tround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor' from \n\t(select inQ.rd_rmid rm, inQ.batch Batch,inQ.ri_date ri_date, \n\tinQ.RD_ACCEPTEDQTY , rmStore.Qty storeQty,\n\tProdQty,coalesce(ThRMForProduction,0)ThRMForProduction ,ProdQty-coalesce(ThRMForProduction,0)  rmwithprod ,  ProdQty-coalesce(ThRMForProduction,0)-coalesce(PL_Kg,0) RMPendingAtProd,\n\tpdscrap -coalesce(PScrapCorrection,0) pdscrap,SplitQty,SlitingScrap-coalesce(SScrapCorrection,0) SlitingScrap,\n    JWRMGiven,JWretqty, JWcompkg,JWscarp -coalesce(JWScrapCorrection,0) JWscarp ,jwRemQty,\n\tlp.PL_kg  loss\n\tFROM \n\t(select rd_rmid , RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n\t\t left join materialmaster on mm_id = rd_rmid\n\t\t where RD_ACCEPTEDQTY>0\n\t\t group by RD_BATCHNO,ri_date,rd_rmid\n\t\t   union\n\t\tselect rmin.rd_rmid , rmin.RD_BATCHNO batch ,rmin.ri_date, rmin.RD_ACCEPTEDQTY   RD_ACCEPTEDQTY from \n\t\t(SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and rd_outwardid <>0 and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=2) rmin,\n\t\t (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=2) rmout\n\t\t where rmin.rd_rmid <>rmout.rd_rmid and rmin.RD_BATCHNO = rmout.RD_BATCHNO     \n\t\t )inQ\n\t\t left join (SELECT RD_BATCHNO batch, RD_RMID\t,\t\n\t\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_qty ELSE 0 END)\n\t\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END), 2 )AS Qty\n\t\tFROM rm_inwarddetails , rm_inwardmaster\n\t\twhere rd_riid=ri_id \n\t\tgroup by RD_BATCHNO,rd_rmid) rmStore on rmStore.batch= inQ.batch and rmStore.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch,rd_rmid,\n\tround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t where RI_MOVEMENTTYPE = 3\n\t\t group by RD_BATCHNO,rd_rmid\n\t\t ) prod on prod.batch = inQ.batch and prod.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch, rd_rmid,coalesce(sum(rd_qty),0) - coalesce(sum(retqty),0) -coalesce(sum(SlitingScrap),0) SplitQty, coalesce(sum(SlitingScrap),0) SlitingScrap\n\t\t from rm_inwarddetails rd\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t left join ( select RD_OUTWARDID, sum(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) retqty\n\t\t\tfrom rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id \n\t\t\tand RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'I' group by RD_OUTWARDID\n\t\t )SplitRet on SplitRet.RD_OUTWARDID = rd.rd_id\n\t\t left join ( select RS_OUTWARDID,sum(rs_qty) SlitingScrap from rm_scrapdetails group by RS_OUTWARDID     \n\t\t )scrap on scrap.RS_OUTWARDID = rd.rd_id \n\t\t where RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'O'\n         group by RD_BATCHNO , rd_rmid\n\t\t ) Splitting on Splitting.batch = inQ.batch and Splitting.rd_rmid = inQ.rd_rmid\n\tleft join (  select pd_batchno batch, mm_id,round(coalesce(sum((PD_PRODQTY)/conVal),0),2)  ThRMForProduction ,  coalesce(sum(PD_SCRAPQTY),0) pdscrap from production_details\n\t\tleft join scheduled_production on pd_psid = ps_id \n\t\tleft join comp_scrapdetails on sd_refno =pd_id and sd_src=1\n\t\tleft join \n\t\t(SELECT ct_id,CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where   CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID  and ct_id = PD_TOOLID\n\t\t\t\tgroup by  pd_batchno,mm_id)prodQ on prodQ.batch=inQ.batch and prodQ.mm_id = inQ.rd_rmid\n\t\tleft join(select RD_BATCHNO batch,rd_rmid, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0))+ sum(COALESCE(sfRej,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp, -- + sum(COALESCE(setupW,0))\n\t\t\tround((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))  +sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (   -- + sum(COALESCE(sfRej,0)) + sum(COALESCE(setupW,0))\n\t\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty,sfRej,setupW,RI_MOVEMENTTYPE,ri.ri_id , rd.rd_riid\n\t\t\tfrom rm_inwardmaster ri,rm_inwarddetails rd\n\t\t\tjoin\n\t\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\t\tleft join  (select rd_id,RD_OUTWARDid, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='I' and ri_movementtype=4 group by RD_OUTWARDID, rd_batchno,rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid, sum(cr_qtykg) sfRej, sum(SD_QTYKG) setupW from comp_inwarddetails\n\t\t\t\tleft join comp_rejectdetails on cr_cmid= cd_cmid\n\t\t\t\tleft join comp_scrapdetails on sd_refno =cd_cmid and sd_src=4\n\t\t\t\t where cd_src=4   group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id \n\t\t\twhere ri_id = rd_riid and RI_MOVEMENTTYPE=4\n\t\t\t) t\n\t\t\tgroup by rd_batchno,rd_rmid) jwQty on jwQty.batch = inQ.batch   and jwQty.rd_rmid = inQ.rd_rmid    \n\t\tLEFT JOIN (\n\t\t\tSELECT\n\t\t\t  TRIM(rc_batchno) AS rc_batchno,   rc_rmid,\n\t\t\t  case when  rc_movementtype='P' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS PScrapCorrection,\n\t\t\t  case when  rc_movementtype='S' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS SScrapCorrection,\n\t\t\t  case when  rc_movementtype='J' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS JWScrapCorrection\n\t\t\tFROM rm_scrapcorrection       \n\t\t\tGROUP BY rc_batchno, rc_rmid,rc_movementtype\n\t\t   ) scrapCorrections ON scrapCorrections.rc_batchno = inQ.batch  AND scrapCorrections.rc_rmid = inQ.rd_rmid\n\t\t\tleft join (select PL_RMID,pl_batch,coalesce(sum(PL_kg),0) PL_kg from  rm_prodloss group by PL_RMID,pl_batch) lp on lp.PL_RMID =  inQ.rd_rmid and lp.pl_batch = inQ.batch  \n\t\t\t)t1 left join materialmaster on mm_id = t1.rm\n\t\t\tleft join materialtypemaster on MM_MTID = MT_Id\n\t\t\twhere storeQty >0 or rmwithprod >0 or jwRemQty>0 or splitQty>0 \norder by MM_RawMtPartNo;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-07-27T14:19:42.465401+00:00",
+      "updatedAt": "2026-08-05T03:20:10.841110+00:00"
+    },
+    {
+      "id": "cf573646-5126-4588-b673-04184b318912",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM Issue-wise details",
+      "queryTemplate": "SELECT tab.*,\n       ROUND((TheoRMRemaining - LossQty - SysLoss - ReturnQty),4) AS PendingRMClearance\nFROM (\n    SELECT \n        MAX(MM_RawMtPartNo) AS RawMaterial,\n        MAX(rd_batchno) AS BatchNo,\n        MAX(RI_REPORTNO) AS IssueNo,\n        DATE_FORMAT(MAX(ri_date), '%d-%m-%Y') AS IssueDate,\n        MAX(co_partno) AS PartNo,\n        ROUND(COALESCE(SUM(PD_PRODQTY),0),4) AS PartQty,\n        COALESCE(RD_QTY,0) AS IssueQty,\n        ROUND(COALESCE(SUM(PD_PRODQTY/conVal),0),4) AS TheoRM_kg,\n        ROUND(COALESCE(RD_QTY,0) - COALESCE(SUM(PD_PRODQTY/conVal),0),4) AS TheoRMRemaining,\n        COALESCE(MAX(lp.PL_kg),0) AS LossQty,\n        COALESCE(PLR_NAME,'') AS LossReason,\n        COALESCE(MAX(ls.PL_kg),0) AS SysLoss,\n        COALESCE(retQty,0) AS ReturnQty\n    FROM (\n        SELECT DISTINCT(co_parentid) sc_compid, sc_smid, CO_PARTNO, CO_PARTNAME\n        FROM schedule_details\n        LEFT JOIN components ON sc_compid = co_id\n    ) sd\n    LEFT JOIN schedule_master ON sm_id = sc_smid\n    LEFT JOIN (\n        SELECT *\n        FROM rm_inwarddetails\n        JOIN rm_inwardmaster ON rd_riid = ri_id\n        WHERE RI_MOVEMENT='O' AND RI_MOVEMENTTYPE = 3\n    ) r ON rd_smid = sm_id AND RD_COMPID = SC_COMPID\n    LEFT JOIN production_details ON pd_rdid = rd_id\n    LEFT JOIN materialmaster ON mm_id = rd_rmid\n    LEFT JOIN (\n        SELECT rd.RD_ID retrdid,\n               rd.RD_BATCHNO AS retbatch,\n               COALESCE(SUM(rdret.RD_QTY),0) AS retQty\n        FROM rm_inwarddetails rd\n        JOIN rm_inwardmaster ri ON rd.RD_RIID = ri.RI_ID\n                               AND ri.RI_MOVEMENT = 'O'\n                               AND ri.RI_MOVEMENTTYPE = 3\n        LEFT JOIN rm_inwarddetails rdret ON rdret.RD_OUTWARDID = rd.RD_ID\n        LEFT JOIN rm_inwardmaster riret ON rdret.RD_RIID = riret.RI_ID\n                                       AND riret.RI_MOVEMENT = 'I'\n                                       AND riret.RI_MOVEMENTTYPE = 3\n        GROUP BY rd.RD_ID, rd.RD_BATCHNO\n        HAVING retQty > 0\n    ) rettable ON rd_id = retrdid\n    LEFT JOIN rm_prodloss lp ON lp.pl_rdid = rd_id\n                            AND lp.pl_batch = RD_BATCHNO\n                            AND lp.PL_CATEGORY = 'P'\n    LEFT JOIN rm_prodloss ls ON ls.pl_rdid = rd_id\n                            AND ls.pl_batch = RD_BATCHNO\n                            AND ls.PL_CATEGORY = 'S'\n    LEFT JOIN rm_prodlossreason ON PLR_ID = lp.PL_LOSSREASON\n    LEFT JOIN (\n        SELECT CT_ID AS ctid, CT_COMPID,\n               ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * \n                ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n        FROM components_tool\n        INNER JOIN materialmaster ON CT_RMID = MM_Id\n        INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n        WHERE CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0\n    ) toolConv ON ctid = pd_toolid AND CT_COMPID = sc_compid\n    WHERE rd_qty > 0\n      AND sm_month ={month}\n      AND sm_year = {year}\n    GROUP BY sm_month, sm_year, sc_compid, rd_id, RD_QTY, PLR_NAME\n) tab",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-07-28T10:32:27.678741+00:00",
+      "updatedAt": "2026-07-28T10:38:55.176963+00:00"
+    },
+    {
+      "id": "81da14cb-d7ec-4918-8469-d46634a0ba8d",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Monthly Top 10 Production",
+      "queryTemplate": "SELECT \n    rn As 'Ranking',\n    COALESCE(MAX(CASE WHEN ProdMonth = 4  THEN PartNo END),'') AS AprilPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 4  THEN TotalProd END),'') AS AprilTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 5  THEN PartNo END),'') AS MayPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 5  THEN TotalProd END),'') AS MayTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 6  THEN PartNo END),'') AS JunePartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 6  THEN TotalProd END),'') AS JuneTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 7  THEN PartNo END),'') AS JulyPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 7  THEN TotalProd END),'') AS JulyTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 8  THEN PartNo END),'') AS AugustPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 8  THEN TotalProd END),'') AS AugustTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 9  THEN PartNo END),'') AS SeptemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 9  THEN TotalProd END),'') AS SeptemberTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 10 THEN PartNo END),'') AS OctoberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 10 THEN TotalProd END),'') AS OctoberTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 11 THEN PartNo END),'') AS NovemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 11 THEN TotalProd END),'') AS NovemberTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 12 THEN PartNo END),'') AS DecemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 12 THEN TotalProd END),'') AS DecemberTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 1  THEN PartNo END),'') AS JanuaryPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 1  THEN TotalProd END),'') AS JanuaryTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 2  THEN PartNo END),'') AS FebruaryPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 2  THEN TotalProd END),'') AS FebruaryTotalProd,\n    COALESCE(MAX(CASE WHEN ProdMonth = 3  THEN PartNo END),'') AS MarchPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 3  THEN TotalProd END),'') AS MarchTotalProd\nFROM (\n    SELECT \n        CO_PARTNO AS PartNo,\n        MONTH(PD_DATE) AS ProdMonth,\n        SUM(pd_prodqty) AS TotalProd,\n        ROW_NUMBER() OVER (\n            PARTITION BY MONTH(PD_DATE) \n            ORDER BY SUM(pd_prodqty) DESC\n        ) AS rn\n    FROM production_details\n    LEFT JOIN scheduled_production ON ps_id = pd_psid\n    LEFT JOIN components ON co_id = PS_PARENTCOMPID\n    WHERE (YEAR(PD_DATE) = {year} AND MONTH(PD_DATE) >= 4)\n       OR (YEAR(PD_DATE) = {year}  + 1 AND MONTH(PD_DATE) <= 3)\n    GROUP BY CO_PARTNO, MONTH(PD_DATE)\n) ranked\nWHERE rn <= 10\nGROUP BY rn\nORDER BY rn;",
+      "variables": [
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-07-29T12:45:06.263079+00:00",
+      "updatedAt": "2026-07-31T07:28:17.526153+00:00"
+    },
+    {
+      "id": "44f78950-7e3e-46f2-a278-ba88e0c7d8c9",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "BOM Dispatch Details",
+      "queryTemplate": "SELECT BOM_NO as 'BOM Number',BOM_NAME as 'BOM Name',SO_NO as 'Sales Order No',C.CU_Name as 'Cumtomer Name',QTY as 'Schedule Qty',INV_QTY as 'Dispatched Qty'  \nFROM sales_order,customer c  where c.cu_id=CUST_ID and CATEGORY_ID=2 and BOM_NO is not null and month(SO_DATE) =  {month} and year(SO_DATE) = {year}",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-25T08:26:28.558185+00:00",
+      "updatedAt": "2026-07-31T17:56:03.574055+00:00"
+    },
+    {
+      "id": "571e9c58-9353-4e7e-8169-dc10ffeb4b5d",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM Stock Location-wise( Includes NPD)",
+      "queryTemplate": "select  MM_RawMtPartNo 'RawMaterial',mt_name 'Material',\n\tBatch ,\n\tRD_ACCEPTEDQTY 'inwardQty', storeQty as 'RM In Store',\n\tround(COALESCE(GREATEST(ProdQty,0),0),2) 'RMGivenForProd' ,\n\tround(COALESCE(GREATEST(ThRMForProduction,0),0),2) 'RMUsed(Theo)' ,\n\tround(COALESCE(GREATEST((rmwithprod),0),0),2) as 'RM with Prod(Theo)' ,\n    round(COALESCE(GREATEST(RMPendingAtProd,0),0),2) RMPendingClearanceAtProd,\n\tround(COALESCE(GREATEST(pdscrap,0),0),2) 'ProdScrap',\n\tround(COALESCE(GREATEST(SplitQty,0),0),2) 'RW with Slitting' ,\n\tround(COALESCE(GREATEST(SlitingScrap,0),0),2) 'SlitingScrap' ,\n\tround(COALESCE(GREATEST(JWRMGiven,0),0),2) 'JWRMGiven',\n\tround(COALESCE(GREATEST(JWretqty,0),0),2) 'JWRetQty', \n\tround(COALESCE(GREATEST(JWcompkg,0),0),2) 'JWCompKg',\n\tround(COALESCE(GREATEST(JWscarp,0),0),2) 'JWSrap',\n\tround(COALESCE(GREATEST(jwRemQty,0),0),2) 'RM with JW Vendor' from \n\t(select inQ.rd_rmid rm, inQ.batch Batch, \n\tinQ.RD_ACCEPTEDQTY , rmStore.Qty storeQty,\n\tProdQty,coalesce(ThRMForProduction,0)ThRMForProduction ,ProdQty-coalesce(ThRMForProduction,0)  rmwithprod ,  ProdQty-coalesce(ThRMForProduction,0)-coalesce(PL_Kg,0) RMPendingAtProd,\n\tpdscrap -coalesce(PScrapCorrection,0) pdscrap,SplitQty,SlitingScrap-coalesce(SScrapCorrection,0) SlitingScrap,\n    JWRMGiven,JWretqty, JWcompkg,JWscarp -coalesce(JWScrapCorrection,0) JWscarp ,jwRemQty,\n\tlp.PL_kg  loss\n\tFROM \n\t(select rd_rmid ,  batch , sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY from ( select rd_rmid , RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n\t\t left join materialmaster on mm_id = rd_rmid\n\t\t where RD_ACCEPTEDQTY>0\n\t\t group by RD_BATCHNO,ri_date,rd_rmid\n\t\t   union\n\t\tselect rmin.rd_rmid , rmin.RD_BATCHNO batch ,rmin.ri_date, rmin.RD_ACCEPTEDQTY   RD_ACCEPTEDQTY from \n\t\t(SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and rd_outwardid <>0 and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=2) rmin,\n\t\t (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=2) rmout\n\t\t where rmin.rd_rmid <>rmout.rd_rmid and rmin.RD_BATCHNO = rmout.RD_BATCHNO  )tt  group by    rd_rmid ,  batch\n\t\t )inQ\n\t\t left join (SELECT RD_BATCHNO batch, RD_RMID\t,\t\n\t\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 )AS Qty\n\t\tFROM rm_inwarddetails , rm_inwardmaster\n\t\twhere rd_riid=ri_id \n\t\tgroup by RD_BATCHNO,rd_rmid) rmStore on rmStore.batch= inQ.batch and rmStore.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch,rd_rmid,\n\tround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t where RI_MOVEMENTTYPE = 3\n\t\t group by RD_BATCHNO,rd_rmid\n\t\t ) prod on prod.batch = inQ.batch and prod.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch, rd_rmid,coalesce(sum(rd_qty),0) - coalesce(sum(retqty),0) -coalesce(sum(SlitingScrap),0) SplitQty, coalesce(sum(SlitingScrap),0) SlitingScrap\n\t\t from rm_inwarddetails rd\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t left join ( select RD_OUTWARDID, sum(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) retqty\n\t\t\tfrom rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id \n\t\t\tand RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'I' group by RD_OUTWARDID\n\t\t )SplitRet on SplitRet.RD_OUTWARDID = rd.rd_id\n\t\t left join ( select RS_OUTWARDID,sum(rs_qty) SlitingScrap from rm_scrapdetails group by RS_OUTWARDID     \n\t\t )scrap on scrap.RS_OUTWARDID = rd.rd_id \n\t\t where RI_MOVEMENTTYPE = 2 and  RI_MOVEMENT = 'O'\n         group by RD_BATCHNO , rd_rmid\n\t\t ) Splitting on Splitting.batch = inQ.batch and Splitting.rd_rmid = inQ.rd_rmid\n\tleft join (  select pd_batchno batch, mm_id,round(coalesce(sum((PD_PRODQTY)/conVal),0),2)  ThRMForProduction ,  coalesce(sum(PD_SCRAPQTY),0) pdscrap from production_details\n\t\tleft join scheduled_production on pd_psid = ps_id \n\t\tleft join comp_scrapdetails on sd_refno =pd_id and sd_src=1\n\t\tleft join \n\t\t(SELECT ct_id,CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where   CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID  and ct_id = PD_TOOLID\n\t\t\t\tgroup by  pd_batchno,mm_id)prodQ on prodQ.batch=inQ.batch and prodQ.mm_id = inQ.rd_rmid\n\t\tleft join(select RD_BATCHNO batch,rd_rmid, rmgiven JWRMGiven ,sum(COALESCE(retRMqty,0)) JWretqty,sum(COALESCE(compkgqty,0))+ sum(COALESCE(sfRej,0)) JWcompkg,sum(COALESCE(scrapqty,0)) JWscarp, -- + sum(COALESCE(setupW,0))\n\t\t\tround((rmgiven-(sum(COALESCE(retRMqty,0))+ sum(COALESCE(compkgqty,0))  +sum(COALESCE(scrapqty,0)))),2) as jwRemQty from (   -- + sum(COALESCE(sfRej,0)) + sum(COALESCE(setupW,0))\n\t\t\tselect rd_batchno, RD_RMID,RMGiven, retRMqty,compKGQty, scrapqty,sfRej,setupW,RI_MOVEMENTTYPE,ri.ri_id , rd.rd_riid\n\t\t\tfrom rm_inwardmaster ri,rm_inwarddetails rd\n\t\t\tjoin\n\t\t\t(select sum(rd_qty) RMGiven, RD_BATCHNO batch from rm_inwarddetails, rm_inwardmaster where rd_riid= ri_id and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=4 group by RD_BATCHNO)r on r.batch = rd.rd_batchno\n\t\t\tleft join  (select rd_id,RD_OUTWARDid, sum(RD_ACCEPTEDQTY) retRMqty from rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='I' and ri_movementtype=4 group by RD_OUTWARDID, rd_batchno,rd_id)ret on ret.RD_OUTWARDID= rd.rd_id \n\t\t\tleft join (select sum(cd_kgqty) compKGQty , cd_outwardid, sum(cr_qtykg) sfRej, sum(SD_QTYKG) setupW from comp_inwarddetails\n\t\t\t\tleft join comp_rejectdetails on cr_cmid= cd_cmid\n\t\t\t\tleft join comp_scrapdetails on sd_refno =cd_cmid and sd_src=4\n\t\t\t\t where cd_src=4   group by cd_outwardid)comp on cd_outwardid=  ret.rd_id\n\t\t\tleft join (SELECT rs_qty scrapqty,RS_OUTWARDID FROM rm_scrapdetails) scrap on scrap.RS_OUTWARDID=  ret.rd_id \n\t\t\twhere ri_id = rd_riid and RI_MOVEMENTTYPE=4\n\t\t\t) t\n\t\t\tgroup by rd_batchno,rd_rmid) jwQty on jwQty.batch = inQ.batch   and jwQty.rd_rmid = inQ.rd_rmid    \n\t\tLEFT JOIN (\n\t\t\tSELECT\n\t\t\t  TRIM(rc_batchno) AS rc_batchno,   rc_rmid,\n\t\t\t  case when  rc_movementtype='P' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS PScrapCorrection,\n\t\t\t  case when  rc_movementtype='S' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS SScrapCorrection,\n\t\t\t  case when  rc_movementtype='J' then ROUND(SUM(COALESCE(rc_correction, 0)), 2) else 0 end AS JWScrapCorrection\n\t\t\tFROM rm_scrapcorrection       \n\t\t\tGROUP BY rc_batchno, rc_rmid,rc_movementtype\n\t\t   ) scrapCorrections ON scrapCorrections.rc_batchno = inQ.batch  AND scrapCorrections.rc_rmid = inQ.rd_rmid\n\t\t\tleft join (select PL_RMID,pl_batch,coalesce(sum(PL_kg),0) PL_kg from  rm_prodloss group by PL_RMID,pl_batch) lp on lp.PL_RMID =  inQ.rd_rmid and lp.pl_batch = inQ.batch  \n\t\t\t)t1 left join materialmaster on mm_id = t1.rm\n\t\t\tleft join materialtypemaster on MM_MTID = MT_Id\n\t\t\twhere storeQty >0 or rmwithprod >0 or jwRemQty>0 or splitQty>0 \n-- order by MM_RawMtPartNo;\norder by  inQ.batch;",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-08-03T13:39:03.621890+00:00",
+      "updatedAt": "2026-08-05T03:20:27.734484+00:00"
+    },
+    {
+      "id": "7ab1f8ed-e959-4003-81dc-7ceae22e6834",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Current RawMaterial in Store( RM Wise) dup",
+      "queryTemplate": "select * from (SELECT RD_BATCHNO as 'Batch No',\n\t\tMM_RawMtPartNo as 'Raw Material',\n        MT_Name as 'Material Type',\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 ) AS 'Qty(Kg)'\n\tFROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster\n    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id\n    group by RD_BATCHNO, RD_RMID order by `Qty(Kg)`) t where `Qty(Kg)` != 0;",
+      "variables": [],
+      "pinned": false,
+      "createdAt": "2026-08-10T10:23:08.980813+00:00",
+      "updatedAt": "2026-08-11T07:57:27.962088+00:00"
+    },
+    {
+      "id": "1447a006-d4c6-4160-9be1-27e7c8bb68e3",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Current RawMaterial in Store( RM Wise)",
+      "queryTemplate": "select * from (SELECT \n\t\tMM_RawMtPartNo as 'Raw Material',\n        MT_Name as 'Material Type',\n\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 ) AS 'Qty(Kg)'\n\tFROM rm_inwarddetails , rm_inwardmaster, materialmaster, materialtypemaster\n    where rd_riid=ri_id and RD_RMID = MM_Id and MM_mtId = MT_Id\n    group by  RD_RMID order by `Qty(Kg)`) t where `Qty(Kg)` != 0 order by 'Raw Material';",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-08-11T07:56:25.254897+00:00",
+      "updatedAt": "2026-08-11T07:58:14.585006+00:00"
+    },
+    {
+      "id": "a62542bb-b7e7-49d5-bb0b-666caaad7b16",
+      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
+      "name": "Yearly PM Count",
+      "queryTemplate": "SELECT year(PM_date) Year,MONTH(PM_date) Month,\n    MONTHNAME(PM_date) AS 'MonthName',\n    COUNT(*) AS 'Count'\nFROM preventive_maintenance\nWHERE (CASE \n          WHEN MONTH(PM_date) >= 4 \n          THEN YEAR(PM_date)  \n          ELSE YEAR(PM_date) - 1 \n      END) = {year}\nGROUP BY MONTHNAME(PM_date),MONTH(PM_date),year(PM_date)\nORDER BY MONTH(PM_date);",
+      "variables": [
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-11T09:59:16.964426+00:00",
+      "updatedAt": "2026-08-20T05:33:02.198085+00:00",
+      "noFormatColumns": [
+        "Month",
+        "Year"
+      ],
+      "drilldowns": [
+        {
+          "column": "Count",
+          "targetReportId": "5536e9cf-f170-4f55-8b36-2375dd3e9492",
+          "variables": {
+            "month": {
+              "type": "column",
+              "value": "Month"
+            },
+            "year": {
+              "type": "column",
+              "value": "Year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "5536e9cf-f170-4f55-8b36-2375dd3e9492",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Tool ChildReport-Year/Month",
+      "queryTemplate": "select pm_tool_number Tool,DATE_FORMAT(PM_date, '%d-%m-%Y') AS 'Date', PM_current_stroke CurrentStroke, PM_next_stroke NextStroke from preventive_maintenance\nWHERE (CASE \n          WHEN MONTH(PM_date) >= 4 \n          THEN YEAR(PM_date)  \n          ELSE YEAR(PM_date) - 1 \n      END) = {year}\nand MONTH(PM_date) = {month}",
+      "variables": [
+        "year",
+        "month"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-11T11:02:45.265807+00:00",
+      "updatedAt": "2026-08-11T11:08:53.907692+00:00"
+    },
+    {
+      "id": "84bc7a1f-31cf-4640-be40-641050dcd751",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Tool Breakdown Child Report",
+      "queryTemplate": "SELECT\n    TOOL_NO AS `Tool No`,\n    PART_NO AS `Part No`,\n    PART_NAME AS `Part Name`,\n    MACHINE_NAME AS `Machine Name`,\n    DPR_PRODUCED_QTY AS `Produced Quantity`,\n    ISSUE AS `Issue`,\n    TOOL_DOWN AS `Tool Down`,\n    OPERATOR_NAME AS `Operator Name`,\n    DOWNTIME_AT AS `Downtime At`,\n    ROOT_CAUSE AS `Root Cause`,\n    ANALYSIS AS `Analysis`,\n    ACTION_TAKEN AS `Action Taken`,\n    REMARKS AS `Remarks`,\n    SPARE_CONSUMED AS `Spare Consumed`,\n    COMPLETED_AT AS `Completed At`,\n    HOURS_SPENT AS `Hours Spent`,\n    CURRENT_STROKE AS `Current Stroke`,\n    NEXT_STROKE AS `Next Stroke`\nFROM tool_breakdowns\nWHERE tool_no = {tool_number} and tool_down='Breakdown';",
+      "variables": [
+        "tool_number"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-12T10:43:46.695059+00:00",
+      "updatedAt": "2026-08-12T11:15:22.369141+00:00"
+    },
+    {
+      "id": "4fac67f2-929b-488c-910d-83c0dcb722cb",
+      "groupId": "f06ae007-823b-49e3-98e5-a65269bcaffd",
+      "name": "Tool Breakdown Details",
+      "queryTemplate": "SELECT\n    TOOL_NO AS `Tool No`,\n    PART_NO AS `Part No`,\n    PART_NAME AS `Part Name`,\n    MACHINE_NAME AS `Machine Name`,\n    DPR_PRODUCED_QTY AS `Produced Quantity`,\n    ISSUE AS `Issue`,\n    TOOL_DOWN AS `Tool Down`,\n    OPERATOR_NAME AS `Operator Name`,\n    DOWNTIME_AT AS `Downtime At`,\n    ROOT_CAUSE AS `Root Cause`,\n    ANALYSIS AS `Analysis`,\n    ACTION_TAKEN AS `Action Taken`,\n    REMARKS AS `Remarks`,\n    SPARE_CONSUMED AS `Spare Consumed`,\n    COMPLETED_AT AS `Completed At`,\n    HOURS_SPENT AS `Hours Spent`,\n    CURRENT_STROKE AS `Current Stroke`,\n    NEXT_STROKE AS `Next Stroke`\nFROM tool_breakdowns\nWHERE tool_no = {tool_number};",
+      "variables": [
+        "tool_number"
+      ],
+      "pinned": false,
+      "createdAt": "2026-07-11T10:22:40.582915+00:00",
+      "updatedAt": "2026-08-16T16:18:23.441028+00:00"
+    },
+    {
+      "id": "11cc32d3-5cd7-41ba-8d80-92b1518153ea",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Theoretical Machine Run (Incl NPD)",
+      "queryTemplate": "select MCM_Name 'MachineName',  sum(PD_PRODQTY) 'Prod Qty' , round(sum(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm))/60,4) 'Duration(Hrs)', round(sum(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm))*100/(175*60),4) 'Est Usage Percent',\ncount(distinct(PD_TOOLID)) 'Distinct Parts',count(distinct(PD_OPID)) 'Distinct Operators'  \nfrom  machinemaster\nleft join production_details on mcm_id = PD_MCID\nleft join tool_life on PD_TOOLID=TL_tool_id\nleft join components_tool on PD_TOOLID =ct_id\nwhere month(PD_DATE) = {month}\nand  year(PD_DATE) = {year}\ngroup by PD_MCID\norder by MCM_Name;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-18T15:25:28.646304+00:00",
+      "updatedAt": "2026-09-01T04:06:19.042332+00:00",
+      "drilldowns": [
+        {
+          "column": "MachineName",
+          "targetReportId": "48505f72-cccd-47a5-9edd-e7d1fdbbf207",
+          "variables": {
+            "machinename": {
+              "type": "column",
+              "value": "MachineName"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "95aa5de3-5d0f-4441-9521-bb8afd80a329",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Theoretical Run Child Report",
+      "queryTemplate": "select MCM_Name Machine,DATE_FORMAT(pd_date, '%d-%m-%Y')'Prod Date',co_partno 'Part No',PD_PRODQTY Qty, CT_TOOLNO ToolNo, coalesce(TL_spm,0) SPM,CT_NO_OF_CAVITY Cavity, round(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm)/60 ,4)DurationInHrs,OP_NAME Operator\nfrom production_details\nleft join machinemaster  on mcm_id = PD_MCID\nleft join tool_life on PD_TOOLID=TL_tool_id\nleft join components_tool on PD_TOOLID =ct_id\nleft join components on co_id = CT_COMPID\nleft join operators on OP_ID=PD_OPID\nwhere month(PD_DATE) ={month}\nand  year(PD_DATE) = {year}\nand mcm_name = {MachineName}\nand co_partno = {PartNo}",
+      "variables": [
+        "month",
+        "year",
+        "MachineName",
+        "PartNo"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-18T15:52:51.216746+00:00",
+      "updatedAt": "2026-08-19T10:43:18.929387+00:00"
+    },
+    {
+      "id": "48505f72-cccd-47a5-9edd-e7d1fdbbf207",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Theoritical Run Sub Report",
+      "queryTemplate": "select  MCM_Name Machine,co_partno 'PartNo',sum(PD_PRODQTY) Qty, \n round(coalesce(sum(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm))/60,0) ,4)DurationInHrs,\n round(coalesce(sum(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm))*100/(175*60),0),4) 'Est Usage Percent' \nfrom production_details\nleft join machinemaster  on mcm_id = PD_MCID\nleft join tool_life on PD_TOOLID=TL_tool_id\nleft join components_tool on PD_TOOLID =ct_id\nleft join components on co_id = CT_COMPID\nwhere month(PD_DATE) ={month}\nand  year(PD_DATE) = {year}\nand mcm_name ={machinename}\ngroup by mcm_name,co_partno",
+      "variables": [
+        "month",
+        "year",
+        "machinename"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-19T10:08:03.078842+00:00",
+      "updatedAt": "2026-08-19T15:20:29.087058+00:00",
+      "drilldowns": [
+        {
+          "column": "PartNo",
+          "targetReportId": "95aa5de3-5d0f-4441-9521-bb8afd80a329",
+          "variables": {
+            "MachineName": {
+              "type": "column",
+              "value": "Machine"
+            },
+            "PartNo": {
+              "type": "column",
+              "value": "PartNo"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        },
+        {
+          "column": "Machine",
+          "targetReportId": "945e0119-4e21-4bc1-8a67-9b472d1d7983",
+          "variables": {
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            },
+            "MachineName": {
+              "type": "parentVariable",
+              "value": "machinename"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "945e0119-4e21-4bc1-8a67-9b472d1d7983",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Theoritical Run Child Report (Mc wise)",
+      "queryTemplate": "select MCM_Name Machine,DATE_FORMAT(pd_date, '%d-%m-%Y')'Prod Date',co_partno 'Part No',PD_PRODQTY Qty, CT_TOOLNO ToolNo, coalesce(TL_spm,0) SPM,CT_NO_OF_CAVITY Cavity, round(PD_PRODQTY/(CT_NO_OF_CAVITY*TL_spm)/60 ,4)DurationInHrs,OP_NAME Operator\nfrom production_details\nleft join machinemaster  on mcm_id = PD_MCID\nleft join tool_life on PD_TOOLID=TL_tool_id\nleft join components_tool on PD_TOOLID =ct_id\nleft join components on co_id = CT_COMPID\nleft join operators on OP_ID=PD_OPID\nwhere month(PD_DATE) ={month}\nand  year(PD_DATE) = {year}\nand mcm_name = {MachineName}",
+      "variables": [
+        "month",
+        "year",
+        "MachineName"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-19T15:18:24.108083+00:00",
+      "updatedAt": "2026-08-19T15:18:24.108083+00:00"
+    },
+    {
+      "id": "a5294396-ecab-4251-8a7d-55feb2f4a844",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Operator Contribution",
+      "queryTemplate": "select OP_NAME Operator,sum(PD_PRODQTY ) Qty, sum(PD_SFREJECT) RejectQty, sum(PD_SWQTY) SWQty, count(distinct(PD_MCID)) 'Distinct Machines', count(distinct(PD_PSID)) 'Distinct Parts'\nfrom  operators \nleft join production_details on OP_ID=PD_OPID\nwhere month(PD_DATE) = {month}\nand  year(PD_DATE) = {year}\ngroup by op_id\norder by OP_NAME;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-20T17:00:36.971252+00:00",
+      "updatedAt": "2026-09-01T04:06:24.318174+00:00",
+      "drilldowns": [
+        {
+          "column": "Operator",
+          "targetReportId": "3e5b0458-a5d2-4370-a7ad-049f7046b6f3",
+          "variables": {
+            "Operator": {
+              "type": "column",
+              "value": "Operator"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "3e5b0458-a5d2-4370-a7ad-049f7046b6f3",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Operator Efficiency Child",
+      "queryTemplate": "select op_Name Operator, CO_PARTNO PartNo,PD_LotNo LotNo,DATE_FORMAT(pd_date, '%d-%m-%Y')'Prod Date', PD_BATCHNO Batch,CT_TOOLNO Tool, PD_PRODQTY ProdQty,PD_SFREJECT SFReject, PD_SWQTY SWQty  from production_details\nleft join operators on op_id = pd_opid\nleft join components_tool on PD_TOOLID = ct_id\nleft join components on CT_COMPID = co_id\nwhere  month(PD_DATE) = {month}\nand  year(PD_DATE) = {year}\nand op_name={Operator};",
+      "variables": [
+        "month",
+        "year",
+        "Operator"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-20T17:17:50.001787+00:00",
+      "updatedAt": "2026-08-21T10:26:51.910118+00:00"
+    },
+    {
       "id": "e6f7a8b9-0c1d-4e2f-9a3b-4c5d6e7f8a9b",
       "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
       "name": "Component Stock Sections",
       "queryTemplate": "",
       "variables": [],
       "pinned": true,
-      "createdAt": "2026-08-23T07:55:34.725062+00:00",
-      "updatedAt": "2026-08-23T07:55:34.725062+00:00",
+      "createdAt": "2026-08-23T15:45:38.750375+00:00",
+      "updatedAt": "2026-08-23T15:45:38.750375+00:00",
       "handler": "component_stock"
+    },
+    {
+      "id": "97442017-fabf-4e25-a3cd-eb24637f8586",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Yearly Top 10 Dispatch",
+      "queryTemplate": "SELECT \n    rn As 'Ranking',\n    COALESCE(MAX(CASE WHEN ProdMonth = 4  THEN PartNo END),'') AS AprilPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 4  THEN TotalDisp END),'') AS AprilTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 5  THEN PartNo END),'') AS MayPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 5  THEN TotalDisp END),'') AS MayTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 6  THEN PartNo END),'') AS JunePartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 6  THEN TotalDisp END),'') AS JuneTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 7  THEN PartNo END),'') AS JulyPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 7  THEN TotalDisp END),'') AS JulyTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 8  THEN PartNo END),'') AS AugustPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 8  THEN TotalDisp END),'') AS AugustTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 9  THEN PartNo END),'') AS SeptemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 9  THEN TotalDisp END),'') AS SeptemberTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 10 THEN PartNo END),'') AS OctoberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 10 THEN TotalDisp END),'') AS OctoberTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 11 THEN PartNo END),'') AS NovemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 11 THEN TotalDisp END),'') AS NovemberTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 12 THEN PartNo END),'') AS DecemberPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 12 THEN TotalDisp END),'') AS DecemberTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 1  THEN PartNo END),'') AS JanuaryPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 1  THEN TotalDisp END),'') AS JanuaryTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 2  THEN PartNo END),'') AS FebruaryPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 2  THEN TotalDisp END),'') AS FebruaryTotalDisp,\n    COALESCE(MAX(CASE WHEN ProdMonth = 3  THEN PartNo END),'') AS MarchPartNo,\n    COALESCE(MAX(CASE WHEN ProdMonth = 3  THEN TotalDisp END),'') AS MarchTotalDisp\nFROM (\n    SELECT CO_PARTNO AS PartNo,\n        sm_month  AS ProdMonth,\n        sum(SD_LOTSIZE) AS TotalDisp,\n        ROW_NUMBER() OVER (\n            PARTITION BY sm_month  \n            ORDER BY SUM(SD_LOTSIZE) DESC\n        ) AS rn\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN schedule_details ON SC_Id = CS_SCID\ninner join schedule_master on sc_smid = sm_id\nINNER JOIN components ON CO_Id = SC_COMPID\nwhere SD_Status = 7\n and (sm_year= {year} \n    AND sm_month >= 4)\n       OR (sm_year =  {year}  + 1 \n       AND sm_month <= 3)\ngroup by co_partno,sm_month \norder by co_partno , sm_month \n) ranked\nWHERE rn <= 10\nGROUP BY rn\nORDER BY rn;",
+      "variables": [
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-24T10:26:02.058606+00:00",
+      "updatedAt": "2026-09-01T10:29:32.830949+00:00"
+    },
+    {
+      "id": "2955e0f2-300d-4bb9-8ae2-198ae9fb9fd9",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Produced but not Dispatched",
+      "queryTemplate": "select prod.partno,prod.CO_PARTNAME PartName,prod.totalprod from\n(SELECT \n        CO_PARTNO AS PartNo,CO_PARTNAME,\n        SUM(pd_prodqty) AS TotalProd        \n    FROM production_details\n    LEFT JOIN scheduled_production ON ps_id = pd_psid\n    LEFT JOIN components ON co_id = PS_PARENTCOMPID\n    WHERE YEAR(PD_DATE) =  {year} \n    AND MONTH(PD_DATE) = {month}     \n    GROUP BY CO_PARTNO,CO_PARTNAME) prod \nwhere prod.partno not in \n    (SELECT CO_PARTNO AS PartNo      \n       -- sum(SD_LOTSIZE) AS TotalDisp\nFROM scheduled_customerdispatch\nINNER JOIN scheduled_customer ON SD_CSID = CS_Id\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nwhere SD_Status = 7\n and YEAR(sd_dispatchdate) =  {year} \n    AND MONTH(sd_dispatchdate) >= {month}  \ngroup by co_partno) \norder by prod.totalprod desc;",
+      "variables": [
+        "year",
+        "month"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-24T15:07:30.776971+00:00",
+      "updatedAt": "2026-09-01T04:06:21.801934+00:00"
+    },
+    {
+      "id": "5a9e7852-c386-4192-a362-e7343e0991f1",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Non Moving Parts (Incl Child Parts)",
+      "queryTemplate": "SELECT \n    c.CO_PARTNO PartNo,c.CO_PARTName PartName, custcount.cnt  CustomerCount, Customers\nFROM components c\nLEFT JOIN (\n    SELECT \n        co.CO_PARTNO,co.CO_PARTNAME,\n        SUM(sd.SD_LOTSIZE) AS TotalDisp\n    FROM scheduled_customerdispatch sd\n    INNER JOIN scheduled_customer scust ON sd.SD_CSID = scust.CS_Id\n    INNER JOIN schedule_details sdet ON scust.CS_SCID = sdet.SC_Id\n    INNER JOIN components co ON sdet.SC_COMPID = co.CO_Id\n    WHERE sd.SD_Status = 7\n      AND sd.SD_DispatchDate BETWEEN {date1} AND {date2}\n    GROUP BY co.CO_PARTNO,co.CO_PARTNAME\n) disp ON c.CO_PARTNO = disp.CO_PARTNO\nleft join (SELECT CO_PARTNO, count(*)cnt, group_concat(CU_Name  SEPARATOR ',    ') Customers FROM components left join customer on  CO_CUSTID=cu_id  where  CO_ACTIVEYN = 'Y' \ngroup by CO_PARTNO) custcount on custcount.CO_PARTNO = c.CO_PARTNO\nWHERE c.CO_ACTIVEYN = 'Y'\n  AND disp.CO_PARTNO IS NULL\nGROUP BY c.CO_PARTNO,c.CO_PARTNAME\nORDER BY custcount.cnt desc,c.CO_PARTNO;",
+      "variables": [
+        "date1",
+        "date2"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-24T16:16:49.136012+00:00",
+      "updatedAt": "2026-09-01T04:06:09.091461+00:00"
+    },
+    {
+      "id": "1ae0c906-4ec0-460b-a3df-04b18634965c",
+      "groupId": "0c42a7f4-a0f1-432d-afa9-bd9c8d250e3f",
+      "name": "Material Scrap",
+      "queryTemplate": "select mt_name MaterialName, round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)', round( (sum(pd_prodqty/conVal) -sum(pd_prodqty*co_weight/1000)),2) as 'Theo Scrap'\n\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft  join materialtypemaster on mm_mtid = mt_id\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \n where Date(pd_date) between {fromDate} and {toDate}  \nand pd_ecsid = 8\ngroup by mt_name\norder by  mt_name;",
+      "variables": [
+        "fromDate",
+        "toDate"
+      ],
+      "pinned": true,
+      "createdAt": "2026-08-27T10:40:25.348033+00:00",
+      "updatedAt": "2026-08-28T13:14:39.924685+00:00",
+      "drilldowns": [
+        {
+          "column": "MaterialName",
+          "targetReportId": "e0f7c5da-0536-4d61-8418-c00414f2e101",
+          "variables": {
+            "fromDate": {
+              "type": "parentVariable",
+              "value": "fromDate"
+            },
+            "material": {
+              "type": "column",
+              "value": "MaterialName"
+            },
+            "toDate": {
+              "type": "parentVariable",
+              "value": "toDate"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "e0f7c5da-0536-4d61-8418-c00414f2e101",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Material Scrap Child",
+      "queryTemplate": "select mt_name MaterialName, MM_RawMtPartNo RawMaterial, round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)', round( (sum(pd_prodqty/conVal) -sum(pd_prodqty*co_weight/1000)),2) as 'Theo Scrap', COALESCE(MAX(ls.PL_kg),0) AS SysLoss, COALESCE(MAX(lp.PL_kg),0) AS ProdLoss\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft  join materialtypemaster on mm_mtid = mt_id\nLEFT JOIN rm_prodloss lp ON lp.pl_rdid = pd_rdid\n                            AND lp.pl_batch = PD_BATCHNO\n                            AND lp.PL_CATEGORY = 'P'\nLEFT JOIN rm_prodloss ls ON ls.pl_rdid = pd_rdid\n                            AND ls.pl_batch = PD_BATCHNO\n                            AND ls.PL_CATEGORY = 'S'\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id  \n where Date(pd_date) between {fromDate} and {toDate} \nand pd_ecsid = 8\nand mt_name ={material}\ngroup by MM_RawMtPartNo\norder by  MM_RawMtPartNo;",
+      "variables": [
+        "fromDate",
+        "toDate",
+        "material"
+      ],
+      "pinned": false,
+      "createdAt": "2026-08-27T10:41:45.077729+00:00",
+      "updatedAt": "2026-08-28T10:15:35.782228+00:00"
+    },
+    {
+      "id": "631da51a-a0b0-43b5-9462-f419835fb17a",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "RM below Minimum Stock",
+      "queryTemplate": "select mm_rawmtpartno RawMaterial,mm_minstock MinimumStock,round(coalesce(sum(storeQty),0),4) 'Qty At Store',\nround(coalesce(sum(RMPendingAtProd),0),4) 'PendingClearance At Prod'\nfrom (\nselect inQ.rd_rmid rm, inQ.batch Batch, \n\tinQ.RD_ACCEPTEDQTY , rmStore.Qty storeQty,\n\tcoalesce(ProdQty,0),coalesce(ThRMForProduction,0)ThRMForProduction ,\n    CASE \n    WHEN (coalesce(ProdQty,0)- coalesce(ThRMForProduction,0) - coalesce(PL_Kg,0)) < 0 \n    THEN 0 \n    ELSE (coalesce(ProdQty,0)- coalesce(ThRMForProduction,0) - coalesce(PL_Kg,0)) \nEND AS RMPendingAtProd\n\tFROM \n\t(select rd_rmid ,  batch , sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY from ( select rd_rmid , RD_BATCHNO batch ,ri_date, sum(RD_ACCEPTEDQTY  ) RD_ACCEPTEDQTY\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1\n\t\t left join materialmaster on mm_id = rd_rmid\n\t\t where RD_ACCEPTEDQTY>0\n\t\t group by RD_BATCHNO,ri_date,rd_rmid\n\t\t   union\n\t\tselect rmin.rd_rmid , rmin.RD_BATCHNO batch ,rmin.ri_date, rmin.RD_ACCEPTEDQTY   RD_ACCEPTEDQTY from \n\t\t(SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and rd_outwardid <>0 and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=2) rmin,\n\t\t (SELECT * FROM rm_inwarddetails,rm_inwardmaster where  ri_id = rd_riid and RI_MOVEMENT='O' and RI_MOVEMENTTYPE=2) rmout\n\t\t where rmin.rd_rmid <>rmout.rd_rmid and rmin.RD_BATCHNO = rmout.RD_BATCHNO  )tt  group by    rd_rmid ,  batch\n\t\t )inQ\n\t\t left join (SELECT RD_BATCHNO batch, RD_RMID\t,\t\n\t\t\tround(SUM(CASE WHEN ri_movement = 'I' THEN rd_Acceptedqty ELSE 0 END)\n\t\t\t\t- SUM(CASE WHEN ri_movement = 'O' THEN rd_Acceptedqty ELSE 0 END), 2 )AS Qty\n\t\tFROM rm_inwarddetails , rm_inwardmaster\n\t\twhere rd_riid=ri_id \n\t\tgroup by RD_BATCHNO,rd_rmid) rmStore on rmStore.batch= inQ.batch and rmStore.rd_rmid = inQ.rd_rmid\n\t\t left join (select RD_BATCHNO batch,rd_rmid,\n\tround(SUM(CASE WHEN ri_movement = 'O' THEN rd_qty ELSE 0 END)- SUM(CASE WHEN ri_movement = 'I' THEN rd_acceptedqty ELSE 0 END) ,2)AS ProdQty\n\tfrom rm_inwarddetails\n\t\t join rm_inwardmaster on rd_riid= ri_id \n\t\t where RI_MOVEMENTTYPE = 3\n\t\t group by RD_BATCHNO,rd_rmid\n\t\t ) prod on prod.batch = inQ.batch and prod.rd_rmid = inQ.rd_rmid\n\t\t \n\tleft join (  select pd_batchno batch, mm_id,round(coalesce(sum((PD_PRODQTY)/conVal),0),2)  ThRMForProduction ,  coalesce(sum(PD_SCRAPQTY),0) pdscrap from production_details\n\t\tleft join scheduled_production on pd_psid = ps_id \n\t\tleft join comp_scrapdetails on sd_refno =pd_id and sd_src=1\n\t\tleft join \n\t\t(SELECT ct_id,CT_COMPID,mm_id ,((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) as conVal FROM components_tool\n\t\t\t\tinner join materialmaster on CT_RMID = MM_Id inner join materialtypemaster on MM_MTID = MT_Id where   CT_PPC='Y' and CT_PITCH > 0 \n\t\t\t\tand CT_NO_OF_CAVITY > 0)t on CT_COMPID= PS_PARENTCOMPID  and ct_id = PD_TOOLID\n\t\t\t\tgroup by  pd_batchno,mm_id)prodQ on prodQ.batch=inQ.batch and prodQ.mm_id = inQ.rd_rmid\n\t\t\n\t\t\tleft join \n            (select PL_RMID,pl_batch,coalesce(sum(PL_kg),0) PL_kg from  rm_prodloss group by PL_RMID,pl_batch) lp on lp.PL_RMID =  inQ.rd_rmid and lp.pl_batch = inQ.batch  \n)res\nleft join materialmaster on  mm_id = rm\nwhere (RMPendingAtProd + storeQty)< mm_minstock\ngroup by rm\norder by mm_minstock desc",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-09-01T11:03:42.428336+00:00",
+      "updatedAt": "2026-09-10T11:29:17.534642+00:00"
+    },
+    {
+      "id": "43d344e7-157b-4e9e-aba8-2f68d94bcccc",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "Monthly Schedule - Dispatch",
+      "queryTemplate": "SELECT\n  sch.Customer,\n  sch.PartNo,\n  sch.scheduleCount,\n  sch.TotalScheduleQty,\n  COALESCE(disp.DispatchCount, 0) AS DispatchCount,\n  COALESCE(disp.TotaldispatchQty, 0) AS TotaldispatchQty\nFROM (\n  SELECT\n    CU_Name AS Customer,\n    CO_PARTNO AS PartNo,\n    CS_SCID,\n    CS_CUSTID,\n    SC_COMPID,\n    COUNT(*) AS scheduleCount,\n    SUM(CS_QTY) AS TotalScheduleQty\n  FROM scheduled_customer\n  LEFT JOIN schedule_details ON CS_SCID = SC_ID\n  LEFT JOIN schedule_master ON SC_SMID = SM_ID\n  LEFT JOIN components ON CO_ID = SC_COMPID\n  LEFT JOIN customer ON CS_CUSTID = CU_ID\n  WHERE SM_MONTH = {month}\n    AND SM_YEAR = {year} and CS_SCHEDULESTATE IN (1, 2, 3)\n  GROUP BY CS_SCID, CS_CUSTID, CU_Name, CO_PARTNO, SC_COMPID\n) sch\nLEFT JOIN (\n  SELECT\n    CS_SCID,\n    CS_CUSTID,\n    COUNT(*) AS DispatchCount,\n    COALESCE(SUM(SD_LOTSIZE), 0) AS TotaldispatchQty\n  FROM scheduled_customer\n  LEFT JOIN schedule_details ON CS_SCID = SC_ID\n  LEFT JOIN schedule_master ON SC_SMID = SM_ID\n  LEFT JOIN components ON CO_ID = SC_COMPID\n  LEFT JOIN customer ON CS_CUSTID = CU_ID\n  LEFT JOIN scheduled_customerdispatch\n    ON SD_CSID = CS_ID AND SD_STATUS = 7\n  WHERE SM_MONTH = {month}\n    AND SM_YEAR = {year}\n    AND CS_SCHEDULESTATE IN (1, 2, 3)\n    AND SD_DISPATCHDATE IS NOT NULL\n  GROUP BY CS_SCID, CS_CUSTID\n) disp ON disp.CS_SCID = sch.CS_SCID AND disp.CS_CUSTID = sch.CS_CUSTID\nORDER BY sch.Customer, sch.SC_COMPID;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-09-06T05:12:13.163715+00:00",
+      "updatedAt": "2026-09-14T14:50:24.508773+00:00",
+      "drilldowns": [
+        {
+          "column": "TotalScheduleQty",
+          "targetReportId": "4e0bd39a-e183-4bd6-9605-8c532ff2906d",
+          "variables": {
+            "co_partno": {
+              "type": "column",
+              "value": "PartNo"
+            },
+            "customer": {
+              "type": "column",
+              "value": "Customer"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        },
+        {
+          "column": "TotaldispatchQty",
+          "targetReportId": "aa08e241-eb36-4ac8-a1bd-09d5055b4312",
+          "variables": {
+            "co_partno": {
+              "type": "column",
+              "value": "PartNo"
+            },
+            "customer": {
+              "type": "column",
+              "value": "Customer"
+            },
+            "month": {
+              "type": "parentVariable",
+              "value": "month"
+            },
+            "year": {
+              "type": "parentVariable",
+              "value": "year"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "4e0bd39a-e183-4bd6-9605-8c532ff2906d",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Monthly Schedule-Dispatch ChildSchedule",
+      "queryTemplate": "select    CU_Name Customer, CO_PARTNO PartNo , Co_partName PartName,date_format(cs_date,'%d-%m-%Y') ScheduleDate, cs_qty ScheduleQty\nfrom scheduled_customer\n\tleft join schedule_details on cs_scid=sc_id\n\tleft join schedule_master on sc_smid= sm_id\n    left  join components on co_id = sc_compid\n    left join customer on CS_CUSTID = cu_id\n where sm_month = {month} and SM_YEAR= {year}  and trim(co_partno) ={co_partno}\nand trim(CU_Name) ={customer}",
+      "variables": [
+        "month",
+        "year",
+        "co_partno",
+        "customer"
+      ],
+      "pinned": false,
+      "createdAt": "2026-09-06T05:24:31.583271+00:00",
+      "updatedAt": "2026-09-07T11:47:01.358275+00:00"
+    },
+    {
+      "id": "aa08e241-eb36-4ac8-a1bd-09d5055b4312",
+      "groupId": "9524103c-99b2-48c3-959c-432fb6c62d9c",
+      "name": "Monthly Schedule-Dispatch ChildDispatch",
+      "queryTemplate": "select    CU_Name Customer, CO_PARTNO PartNo , Co_partName PartName,SD_INVOICE InvoiceNo, date_format(sd_dispatchdate,'%d-%m-%Y') DispatchDate, sd_lotsize DispatchQty\nfrom scheduled_customer\n\tleft join schedule_details on cs_scid=sc_id\n\tleft join schedule_master on sc_smid= sm_id\n    left  join components on co_id = sc_compid\n    left join customer on CS_CUSTID = cu_id\n    left join scheduled_customerdispatch on sd_csid = cs_id and SD_STATUS= 7\n where sm_month = {month} and SM_YEAR= {year}  and trim(co_partno) ={co_partno} and  trim(CU_Name) ={customer} and sd_dispatchdate is not null and CS_SCHEDULESTATE in ( 1,2,3)\n order by CU_Name,sc_compid;",
+      "variables": [
+        "month",
+        "year",
+        "co_partno",
+        "customer"
+      ],
+      "pinned": false,
+      "createdAt": "2026-09-06T05:36:42.381316+00:00",
+      "updatedAt": "2026-09-14T14:42:27+00:00"
+    },
+    {
+      "id": "19ff3b29-3eed-4870-9589-3832f72c1d9e",
+      "groupId": "b6873db9-b4b6-4baa-b175-2bec5286cba7",
+      "name": "Consolidated-Component Month-wise Production(Ref to Schedule)",
+      "queryTemplate": "select  CO_PARTNO 'Part No', MM_RawMtPartNo 'Raw Material',\n sum(pd_prodqty)  'No Of Comp', sum(PD_SFREJECT) 'SF Rej(Nos)',sum(PD_SWQTY) 'SU Wastage(Nos)',round(sum(PD_SCRAPQTY),2) 'Scrap(Kg)',\n round(sum(PD_QTYKG),2) 'Part Wt(Kg)', round(sum(pd_prodqty/conVal),2) 'Theo RM(Kg)', round(sum(pd_prodqty*co_weight/1000),2) 'Theo Part Wt', \n round( (sum(pd_prodqty/conVal) -sum(pd_prodqty*co_weight/1000)),2) as 'Theo Scrap'\nfrom production_details \nleft join materialmaster on mm_id = pd_rmid\nleft join scheduled_production on pd_psid= ps_id\nleft join components on PS_PARENTCOMPID = CO_ID\nleft join components_tool on PD_TOOLID = ct_id\nleft join schedule_master on sm_id = ps_smid\nleft join (\nSELECT CT_ID AS ctid,\n        ((1 / ((MT_Density * MM_Thickness) * MM_StripWidth)) * ((1000 * CT_NO_OF_CAVITY) / CT_Pitch)) AS conVal\n      FROM components_tool\n      INNER JOIN materialmaster ON CT_RMID = MM_Id\n      INNER JOIN materialtypemaster ON MM_MTID = MT_Id\n      WHERE CT_ActiveYN = 'Y' AND CT_PITCH > 0 AND CT_NO_OF_CAVITY > 0) toolConv on ctid = ct_id \nwhere sm_month = {month} and SM_YEAR= {year} and pd_ecsid = 8\ngroup by CO_PARTNO,MM_RawMtPartNo\norder by  CO_PARTNO;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": false,
+      "createdAt": "2026-09-06T08:50:28.600873+00:00",
+      "updatedAt": "2026-09-06T08:51:08.115806+00:00"
+    },
+    {
+      "id": "d784dc4c-6d69-4ec8-80aa-6d3610e47ac4",
+      "groupId": "c0d7c79a-3554-4648-adb3-00fee980f019",
+      "name": "Inwarded Raw Material after Inspection",
+      "queryTemplate": "select RI_REPORTNO as ReportNo,DATE_FORMAT(RI_DATE, '%M-%Y') as 'Month - Inward', DATE_FORMAT(RI_DATE, '%d-%m-%Y') as Date,\nss_Name as Supplier,RI_PO as PO, ri_invoice AS'Invoice No',MM_RawMtPartNo as RawMaterial, MT_Name as MaterialType, \nRD_BATCHNO as BatchNo,RD_QTY as 'Inward Qty',RD_RECEIVEDQTY as 'Received Qty',  RD_ACCEPTEDQTY as 'Accepted Qty',date_format(RI_LASTUPDATED,'%d-%m-%Y') as 'Inspection Date'\n from rm_inwarddetails left join rm_inwardmaster on RI_ID = RD_RIID\n left join materialmaster on RD_RMID = MM_Id\n left join supplier on RI_SUPPLIERID = ss_Id\n left join materialtypemaster on MM_mtId=mt_id\n where month(RI_DATE) = {month} and year(RI_DATE) ={year} and RI_REPORTNO like 'INV%' and RI_INSPECTIONYN = 'Y'  and RI_MOVEMENT='I' and RI_MOVEMENTTYPE=1;",
+      "variables": [
+        "month",
+        "year"
+      ],
+      "pinned": true,
+      "createdAt": "2026-09-08T07:18:53.372523+00:00",
+      "updatedAt": "2026-09-09T06:07:06.498927+00:00",
+      "noFormatColumns": [
+        "Invoice No"
+      ]
+    },
+    {
+      "id": "1a465d8c-89c2-4193-ab73-70c542b43494",
+      "groupId": "9b2f70ec-68b3-48b8-9f0f-9058308a4e3b",
+      "name": "temp",
+      "queryTemplate": "SELECT\n  CO_partNo AS 'Part No',\n  sum(CS_QTY) AS 'Requested Qty(Nos)',\nCOALESCE(sum(SD_LOTSIZE),0) \nFROM scheduled_customer\n LEFT join (select sd_csid, sum(coalesce(sd_lotsize,0)) sd_lotsize  from scheduled_customerdispatch where SD_STATUS=7 group by sd_csid) disp\n\t\ton disp.sd_csid = cs_id \nINNER JOIN customer ON CU_Id = CS_CUSTID\nINNER JOIN schedule_details ON SC_Id = CS_SCID\nINNER JOIN components ON CO_Id = SC_COMPID\nWHERE CS_SCHEDULESTATE in ( 1,2,3) \n AND CS_DATE between {from_date}\nAND {to_date}\ngroup by CO_partNo;",
+      "variables": [
+        "from_date",
+        "to_date"
+      ],
+      "pinned": false,
+      "createdAt": "2026-09-12T06:32:49.844648+00:00",
+      "updatedAt": "2026-09-14T13:35:47.123382+00:00"
+    },
+    {
+      "id": "f7a8b9c0-1d2e-4f3a-ab4c-5d6e7f8a9b0c",
+      "groupId": "1f90d55f-e538-4c49-91db-35d1960642eb",
+      "name": "NR DC Stock",
+      "queryTemplate": "",
+      "variables": [],
+      "pinned": true,
+      "createdAt": "2026-09-26T04:25:53.254786+00:00",
+      "updatedAt": "2026-09-26T04:25:53.254786+00:00",
+      "handler": "nr_dc_stock"
     }
   ]
 }

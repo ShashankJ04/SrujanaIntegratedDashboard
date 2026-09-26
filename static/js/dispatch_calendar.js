@@ -899,6 +899,11 @@
 
   async function fetchPayload() {
     const params = new URLSearchParams();
+    const loc = new URLSearchParams(window.location.search);
+    const month = Number(loc.get('month'));
+    const year = Number(loc.get('year'));
+    if (month >= 1 && month <= 12) params.set('month', String(month));
+    if (year >= 1900 && year <= 2100) params.set('year', String(year));
     const rowFilter = dispatchRowFilter();
     if (rowFilter) params.set('rowFilter', rowFilter);
     const qs = params.toString();
@@ -956,7 +961,13 @@
     const elTotal = document.getElementById('dc-kpi-dispatch-total-so');
     if (!elTotal || typeof window.Hub === 'undefined' || !window.Hub.api || !window.Hub.utils) return;
     try {
-      const summary = await window.Hub.api.getReportSummary();
+      const loc = new URLSearchParams(window.location.search);
+      const month = Number(loc.get('month'));
+      const year = Number(loc.get('year'));
+      const hasPeriod = month >= 1 && month <= 12 && year >= 1900 && year <= 2100;
+      const summary = hasPeriod
+        ? await window.Hub.api.getReportSummary(month, year)
+        : await window.Hub.api.getReportSummary();
       const dispatchKpi = summary.dispatch_kpi || {};
       const dispatchScheduled = Number(dispatchKpi.scheduled) || 0;
       const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;

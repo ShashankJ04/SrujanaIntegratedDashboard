@@ -110,6 +110,27 @@
     return v ? String(v).trim().toLowerCase() : '';
   }
 
+  function getPeriodFromLocation() {
+    const params = new URLSearchParams(window.location.search);
+    const month = Number(params.get('month'));
+    const year = Number(params.get('year'));
+    if (month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
+      return { month, year };
+    }
+    return null;
+  }
+
+  function periodVariablesForReport(report, period) {
+    if (!period || !report) return {};
+    const out = {};
+    (report.variables || []).forEach(function(v) {
+      const u = String(v).toUpperCase();
+      if (u === 'MONTH' || u.endsWith('_MONTH')) out[v] = String(period.month);
+      else if (u === 'YEAR' || u === 'Y' || u.endsWith('_YEAR')) out[v] = String(period.year);
+    });
+    return out;
+  }
+
   function rowValueCaseInsensitive(row, candidates) {
     if (!row) return undefined;
     const keys = Object.keys(row);
@@ -491,6 +512,36 @@
       return '<div class="rr-var"><input type="date" class="ti-input rr-var__ctl" id="' + id + '" value="' + today + '"' + tip + '></div>';
     }
     return '<div class="rr-var"><input type="text" class="ti-input rr-var__ctl" id="' + id + '" placeholder="' + ph + '" style="min-width:100px;max-width:160px"' + tip + '></div>';
+  }
+
+  function fillRunVariableInputs(values) {
+    const vals = values || {};
+    (currentRunReport.variables || []).forEach(v => {
+      const el = document.getElementById('runVar_' + v);
+      if (!el) return;
+      const raw = vals[v];
+      if (raw === null || raw === undefined || raw === '') return;
+      const str = String(raw);
+      el.value = str;
+      if (el.tagName === 'SELECT' && el.value !== str) {
+        const n = Number(str);
+        if (Number.isFinite(n)) el.value = String(n);
+      }
+    });
+  }
+
+  function renderRunVarsPanel(report, values, visible) {
+    const varsPanel = document.getElementById('runVarsPanel');
+    if (!varsPanel) return;
+    const vars = (report && report.variables) || [];
+    if (!visible || !vars.length) {
+      varsPanel.style.display = 'none';
+      varsPanel.innerHTML = '';
+      return;
+    }
+    varsPanel.style.display = 'flex';
+    varsPanel.innerHTML = vars.map(reportVarControlHtml).join('');
+    fillRunVariableInputs(values);
   }
 
   function resetRunVariableInputs() {
@@ -1139,18 +1190,10 @@
     document.getElementById('runExportBtn').style.display = '';
     document.getElementById('runClearBtn').style.display = '';
 
-    const varsPanel = document.getElementById('runVarsPanel');
-    const vars = report.variables || [];
-    if (vars.length) {
-      varsPanel.style.display = 'flex';
-      varsPanel.innerHTML = vars.map(reportVarControlHtml).join('');
-    } else {
-      varsPanel.style.display = 'none';
-      varsPanel.innerHTML = '';
-    }
+    renderRunVarsPanel(report, periodVariablesForReport(report, getPeriodFromLocation()), true);
 
     document.getElementById('runEmpty').style.display = 'none';
-    document.getElementById('runClearBtn').style.display = vars.length ? '' : 'none';
+    document.getElementById('runClearBtn').style.display = (report.variables || []).length ? '' : 'none';
     updateBackButtonState();
     syncReportsPicker(report.id);
   }
@@ -1213,9 +1256,7 @@
         searchValue: (document.getElementById('reportsGridSearch') || {}).value || '',
       });
       currentViewMode = 'drilldown';
-      const varsPanel = document.getElementById('runVarsPanel');
-      varsPanel.style.display = 'none';
-      varsPanel.innerHTML = '';
+      renderRunVarsPanel(currentRunReport, currentRunVariables, false);
       updateBackButtonState();
       await runReportExecute(child, variables, { title: `${child.name}` });
     } catch (err) {
@@ -1236,6 +1277,11 @@
     _activeNoFormatColumns = new Set(noFmtList.map(c => String(c).trim().toLowerCase()));
     document.getElementById('runReportTitle').textContent = prev.title || prev.report.name;
     document.getElementById('runReportSub').style.display = 'none';
+    renderRunVarsPanel(
+      prev.report,
+      currentRunVariables,
+      currentViewMode === 'root'
+    );
     renderResultGrid(prev.report, prev.result, prev.searchValue || '');
     updateBackButtonState();
     document.getElementById('runExportBtn').disabled = false;
@@ -1250,7 +1296,10 @@
     try {
       const report = await apiFetch('/api/reports/reports/' + encodeURIComponent(reportId));
       openRunReport(report);
-      if (canAutoRunReport(report)) await runReportExecute();
+      if (canAutoRunReport(report)) {
+        const periodVars = periodVariablesForReport(report, getPeriodFromLocation());
+        await runReportExecute(report, Object.keys(periodVars).length ? periodVars : undefined);
+      }
     } catch (err) {
       document.getElementById('runError').innerHTML = `<div class="rr-error__msg">⚠️ ${err.message || 'Failed to load report'}</div>`;
       document.getElementById('runError').style.display = 'block';

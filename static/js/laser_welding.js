@@ -818,7 +818,9 @@ window.LaserWeldingPage = (() => {
     let baseCols = 4;
     let html = '<table class="ti-table lw-detail-table"><thead><tr>';
     if (_tab === 'qa') {
-      html += '<th>Lot No</th><th>Passed</th><th>Scrap</th><th>Rework</th>';
+      baseCols = 7;
+      html += '<th>Lot No</th><th>Machine</th><th>Operators</th><th>Date</th>';
+      html += '<th>Passed</th><th>Scrap</th><th>Rework</th>';
     } else {
       html += '<th>Lot No</th>';
       html += '<th>Inspected QTY</th><th>QA</th><th>Scrap</th>';
@@ -840,6 +842,12 @@ window.LaserWeldingPage = (() => {
         const passed = Number(ln.qaQty) || 0;
         const scrap = Number(ln.scrapQty) || 0;
         const rework = Number(ln.reworkQty) || 0;
+        const machine = String(ln.producedMachineName || '').trim();
+        const operators = String(ln.producedOperatorNames || '').trim();
+        const produced = qaLotProducedLabel(ln);
+        html += `<td class="lw-detail-col-origin" title="${escapeAttr(machine)}">${escapeHtml(machine || '—')}</td>`;
+        html += `<td class="lw-detail-col-origin lw-detail-col-operators" title="${escapeAttr(operators)}">${escapeHtml(operators || '—')}</td>`;
+        html += `<td class="lw-detail-col-produced">${escapeHtml(produced || '—')}</td>`;
         html += `<td>${passed > 0 ? passed : '—'}</td>`;
         html += `<td>${scrap > 0 ? scrap : '—'}</td>`;
         html += `<td>${rework > 0 ? rework : '—'}</td>`;
@@ -1898,6 +1906,46 @@ window.LaserWeldingPage = (() => {
     return plantId != null && plantId !== '' ? ` · Unit ${plantId}` : '';
   }
 
+  function qaLotProducedLabel(lot) {
+    if (!lot) return '';
+    const dates = Array.isArray(lot.producedDates) && lot.producedDates.length
+      ? lot.producedDates
+      : (lot.producedDate ? [lot.producedDate] : []);
+    if (!dates.length) return '';
+    const first = isoToDisplayDate(dates[0]) || dates[0];
+    if (dates.length === 1) return first;
+    const last = isoToDisplayDate(dates[dates.length - 1]) || dates[dates.length - 1];
+    return first === last ? first : `${first} – ${last}`;
+  }
+
+  function qaLotOriginHint(lot) {
+    if (!lot) return '';
+    return [lot.machineName, lot.operatorNames, qaLotProducedLabel(lot)]
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  function qaLotOriginHtml(lot) {
+    if (!lot) return '';
+    const machine = String(lot.machineName || lot.producedMachineName || '').trim();
+    const operators = String(lot.operatorNames || lot.producedOperatorNames || '').trim();
+    const produced = qaLotProducedLabel(lot);
+    if (!machine && !operators && !produced) return '';
+    const field = (label, value) => {
+      const text = value || '—';
+      return `<div class="lw-qa-origin-field">`
+        + `<span class="lw-qa-origin-label">${label}</span>`
+        + `<span class="lw-qa-origin-value" title="${escapeAttr(text)}">${escapeHtml(text)}</span>`
+        + '</div>';
+    };
+    return '<div class="lw-qa-lot-origin">'
+      + field('Machine', machine)
+      + field('Operators', operators)
+      + field('Date', produced)
+      + '</div>';
+  }
+
   function prodLotOptionsHtml(partNo, selectedLot, usedLots, selectedTargetId, usedTargetIds, selectedPlantId) {
     if (_prodModalMode === 'sa_cleaning' || _prodModalMode === 'lw_cleaning' || _prodModalMode === 'lw_inspection') {
       const lots = _cleaningLotsCache[cleaningLotsCacheKey()] || [];
@@ -1929,7 +1977,9 @@ window.LaserWeldingPage = (() => {
         const sel = lotId === Number(selectedTargetId) ? ' selected' : '';
         const qa = Number(l.totalQa || l.noOfComp) || 0;
         const unitLabel = lotUnitLabel(l.plantId);
-        html += `<option value="${lotId}"${sel}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)} (QA: ${qa})</option>`;
+        const hint = qaLotOriginHint(l);
+        const title = hint ? ` title="${escapeAttr(hint)}"` : '';
+        html += `<option value="${lotId}"${sel}${title}>${escapeHtml(lotNo)}${escapeHtml(unitLabel)} (QA: ${qa})</option>`;
       });
       return html;
     }
@@ -2298,10 +2348,13 @@ window.LaserWeldingPage = (() => {
           const passed = Number(ln.qaPassed) || 0;
           const scrap = Number(ln.scrapQty) || 0;
           const rework = Number(ln.reworkQty) || 0;
-          html += '<tr>';
-          html += `<td class="lw-prod-col-lot"><select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
+          const qaLot = (_qaLotsCache[partNo] || []).find(l => Number(l.lotId) === Number(ln.targetLotId));
+          html += '<tr class="lw-qa-data-row">';
+          html += `<td class="lw-prod-col-lot">`;
+          html += `<select class="ti-input lw-prod-line-lot" data-idx="${idx}">`;
           html += prodLotOptionsHtml(partNo, ln.sourceLotNo, usedLots, ln.targetLotId, usedTargetIds, ln.plantId);
-          html += '</select></td>';
+          html += '</select>';
+          html += '</td>';
           html += `<td class="lw-prod-col-avail lw-prod-line-comp" data-idx="${idx}">${max || '—'}</td>`;
           html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-passed" data-idx="${idx}" min="0" max="${max}" value="${passed}" /></td>`;
           html += `<td class="lw-prod-col-num"><input type="number" class="ti-input lw-prod-line-scrap" data-idx="${idx}" min="0" value="${scrap}" /></td>`;
@@ -2312,6 +2365,8 @@ window.LaserWeldingPage = (() => {
             ? `<td class="lw-prod-col-action"><button type="button" class="ti-btn ti-btn-outline ti-btn-xs lw-prod-line-remove" data-idx="${idx}">✕</button></td>`
             : '<td class="lw-prod-col-action"></td>';
           html += '</tr>';
+          const origin = qaLotOriginHtml(qaLot);
+          if (origin) html += `<tr class="lw-qa-origin-row"><td colspan="8">${origin}</td></tr>`;
           return;
         }
 
@@ -2423,6 +2478,7 @@ window.LaserWeldingPage = (() => {
 
     const mode = prodModalModeForTab();
     _prodModalMode = mode;
+    overlay.querySelector('.lw-production-modal')?.classList.toggle('lw-production-modal--qa', mode === 'qa');
     _prodModalDraftLineId = row?.draftLineId || row?.lineId || null;
     _prodModalBomId = isCleaningTab() ? (row?.bomId || bomIdForPartNo(row?.partNumber)) : null;
     _prodModalSubAssemblyPartNo = isCleaningTab() ? cleaningSubAssemblyPartNo(row) : null;
@@ -2515,6 +2571,7 @@ window.LaserWeldingPage = (() => {
     _prodModalOpenSeq += 1;
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
+    overlay.querySelector('.lw-production-modal')?.classList.remove('lw-production-modal--qa');
     _prodModalLines = [];
     _prodModalMode = 'production';
     _prodModalDraftLineId = null;

@@ -215,7 +215,11 @@ def _fetch_opening_stock_map(month: int, year: int) -> Dict[str, float]:
 
 
 def _fetch_daily_production_map(month: int, year: int) -> Dict[str, Dict[str, float]]:
-    """Daily produced qty per part (Date-wise Monthly Production report source)."""
+    """Daily produced qty per part for the month's production schedule.
+
+    Attributes production to SM_MONTH/SM_YEAR (same as Inventory produced_qty),
+    not the calendar booking date on PD_DATE.
+    """
     rows = fetch_all(
         """
         SELECT
@@ -224,9 +228,12 @@ def _fetch_daily_production_map(month: int, year: int) -> Dict[str, Dict[str, fl
             SUM(pd.PD_PRODQTY) AS producedQty
         FROM production_details pd
         INNER JOIN scheduled_production sp ON pd.PD_PSID = sp.PS_ID
+        INNER JOIN schedule_master sm ON sm.SM_Id = sp.PS_SMID
         INNER JOIN components c ON sp.PS_PARENTCOMPID = c.CO_ID
-        WHERE MONTH(pd.PD_DATE) = %s
-          AND YEAR(pd.PD_DATE) = %s AND pd.PD_ECSID != 6
+        WHERE sm.SM_MONTH = %s
+          AND sm.SM_YEAR = %s
+          AND sm.SM_Status = 'S'
+          AND pd.PD_ECSID = 8
         GROUP BY TRIM(c.CO_PARTNO), DAY(pd.PD_DATE)
         """,
         (month, year),
@@ -720,16 +727,14 @@ def get_production_kpi(month: int, year: int) -> Dict[str, Any]:
 
 
 def get_daily_production_vs_target(month: int, year: int) -> Dict[str, Any]:
-    """Daily produced qty vs average target (monthly schedule ÷ days in month)."""
+    """Daily produced qty vs average target (monthly planned production ÷ days in month)."""
     from datetime import date as date_cls
 
-    from .dispatch_calendar import get_dispatch_kpi
-
-    kpi = get_dispatch_kpi(month, year)
-    scheduled_total = float(kpi.get("scheduled") or 0.0)
+    kpi = get_production_kpi(month, year)
+    planned_total = float(kpi.get("planned") or 0.0)
     days_in_month = calendar.monthrange(year, month)[1]
     avg_daily_target = (
-        scheduled_total / days_in_month if scheduled_total > 0 and days_in_month > 0 else 0.0
+        planned_total / days_in_month if planned_total > 0 and days_in_month > 0 else 0.0
     )
 
     daily_map = _fetch_daily_production_map(month, year)
@@ -767,7 +772,7 @@ def get_daily_production_vs_target(month: int, year: int) -> Dict[str, Any]:
         "month": month,
         "daysInMonth": days_in_month,
         "asOfDay": as_of_day,
-        "scheduledTotal": round(scheduled_total, 2),
+        "plannedTotal": round(planned_total, 2),
         "avgDailyTarget": round(avg_daily_target, 2),
         "days": days,
     }

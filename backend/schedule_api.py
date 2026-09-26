@@ -57,7 +57,7 @@ def schedule_export(date_param):
             JOIN customer cu           ON c.CO_CUSTID  = cu.CU_Id
         WHERE sm.SM_MONTH = %s
             AND sm.SM_YEAR  = %s
-            AND sc.CS_SCHEDULESTATE IN (1, 2)
+            AND sc.CS_SCHEDULESTATE IN (1, 2, 3)
         GROUP BY cu.CU_Name, c.CO_PARTNO, DAY(sc.CS_DATE)
         ORDER BY cu.CU_Name, c.CO_PARTNO, DAY(sc.CS_DATE)
         """,

@@ -65,8 +65,14 @@
 <!-- ═══ QUANTITY PROGRESS (full width) ═══ -->
 <div class="ti-monitor-row ti-monitor-row--qty">
   <div class="ti-monitor ti-monitor--qty">
-    <div class="ti-monitor-qty-grid">
+    <div class="ti-monitor-qty-header">
       <div class="ti-monitor-qty-title">Quantity Progress</div>
+      <div class="ti-overview-kpi-period" role="group" aria-label="Monthly KPI period">
+        <label class="ti-overview-kpi-period__label" for="overview-kpi-month">Month</label>
+        <select id="overview-kpi-month" class="ti-select ti-select--compact" aria-label="Select month for Quantity, Dispatch, Parts and BOM KPIs"></select>
+      </div>
+    </div>
+    <div class="ti-monitor-qty-grid">
       <div class="ti-monitor-metric-cell">
         <div class="ti-monitor-metric-label">Planned</div>
         <div class="ti-monitor-metric-value" id="mon-total-so">–</div>
@@ -275,7 +281,7 @@
 </div>
 
 <!-- ═══ RM Charts Row 1 ═══ -->
-<div class="ti-grid-3 ti-mb-24">
+<!-- <div class="ti-grid-3 ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header"><div class="ti-card-title">Top RM Requirement</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-top-rm-requirement"></div></div>
@@ -288,10 +294,10 @@
     <div class="ti-card-header"><div class="ti-card-title">Material Mix</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-material-mix"></div></div>
   </div>
-</div>
+</div> -->
 
 <!-- ═══ RM Charts Row 2 ═══ -->
-<div class="ti-grid-3 ti-mb-24">
+<!-- <div class="ti-grid-3 ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header"><div class="ti-card-title">Stock vs Requirement</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-rm-stock-vs-req"></div></div>
@@ -304,17 +310,31 @@
     <div class="ti-card-header"><div class="ti-card-title">RM Balance (Kgs)</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-top-rm-balance"></div></div>
   </div>
-</div>
+</div> -->
 
 <!-- ═══ Full Width Charts ═══ -->
-<div class="ti-grid-full ti-mb-24">
+<!-- <div class="ti-grid-full ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header"><div class="ti-card-title">RM Shortage (by Part)</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-rm-shortage-actual"></div></div>
   </div>
+</div> -->
+
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">RM Utilized by Material</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-material-rm-utilized"></div></div>
+  </div>
 </div>
 
-<div class="ti-grid-3 ti-mb-24">
+<div class="ti-grid-full ti-mb-24">
+  <div class="ti-card">
+    <div class="ti-card-header"><div class="ti-card-title">Pending Treemap</div></div>
+    <div class="ti-card-body ti-card-body--chart"><div id="chart-pending-treemap"></div></div>
+  </div>
+</div>
+
+<!-- <div class="ti-grid-3 ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header"><div class="ti-card-title">Pending Treemap</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-pending-treemap"></div></div>
@@ -327,23 +347,23 @@
     <div class="ti-card-header"><div class="ti-card-title">Top Shortages (Chart)</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-top-pending"></div></div>
   </div>
-</div>
+</div> -->
 
-<div class="ti-grid-full ti-mb-24">
+<!-- <div class="ti-grid-full ti-mb-24">
   <div class="ti-card">
     <div class="ti-card-header"><div class="ti-card-title">Requirement vs Balance</div></div>
     <div class="ti-card-body ti-card-body--chart"><div id="chart-production-vs-req"></div></div>
   </div>
-</div>
+</div> -->
 
 <!-- ═══ URGENT ITEMS ═══ -->
-<div class="ti-urgent" id="urgent-panel" style="display:none">
+<!-- <div class="ti-urgent" id="urgent-panel" style="display:none">
   <div class="ti-urgent-title">🚨 Urgent Action Items</div>
   <div id="urgent-items"></div>
-</div>
+</div> -->
 
 <!-- ═══ TOP PENDING TABLE (using DataGrid) ═══ -->
-<div id="pending-grid-container" class="ti-mb-24" style="display:none"></div>
+<!-- <div id="pending-grid-container" class="ti-mb-24" style="display:none"></div> -->
 
 <script>
 (async function loadOverview() {
@@ -379,45 +399,111 @@
     if (el) el.textContent = text;
   }
 
-  // ── Monitor cards (Quantity + Parts Progress) ──
-  try {
-    const summary = await Hub.api.getReportSummary();
+  const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    try {
-      const ytd = summary.ytd_kpi || {};
-      const ytdDistinct = ytd.distinct || {};
-      const ytdReports = ytdDistinct.reports || {};
-      setOverviewText('ytd-as-on-label', formatAsOnDate(ytd.periodEnd));
-      setOverviewText('ytd-scheduled', formatCrores(ytd.scheduled));
-      setOverviewText('ytd-planned', formatCrores(ytd.planned));
-      setOverviewText('ytd-produced', formatCrores(ytd.produced));
-      setOverviewText('ytd-dispatched', formatCrores(ytd.dispatched));
-      setOverviewText('ytd-rm-inward', formatTons(ytd.rmInwardKg));
-      setOverviewText('ytd-tool-breakdown', Hub.utils.formatIndian(ytd.toolBreakdown || 0));
-      setOverviewText('ytd-distinct-comp', Hub.utils.formatIndian(ytdDistinct.components || 0));
-      setOverviewText('ytd-distinct-tool', Hub.utils.formatIndian(ytdDistinct.tools || 0));
-      setOverviewText('ytd-distinct-cust', Hub.utils.formatIndian(ytdDistinct.customers || 0));
-      setOverviewText('ytd-distinct-rm', Hub.utils.formatIndian(ytdDistinct.rawMaterials || 0));
+  /** Financial-year months Apr→Mar (same order as Yearly Production). */
+  function buildFyMonthOptions(refDate) {
+    const d = refDate || new Date();
+    const calMonth = d.getMonth() + 1;
+    const calYear = d.getFullYear();
+    const fyStart = calMonth >= 4 ? calYear : calYear - 1;
+    const order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+    return order.map((mn) => {
+      const yr = mn >= 4 ? fyStart : fyStart + 1;
+      return {
+        value: `${yr}-${String(mn).padStart(2, '0')}`,
+        label: `${MONTH_SHORT[mn - 1]} ${yr}`,
+        month: mn,
+        year: yr,
+      };
+    });
+  }
 
-      [
-        ['ytd-tool-breakdown-link', ytd.toolBreakdownReportId || '88a9ed8d-8131-44cb-8fef-fc2782449986'],
-        ['ytd-distinct-comp-link', ytdReports.components || '5749a7ed-e4be-4b41-a73b-78bd416f46b2'],
-        ['ytd-distinct-tool-link', ytdReports.tools || 'ed95ec7b-1c11-4e58-8adb-524421ea224c'],
-        ['ytd-distinct-cust-link', ytdReports.customers || '3b289936-891a-4770-b669-b8b724672431'],
-        ['ytd-distinct-rm-link', ytdReports.rawMaterials || '51a29798-a36d-4933-bbfe-05e4097ba83d'],
-      ].forEach(([id, reportId]) => {
-        const el = document.getElementById(id);
-        if (el && typeof Hub.navigate === 'function') {
-          el.addEventListener('click', (e) => {
-            e.preventDefault();
-            Hub.navigate('reports', { reportId });
-          });
-        }
-      });
-    } catch (ytdErr) {
-      console.error('YTD KPI load error:', ytdErr);
+  function parsePeriodValue(value) {
+    const m = String(value || '').match(/^(\d{4})-(\d{2})$/);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    if (!year || month < 1 || month > 12) return null;
+    return { year, month };
+  }
+
+  function getOverviewKpiPeriod() {
+    const monthSel = document.getElementById('overview-kpi-month');
+    const parsed = parsePeriodValue(monthSel && monthSel.value);
+    if (parsed) return parsed;
+    const now = new Date();
+    return { month: now.getMonth() + 1, year: now.getFullYear() };
+  }
+
+  function overviewNav(section, opts = {}) {
+    const p = getOverviewKpiPeriod();
+    Hub.navigate(section, { ...opts, month: p.month, year: p.year });
+  }
+
+  function syncOverviewNavHref(el, section, opts = {}) {
+    if (!el) return;
+    const p = getOverviewKpiPeriod();
+    let url = `/app?section=${encodeURIComponent(section)}`;
+    if (section === 'reports' && opts.reportId) {
+      url += '&report=' + encodeURIComponent(opts.reportId);
     }
+    if (opts.rowFilter) url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
+    url += '&month=' + p.month + '&year=' + p.year;
+    el.href = url;
+  }
 
+  function initOverviewMonthFilter() {
+    const sel = document.getElementById('overview-kpi-month');
+    if (!sel) return null;
+    const now = new Date();
+    const options = buildFyMonthOptions(now);
+    const currentValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    sel.innerHTML = options.map((o) => {
+      const selected = o.value === currentValue ? ' selected' : '';
+      return `<option value="${o.value}"${selected}>${o.label}</option>`;
+    }).join('');
+    if (![...sel.options].some((o) => o.value === currentValue)) {
+      sel.value = options[0] ? options[0].value : '';
+    }
+    return sel;
+  }
+
+  function applyYtdKpis(summary) {
+    const ytd = summary.ytd_kpi || {};
+    const ytdDistinct = ytd.distinct || {};
+    const ytdReports = ytdDistinct.reports || {};
+    setOverviewText('ytd-as-on-label', formatAsOnDate(ytd.periodEnd));
+    setOverviewText('ytd-scheduled', formatCrores(ytd.scheduled));
+    setOverviewText('ytd-planned', formatCrores(ytd.planned));
+    setOverviewText('ytd-produced', formatCrores(ytd.produced));
+    setOverviewText('ytd-dispatched', formatCrores(ytd.dispatched));
+    setOverviewText('ytd-rm-inward', formatTons(ytd.rmInwardKg));
+    setOverviewText('ytd-tool-breakdown', Hub.utils.formatIndian(ytd.toolBreakdown || 0));
+    setOverviewText('ytd-distinct-comp', Hub.utils.formatIndian(ytdDistinct.components || 0));
+    setOverviewText('ytd-distinct-tool', Hub.utils.formatIndian(ytdDistinct.tools || 0));
+    setOverviewText('ytd-distinct-cust', Hub.utils.formatIndian(ytdDistinct.customers || 0));
+    setOverviewText('ytd-distinct-rm', Hub.utils.formatIndian(ytdDistinct.rawMaterials || 0));
+
+    [
+      ['ytd-tool-breakdown-link', ytd.toolBreakdownReportId || '88a9ed8d-8131-44cb-8fef-fc2782449986'],
+      ['ytd-distinct-comp-link', ytdReports.components || '5749a7ed-e4be-4b41-a73b-78bd416f46b2'],
+      ['ytd-distinct-tool-link', ytdReports.tools || 'ed95ec7b-1c11-4e58-8adb-524421ea224c'],
+      ['ytd-distinct-cust-link', ytdReports.customers || '3b289936-891a-4770-b669-b8b724672431'],
+      ['ytd-distinct-rm-link', ytdReports.rawMaterials || '51a29798-a36d-4933-bbfe-05e4097ba83d'],
+    ].forEach(([id, reportId]) => {
+      const el = document.getElementById(id);
+      if (el && typeof Hub.navigate === 'function' && !el.dataset.boundNav) {
+        el.dataset.boundNav = '1';
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          Hub.navigate('reports', { reportId });
+        });
+      }
+    });
+  }
+
+  function applyMonthlyKpis(summary) {
     const dispatchKpi = summary.dispatch_kpi || {};
     const dispatchScheduled = Number(dispatchKpi.scheduled) || 0;
     const bomDeliveryKpi = summary.bom_delivery_kpi || {};
@@ -428,20 +514,32 @@
     const productionKpi = summary.production_kpi || {};
     const pcPlanned = Number(productionKpi.planned) || 0;
     const pcProduced = Number(productionKpi.produced) || 0;
-    const totalPendingQty = Number(summary.total_pending_qty) || 0;
+    const totalPendingQty = Number(
+      productionKpi.balance != null ? productionKpi.balance : summary.total_pending_qty
+    ) || 0;
     const partsTotal = Number(summary.parts_total) || 0;
     const partsCompleted = Number(summary.parts_completed) || 0;
     const partsPending = Number(summary.parts_pending) || 0;
     const dispatchQtyMtd = Number(summary.dispatch_qty_mtd) || 0;
     const dispatchInvoiceCountMtd = Number(summary.dispatch_invoice_count_mtd) || 0;
+    const periodMonth = Number(summary.month) || (new Date().getMonth() + 1);
+    const periodYear = Number(summary.year) || new Date().getFullYear();
+    const periodLabel = `${MONTH_SHORT[periodMonth - 1]} ${periodYear}`;
+    const isCurrent =
+      periodMonth === (new Date().getMonth() + 1) &&
+      periodYear === new Date().getFullYear();
 
-    // Quantity monitor — aligned with Production Calendar KPI
     document.getElementById('mon-total-so').textContent = Hub.utils.formatIndian(pcPlanned);
     document.getElementById('mon-produced-qty').textContent = Hub.utils.formatIndian(pcProduced);
     document.getElementById('mon-pending-qty').textContent = Hub.utils.formatIndian(totalPendingQty);
 
-    const actualProduced = pcPlanned - totalPendingQty;
-    const excessProduction = pcProduced - actualProduced;
+    // Prefer Yearly Production ValidActual / Excess when present.
+    const actualProduced = productionKpi.validActual != null
+      ? Number(productionKpi.validActual) || 0
+      : (pcPlanned - totalPendingQty);
+    const excessProduction = productionKpi.excess != null
+      ? Number(productionKpi.excess) || 0
+      : (pcProduced - actualProduced);
     document.getElementById('mon-actual-produced-qty').textContent = Hub.utils.formatIndian(actualProduced);
     document.getElementById('mon-excess-produced-qty').textContent = Hub.utils.formatIndian(excessProduction);
 
@@ -457,67 +555,62 @@
         ? Math.round((excessProduction / pcPlanned) * 100) + '%'
         : '–';
     }
-    
+
     const qtyPctRaw = pcPlanned > 0 ? ((pcPlanned - totalPendingQty) / pcPlanned) * 100 : 0;
     const qtyPct = Math.round(Number.isFinite(qtyPctRaw) ? qtyPctRaw : 0);
     const qtyBar = document.getElementById('mon-qty-bar');
     qtyBar.style.width = Math.min(100, Math.max(0, qtyPct)) + '%';
     qtyBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, qtyPct) / 100) * 120));
 
-    // Parts monitor
     document.getElementById('mon-parts-total').textContent = Hub.utils.formatIndian(partsTotal);
     document.getElementById('mon-parts-completed').textContent = Hub.utils.formatIndian(partsCompleted);
     document.getElementById('mon-parts-pending').textContent = Hub.utils.formatIndian(partsPending);
 
-    const partsPendingLink = document.getElementById('mon-parts-pending-link');
-    if (partsPendingLink && typeof Hub.navigate === 'function') {
-      partsPendingLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('inventory', { rowFilter: 'pending' });
-      });
-    }
-    const qtyPendingLink = document.getElementById('mon-qty-pending-link');
-    if (qtyPendingLink && typeof Hub.navigate === 'function') {
-      qtyPendingLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('inventory', { rowFilter: 'pending' });
-      });
-    }
-    const excessProducedLink = document.getElementById('mon-excess-produced-link');
-    if (excessProducedLink && typeof Hub.navigate === 'function') {
-      excessProducedLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('inventory', { rowFilter: 'excess' });
-      });
-    }
-    const dispatchBalanceLink = document.getElementById('mon-dispatch-balance-link');
-    if (dispatchBalanceLink && typeof Hub.navigate === 'function') {
-      dispatchBalanceLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('dispatch-calendar', { rowFilter: 'balance' });
-      });
-    }
-    const bomBalanceLink = document.getElementById('mon-bom-balance-link');
-    if (bomBalanceLink && typeof Hub.navigate === 'function') {
-      bomBalanceLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('reports', { reportId: bomReportId, rowFilter: 'balance' });
-      });
-    }
-    const bomScheduledLink = document.getElementById('mon-bom-scheduled-link');
-    if (bomScheduledLink && typeof Hub.navigate === 'function') {
-      bomScheduledLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        Hub.navigate('reports', { reportId: bomPivotReportId });
-      });
-    }
+    const bindNavOnce = (id, handler) => {
+      const el = document.getElementById(id);
+      if (el && typeof Hub.navigate === 'function' && !el.dataset.boundNav) {
+        el.dataset.boundNav = '1';
+        el.addEventListener('click', handler);
+      }
+    };
+    bindNavOnce('mon-parts-pending-link', (e) => {
+      e.preventDefault();
+      overviewNav('inventory', { rowFilter: 'pending' });
+    });
+    bindNavOnce('mon-qty-pending-link', (e) => {
+      e.preventDefault();
+      overviewNav('inventory', { rowFilter: 'pending' });
+    });
+    bindNavOnce('mon-excess-produced-link', (e) => {
+      e.preventDefault();
+      overviewNav('inventory', { rowFilter: 'excess' });
+    });
+    bindNavOnce('mon-dispatch-balance-link', (e) => {
+      e.preventDefault();
+      overviewNav('dispatch-calendar', { rowFilter: 'balance' });
+    });
+    bindNavOnce('mon-bom-balance-link', (e) => {
+      e.preventDefault();
+      overviewNav('reports', { reportId: bomReportId, rowFilter: 'balance' });
+    });
+    bindNavOnce('mon-bom-scheduled-link', (e) => {
+      e.preventDefault();
+      overviewNav('reports', { reportId: bomPivotReportId });
+    });
+
+    syncOverviewNavHref(document.getElementById('mon-parts-pending-link'), 'inventory', { rowFilter: 'pending' });
+    syncOverviewNavHref(document.getElementById('mon-qty-pending-link'), 'inventory', { rowFilter: 'pending' });
+    syncOverviewNavHref(document.getElementById('mon-excess-produced-link'), 'inventory', { rowFilter: 'excess' });
+    syncOverviewNavHref(document.getElementById('mon-dispatch-balance-link'), 'dispatch-calendar', { rowFilter: 'balance' });
+    syncOverviewNavHref(document.getElementById('mon-bom-balance-link'), 'reports', { reportId: bomReportId, rowFilter: 'balance' });
+    syncOverviewNavHref(document.getElementById('mon-bom-scheduled-link'), 'reports', { reportId: bomPivotReportId });
+
     const partsPct = partsTotal > 0 ? Math.round((partsCompleted / partsTotal) * 100) : 0;
     document.getElementById('mon-parts-pct').textContent = partsPct + '%';
     const partsBar = document.getElementById('mon-parts-bar');
     partsBar.style.width = Math.min(100, Math.max(0, partsPct)) + '%';
     partsBar.style.setProperty('--monitor-hue', Math.round((partsPct / 100) * 120));
 
-    // Dispatch monitor — aligned with Dispatch Calendar KPI
     const dispatchBalance = Math.max(dispatchScheduled - dispatchQtyMtd, 0);
     document.getElementById('mon-dispatch-scheduled').textContent = Hub.utils.formatIndian(dispatchScheduled);
     document.getElementById('mon-dispatch-qty').textContent = Hub.utils.formatIndian(dispatchQtyMtd);
@@ -527,14 +620,21 @@
     const dispatchBar = document.getElementById('mon-dispatch-bar');
     dispatchBar.style.width = Math.min(100, Math.max(0, dispatchPct)) + '%';
     dispatchBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, dispatchPct) / 100) * 120));
+    const dispatchTitle = document.querySelector('#mon-dispatch-pct')?.closest('.ti-monitor')?.querySelector('.ti-monitor-title');
+    if (dispatchTitle) {
+      dispatchTitle.textContent = isCurrent ? 'Dispatch (MTD)' : `Dispatch (${periodLabel})`;
+    }
     const dispatchFootnote = document.getElementById('mon-dispatch-footnote');
     if (dispatchFootnote) {
-      dispatchFootnote.textContent = dispatchInvoiceCountMtd > 0
-        ? `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (MTD)`
-        : 'Month-to-date dispatch vs total scheduled quantity';
+      if (dispatchInvoiceCountMtd > 0) {
+        dispatchFootnote.textContent = `${Hub.utils.formatIndian(dispatchInvoiceCountMtd)} completed invoices (${isCurrent ? 'MTD' : periodLabel})`;
+      } else {
+        dispatchFootnote.textContent = isCurrent
+          ? 'Month-to-date dispatch vs total scheduled quantity'
+          : `${periodLabel} dispatch vs total scheduled quantity`;
+      }
     }
 
-    // BOM delivery monitor — aligned with BOM Dispatch Details report
     const bomBalance = Math.max(bomScheduled - bomDelivered, 0);
     document.getElementById('mon-bom-scheduled').textContent = Hub.utils.formatIndian(bomScheduled);
     document.getElementById('mon-bom-delivered').textContent = Hub.utils.formatIndian(bomDelivered);
@@ -544,6 +644,52 @@
     const bomBar = document.getElementById('mon-bom-bar');
     bomBar.style.width = Math.min(100, Math.max(0, bomPct)) + '%';
     bomBar.style.setProperty('--monitor-hue', Math.round((Math.min(100, bomPct) / 100) * 120));
+    const bomFootnote = document.getElementById('mon-bom-footnote');
+    if (bomFootnote) {
+      bomFootnote.textContent = isCurrent
+        ? 'Current month BOM schedule vs delivered quantity'
+        : `${periodLabel} BOM schedule vs delivered quantity`;
+    }
+  }
+
+  async function loadMonthlyKpis(month, year) {
+    const summary = await Hub.api.getReportSummary(month, year);
+    applyMonthlyKpis(summary);
+    return summary;
+  }
+
+  // ── Monitor cards (Quantity + Parts Progress) ──
+  const monthSel = initOverviewMonthFilter();
+  try {
+    const initialPeriod = parsePeriodValue(monthSel && monthSel.value) || {
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+    };
+    const summary = await Hub.api.getReportSummary(initialPeriod.month, initialPeriod.year);
+
+    try {
+      applyYtdKpis(summary);
+    } catch (ytdErr) {
+      console.error('YTD KPI load error:', ytdErr);
+    }
+
+    applyMonthlyKpis(summary);
+
+    if (monthSel && !monthSel.dataset.boundChange) {
+      monthSel.dataset.boundChange = '1';
+      monthSel.addEventListener('change', async () => {
+        const period = parsePeriodValue(monthSel.value);
+        if (!period) return;
+        monthSel.disabled = true;
+        try {
+          await loadMonthlyKpis(period.month, period.year);
+        } catch (err) {
+          console.error('Monthly KPI reload error:', err);
+        } finally {
+          monthSel.disabled = false;
+        }
+      });
+    }
   } catch (e) { console.error('Monitor load error:', e); }
 
   // ── Tool health ──

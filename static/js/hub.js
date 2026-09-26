@@ -88,7 +88,15 @@ const Hub = (() => {
     getDashboardRows(p)   { return this.get(`/api/dashboard-rows?${this.buildQuery(p)}`); },
     refreshDashboard()    { return this.post('/api/dashboard-refresh'); },
     updateBufferConfig(pn, q) { return this.put(`/api/buffer-config/${encodeURIComponent(pn)}`, { buffer_qty: q }); },
-    getReportSummary()    { return this.get('/api/reports/summary'); },
+    getReportSummary(month, year) {
+      const params = new URLSearchParams();
+      if (month != null && year != null) {
+        params.set('month', String(month));
+        params.set('year', String(year));
+      }
+      const qs = params.toString();
+      return this.get('/api/reports/summary' + (qs ? '?' + qs : ''));
+    },
     getProductionVsReq(l) { return this.get(`/api/reports/production-vs-requirement?limit=${l || 15}`); },
     getCompletionBuckets(){ return this.get('/api/reports/completion-buckets'); },
     getTopShortfalls(l)   { return this.get(`/api/reports/top-shortfalls?limit=${l || 20}`); },
@@ -442,6 +450,30 @@ const Hub = (() => {
     utils.$$('.ti-section-title').forEach((el) => { el.textContent = t; });
   }
 
+  function parsePeriod(month, year) {
+    const m = Number(month);
+    const y = Number(year);
+    if (m >= 1 && m <= 12 && y >= 1900 && y <= 2100) return { month: m, year: y };
+    return null;
+  }
+
+  function getPeriodFromLocation() {
+    const params = new URLSearchParams(window.location.search);
+    return parsePeriod(params.get('month'), params.get('year'));
+  }
+
+  function appendPeriodToUrl(url, opts = {}) {
+    const period = parsePeriod(opts.month, opts.year);
+    if (!period) return url;
+    return `${url}&month=${encodeURIComponent(period.month)}&year=${encodeURIComponent(period.year)}`;
+  }
+
+  function periodStateFields(opts = {}) {
+    const period = parsePeriod(opts.month, opts.year);
+    if (!period) return {};
+    return { month: period.month, year: period.year };
+  }
+
   async function navigate(section, opts = {}) {
     if (!SECTIONS[section]) section = 'overview';
     if (section === 'component-stock') section = 'overview';
@@ -473,10 +505,12 @@ const Hub = (() => {
         let url = '/app?section=reports';
         if (reportId) url += '&report=' + encodeURIComponent(reportId);
         if (opts.rowFilter) url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
+        url = appendPeriodToUrl(url, opts);
         history.pushState({
           section: 'reports',
           reportId: reportId || undefined,
           rowFilter: opts.rowFilter || undefined,
+          ...periodStateFields(opts),
         }, '', url);
       }
       if (window.__hubReportsOpenReport) {
@@ -501,6 +535,7 @@ const Hub = (() => {
       if ((section === 'inventory' || section === 'dispatch-calendar' || section === 'reports') && opts.rowFilter) {
         url += '&rowFilter=' + encodeURIComponent(opts.rowFilter);
       }
+      url = appendPeriodToUrl(url, opts);
       const st = {
         section,
         reportId: section === 'reports' ? (reportId || undefined) : undefined,
@@ -508,6 +543,7 @@ const Hub = (() => {
           section === 'inventory' || section === 'dispatch-calendar' || section === 'reports'
             ? (opts.rowFilter || undefined)
             : undefined,
+        ...periodStateFields(opts),
       };
       const cur = window.location.pathname + window.location.search;
       if (cur === url) {
@@ -731,10 +767,22 @@ const Hub = (() => {
             const reportId = url.searchParams.get('report');
             if (section === 'reports' && reportId) {
               const rowFilter = url.searchParams.get('rowFilter');
-              navigate('reports', { reportId, rowFilter: rowFilter || undefined, forceReload: true });
+              const period = parsePeriod(url.searchParams.get('month'), url.searchParams.get('year'));
+              navigate('reports', {
+                reportId,
+                rowFilter: rowFilter || undefined,
+                forceReload: true,
+                month: period?.month,
+                year: period?.year,
+              });
             } else {
               const rowFilter = url.searchParams.get('rowFilter');
-              navigate(section, { rowFilter: rowFilter || undefined });
+              const period = parsePeriod(url.searchParams.get('month'), url.searchParams.get('year'));
+              navigate(section, {
+                rowFilter: rowFilter || undefined,
+                month: period?.month,
+                year: period?.year,
+              });
             }
           } else {
             window.location.href = el.dataset.link;
@@ -792,7 +840,13 @@ const Hub = (() => {
       const params = new URLSearchParams(window.location.search);
       const rowFilter = params.get('rowFilter');
       const section = getInitialSection();
-      const opts = { skipHistory: true, rowFilter: rowFilter || undefined };
+      const period = getPeriodFromLocation();
+      const opts = {
+        skipHistory: true,
+        rowFilter: rowFilter || undefined,
+        month: period?.month,
+        year: period?.year,
+      };
       if (section === 'reports') {
         const reportId = params.get('report');
         if (reportId) opts.reportId = reportId;
@@ -803,8 +857,13 @@ const Hub = (() => {
     // Initial section
     const initParams = new URLSearchParams(window.location.search);
     const initRowFilter = initParams.get('rowFilter');
+    const initPeriod = getPeriodFromLocation();
     const section = getInitialSection();
-    navigate(section, { rowFilter: initRowFilter || undefined });
+    navigate(section, {
+      rowFilter: initRowFilter || undefined,
+      month: initPeriod?.month,
+      year: initPeriod?.year,
+    });
 
     // Sidebar PM status LED
     updatePulseBar();
@@ -846,6 +905,7 @@ const Hub = (() => {
     api,
     utils,
     navigate,
+    getPeriodFromLocation,
     updatePulseBar,
     SECTIONS,
     getTheme: () => currentTheme,

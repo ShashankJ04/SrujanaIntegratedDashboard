@@ -205,7 +205,16 @@ def export() -> Any:
 
 @api_bp.get("/reports/summary")
 def reports_summary() -> Any:
-    summary = get_report_summary()
+    from .inventory_snapshot import parse_period_args
+
+    year, month, err = parse_period_args(
+        request.args.get("year"),
+        request.args.get("month"),
+    )
+    if err:
+        return jsonify(err[0]), err[1]
+
+    summary = get_report_summary(month=month, year=year)
     return jsonify(summary)
 
 

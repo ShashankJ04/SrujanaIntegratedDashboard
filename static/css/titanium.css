@@ -2770,6 +2770,34 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
   margin-bottom: 16px;
 }
 
+.ti-monitor-qty-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.ti-overview-kpi-period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ti-overview-kpi-period__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ti-text-muted, #94a3b8);
+}
+
+.ti-overview-kpi-period .ti-select {
+  min-width: 120px;
+}
+
 .ti-monitor--ytd-strip .ti-monitor-top {
   margin-bottom: 14px;
 }
@@ -2976,27 +3004,19 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
 .ti-monitor-qty-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-rows: auto auto;
   gap: 10px 16px;
-  align-items: end;
+  align-items: stretch;
 }
 
 .ti-monitor-qty-title {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: center;
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ti-text-muted);
   line-height: 1;
-  padding-bottom: 2px;
+  margin: 0;
 }
-
-.ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(2) { grid-column: 1; grid-row: 2; }
-.ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(3) { grid-column: 2; grid-row: 2; }
-.ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(4) { grid-column: 3; grid-row: 2; }
 
 .ti-monitor-qty-grid .ti-monitor-metric-cell {
   display: flex;
@@ -3006,7 +3026,6 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
 }
 
 .ti-monitor-qty-grid .ti-monitor-metric-cell--derived {
-  grid-row: 1 / span 2;
   padding: 10px 12px;
   border-radius: var(--ti-radius-sm, 8px);
   background: color-mix(in srgb, var(--ti-surface-2) 88%, transparent);
@@ -3014,14 +3033,6 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
   justify-content: flex-start;
   gap: 6px;
   align-self: stretch;
-}
-
-.ti-monitor-qty-grid .ti-monitor-metric-cell--derived:nth-child(5) {
-  grid-column: 4;
-}
-
-.ti-monitor-qty-grid .ti-monitor-metric-cell--derived:nth-child(6) {
-  grid-column: 5;
 }
 
 .ti-monitor-qty-grid .ti-monitor-metric-cell--derived .ti-monitor-metric-value,
@@ -3098,38 +3109,15 @@ body.dpr-fullscreen-mode .ti-dpr-summary {
   .ti-monitor-qty-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .ti-monitor-qty-title {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(2) { grid-column: 1; grid-row: 2; }
-  .ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(3) { grid-column: 2; grid-row: 2; }
-  .ti-monitor-qty-grid > .ti-monitor-metric-cell:nth-child(4) { grid-column: 3; grid-row: 2; }
-
-  .ti-monitor-qty-grid .ti-monitor-metric-cell--derived:nth-child(5) {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .ti-monitor-qty-grid .ti-monitor-metric-cell--derived:nth-child(6) {
-    grid-column: 2;
-    grid-row: 3;
-  }
 }
 
 @media (max-width: 640px) {
-  .ti-monitor-qty-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+  .ti-monitor-qty-header {
+    align-items: flex-start;
   }
 
-  .ti-monitor-qty-title,
-  .ti-monitor-qty-grid > .ti-monitor-metric-cell,
-  .ti-monitor-qty-grid .ti-monitor-metric-cell--derived {
-    grid-column: 1 !important;
-    grid-row: auto !important;
+  .ti-monitor-qty-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -7285,6 +7273,70 @@ body.dpr-col-resizing {
 .ti-laser-welding .lw-prod-modal-table td.lw-prod-col-lot {
   width: 28%;
   min-width: 0;
+}
+
+.ti-laser-welding .lw-production-modal.lw-production-modal--qa {
+  max-width: min(96vw, 1080px);
+}
+
+.ti-laser-welding .lw-prod-modal-table tr.lw-qa-data-row:has(+ .lw-qa-origin-row) td {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.ti-laser-welding .lw-prod-modal-table tr.lw-qa-origin-row td {
+  border-bottom: 1px solid var(--ti-border);
+  padding: 0 6px 10px;
+  background: transparent;
+}
+
+.ti-laser-welding .lw-prod-modal-table tr.lw-qa-data-row:has(+ .lw-qa-origin-row):hover td,
+.ti-laser-welding .lw-prod-modal-table tr.lw-qa-origin-row:hover td {
+  background: transparent;
+}
+
+.ti-laser-welding .lw-qa-lot-origin {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.7fr) minmax(0, 0.85fr);
+  gap: 8px 16px;
+  padding: 8px 12px;
+  background: var(--ti-surface-2, #f8fafc);
+  border: 1px solid var(--ti-border);
+  border-radius: 8px;
+}
+
+.ti-laser-welding .lw-qa-origin-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ti-text-muted);
+}
+
+.ti-laser-welding .lw-qa-origin-value {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ti-text);
+  overflow-wrap: anywhere;
+}
+
+.ti-laser-welding .lw-detail-table .lw-detail-col-origin {
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.ti-laser-welding .lw-detail-table .lw-detail-col-operators {
+  max-width: 320px;
+}
+
+.ti-laser-welding .lw-detail-table .lw-detail-col-produced {
+  white-space: nowrap;
+  vertical-align: top;
 }
 
 .ti-laser-welding .lw-prod-modal-table th.lw-prod-col-avail,
