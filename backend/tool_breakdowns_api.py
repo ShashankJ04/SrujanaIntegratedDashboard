@@ -332,6 +332,13 @@ def list_breakdown_operators():
 @tool_breakdowns_bp.get("/operators/dpr")
 @_require_dpr_or_pm_access
 def list_breakdown_operators_dpr():
+    # otid=1: DPR raise-tooldown operator. otid=2: Complete Breakdown "completed by".
+    try:
+        otid = int(request.args.get("otid", "2"))
+    except (TypeError, ValueError):
+        otid = 2
+    if otid not in (1, 2):
+        otid = 2
     rows = fetch_all(
         """
         SELECT
@@ -339,9 +346,10 @@ def list_breakdown_operators_dpr():
             COALESCE(OP_ECNO, '') AS ecno,
             COALESCE(OP_NAME, '') AS name
         FROM operators
-        WHERE OP_ACTIVEYN = 'Y' AND  OP_OTID=2
+        WHERE OP_ACTIVEYN = 'Y' AND OP_OTID = %s
         ORDER BY OP_NAME, OP_ECNO
-        """
+        """,
+        (otid,),
     )
     result = []
     for r in rows:

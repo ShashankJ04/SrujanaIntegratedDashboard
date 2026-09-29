@@ -136,7 +136,7 @@ window.DprPage = (() => {
       }),
     version: (date) => apiFetch(`${BASE}/dpr/version?${qs({ date })}`),
     qrList: () => apiFetch(`${BASE}/dpr/qr-list`),
-    breakdownOperators: () => apiFetch(`${BASE}/tool-breakdowns/operators/dpr`),
+    breakdownOperators: () => apiFetch(`${BASE}/tool-breakdowns/operators/dpr?otid=1`),
     breakdownList: (params) => apiFetch(`${BASE}/tool-breakdowns?${qs(params || {})}`),
     breakdownCreate: (payload) =>
       apiFetch(`${BASE}/tool-breakdowns`, {

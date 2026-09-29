@@ -1043,7 +1043,7 @@ async function loadBreakdownOperators() {
 
 async function loadBreakdownCompleteOperators() {
   if (_breakdownCompleteOperators.length) return _breakdownCompleteOperators;
-  _breakdownCompleteOperators = await apiFetch('/api/tool-breakdowns/operators/dpr');
+  _breakdownCompleteOperators = await apiFetch('/api/tool-breakdowns/operators/dpr?otid=2');
   refreshBreakdownCompleteDatalist();
   return _breakdownCompleteOperators;
 }
