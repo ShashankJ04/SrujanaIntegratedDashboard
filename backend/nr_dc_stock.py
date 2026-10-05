@@ -148,25 +148,57 @@ def _fetch_transit(comp_id: int) -> List[Dict[str, Any]]:
 
 def _fetch_supplier_stock(comp_id: int) -> List[Dict[str, Any]]:
     """
-    Stock held at external suppliers (CS_SUPPLIERID > 0) with qty > 0.
+    Stock held at external suppliers — derived purely from NR DC transactions.
 
-    Each row = supplier + stage combination.
+    For each non-Srujana supplier:
+      received = SUM(NRD_RECEIVEDQTY) from inward (I) records
+      dispatched = SUM(NRD_QTY) from outward (O) records
+      net = received - dispatched
+
+    Only suppliers with net > 0 are returned.  The "Ready for Stage"
+    comes from the inward stage (what the supplier is processing).
     """
     rows = fetch_all(
         """
         SELECT
-            TRIM(s.ss_Name) AS supplier_name,
-            cs.CS_QTY       AS qty,
-            os.OS_NAME      AS stage_name
-        FROM comp_stock cs
-        LEFT JOIN supplier s       ON s.ss_Id  = cs.CS_SUPPLIERID
-        LEFT JOIN comp_opstages os ON os.OS_ID  = cs.CS_STAGEID
-        WHERE cs.CS_COMPID      = %s
-          AND cs.CS_SUPPLIERID  > 0
-          AND cs.CS_QTY         > 0
-        ORDER BY s.ss_Name, os.OS_NAME
+            combined.supplier_id,
+            TRIM(s.ss_Name)  AS supplier_name,
+            combined.net_qty AS qty,
+            os.OS_NAME       AS stage_name
+        FROM (
+            SELECT
+                supplier_id,
+                SUM(qty_change)    AS net_qty,
+                MAX(inward_stage)  AS stage_id
+            FROM (
+                /* Qty received by this supplier via NR DC inward */
+                SELECT
+                    m.NRC_DELIVERSUPPLIER          AS supplier_id,
+                    COALESCE(d.NRD_RECEIVEDQTY, 0) AS qty_change,
+                    m.NRC_OPSTAGE                  AS inward_stage
+                FROM nrcomp_outwardmaster m
+                JOIN nrcomp_outwarddetails d ON d.NRD_NRCID = m.NRC_ID
+                WHERE m.NRC_COID = %s AND m.NRC_MOVEMENT = 'I'
+
+                UNION ALL
+
+                /* Qty dispatched by this supplier via NR DC outward */
+                SELECT
+                    m.NRC_DISPATCHSUPPLIER AS supplier_id,
+                    -d.NRD_QTY             AS qty_change,
+                    NULL                   AS inward_stage
+                FROM nrcomp_outwardmaster m
+                JOIN nrcomp_outwarddetails d ON d.NRD_NRCID = m.NRC_ID
+                WHERE m.NRC_COID = %s AND m.NRC_MOVEMENT = 'O'
+            ) AS movements
+            GROUP BY supplier_id
+            HAVING net_qty > 0
+        ) AS combined
+        LEFT JOIN supplier s       ON s.ss_Id = combined.supplier_id
+        LEFT JOIN comp_opstages os ON os.OS_ID = combined.stage_id
+        ORDER BY s.ss_Name
         """,
-        (comp_id,),
+        (comp_id, comp_id),
     )
     return [
         {
